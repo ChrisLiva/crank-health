@@ -8,6 +8,7 @@ import type {
   RepoContext,
   RunContext,
   RunnerScope,
+  ToolMetrics,
   ToolResult,
   ToolRunner,
 } from '../src/core/types.ts'
@@ -62,6 +63,9 @@ const ok = (findings: readonly Finding[] = []): ToolResult => ({
 })
 
 const never = () => new Promise<ToolResult>(() => {})
+
+/** A repo-owned detection; the details never matter, only that it is not null. */
+const DETECTION: Detection = { reason: 'config', configFiles: ['x'], installed: false }
 
 describe('runScan degradation', () => {
   it('gives every failure mode its own state and still completes the run', async () => {
@@ -216,6 +220,132 @@ describe('runScan context', () => {
       reason: 'not selected by --only',
     })
     expect(result.categories.security).toEqual({ status: 'assessed' })
+  })
+})
+
+describe('runScan tool selection', () => {
+  it('skips a repo-owned-only runner the repo did not choose', async () => {
+    const eslint = { ...fakeRunner('eslint', 'lint', async () => ok()), repoOwnedOnly: true }
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
+
+    expect(result.runs.map((run) => run.tool)).toEqual(['oxlint'])
+    expect(result.categories.lint).toEqual({ status: 'assessed' })
+  })
+
+  it('runs a repo-owned-only runner the repo did choose', async () => {
+    const eslint = {
+      ...fakeRunner(
+        'eslint',
+        'lint',
+        async () => ok(),
+        async () => DETECTION,
+      ),
+      repoOwnedOnly: true,
+    }
+    const result = await runScan(REPO, [adapter('js-ts', [eslint])])
+    expect(result.runs.map((run) => run.tool)).toEqual(['eslint'])
+  })
+
+  /** Spec §1's two branches are exclusive: owned → their tool, not owned → ours. */
+  it('stands our default down in a category this language already owns', async () => {
+    const biome = fakeRunner(
+      'biome-format',
+      'format',
+      async () => ok(),
+      async () => DETECTION,
+    )
+    const prettier = fakeRunner('prettier', 'format', async () => ok())
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+
+    const result = await runScan(REPO, [adapter('js-ts', [biome, prettier, oxlint])])
+
+    expect(result.runs.map((run) => run.tool)).toEqual(['biome-format', 'oxlint'])
+    expect(prettier.calls).toHaveLength(0)
+  })
+
+  it('still merges two repo-owned tools in the same category', async () => {
+    const eslint = fakeRunner(
+      'eslint',
+      'lint',
+      async () => ok([makeFinding({ id: 'e', tool: 'eslint' })]),
+      async () => DETECTION,
+    )
+    const biome = fakeRunner(
+      'biome-lint',
+      'lint',
+      async () => ok([makeFinding({ id: 'b', tool: 'biome-lint' })]),
+      async () => DETECTION,
+    )
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, biome])])
+    expect(result.runs.map((run) => run.tool)).toEqual(['eslint', 'biome-lint'])
+    expect(result.findings).toHaveLength(2)
+  })
+
+  it('scopes ownership to one language, so Python cannot silence a JS default', async () => {
+    const ruff = fakeRunner(
+      'ruff-format',
+      'format',
+      async () => ok(),
+      async () => DETECTION,
+    )
+    const prettier = fakeRunner('prettier', 'format', async () => ok())
+    const result = await runScan(REPO, [adapter('python', [ruff]), adapter('js-ts', [prettier])])
+    expect(result.runs.map((run) => run.tool)).toEqual(['ruff-format', 'prettier'])
+  })
+})
+
+describe('runScan metrics', () => {
+  const measuring = (tool: string, category: Category, metrics: ToolMetrics) =>
+    fakeRunner(tool, category, async () => ({ ...ok(), metrics }))
+
+  it('sums the counts two tools each measured part of', async () => {
+    const result = await runScan(REPO, [
+      adapter('js-ts', [
+        measuring('fallow-health', 'complexity', { functionsTotal: 40, functionsOverCeiling: 3 }),
+        measuring('other', 'complexity', { functionsTotal: 10, functionsOverCeiling: 1 }),
+      ]),
+    ])
+    expect(result.metrics.complexity).toEqual({ functionsTotal: 50, functionsOverCeiling: 4 })
+  })
+
+  it('takes a whole-codebase percentage from the one tool that reports it', async () => {
+    const result = await runScan(REPO, [
+      adapter('common', [
+        measuring('jscpd', 'duplication', { duplicationPercent: 7.5 }),
+        fakeRunner('quiet', 'duplication', async () => ok()),
+      ]),
+    ])
+    expect(result.metrics.duplication).toEqual({ duplicationPercent: 7.5 })
+  })
+
+  it('takes the largest denominator when several formatters report one', async () => {
+    const result = await runScan(REPO, [
+      adapter('js-ts', [
+        measuring('prettier', 'format', { formattableFiles: 12 }),
+        measuring('biome-format', 'format', { formattableFiles: 9 }),
+      ]),
+    ])
+    expect(result.metrics.format).toEqual({ formattableFiles: 12 })
+  })
+
+  it('leaves a field absent when nothing measured it, rather than reporting zero', async () => {
+    const result = await runScan(REPO, [
+      adapter('js-ts', [fakeRunner('x', 'lint', async () => ok())]),
+    ])
+    expect(result.metrics.lint).toEqual({})
+    expect(result.metrics.complexity).toEqual({})
+  })
+
+  it('ignores the metrics of a run that did not succeed', async () => {
+    const broken = fakeRunner('broken', 'complexity', async () => ({
+      state: 'error' as const,
+      findings: [],
+      rawFiles: [],
+      metrics: { functionsTotal: 99 },
+    }))
+    const result = await runScan(REPO, [adapter('js-ts', [broken])])
+    expect(result.metrics.complexity).toEqual({})
   })
 })
 

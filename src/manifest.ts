@@ -12,9 +12,21 @@
  */
 export const TOOL_MANIFEST = {
   oxlint: '1.77.0',
+  eslint: '10.8.0',
+  '@biomejs/biome': '2.5.7',
+  prettier: '3.9.6',
+  typescript: '7.0.2',
+  fallow: '3.14.0',
+  knip: '6.31.0',
+  'fta-cli': '3.0.0',
 } as const satisfies Readonly<Record<string, string>>
 
-/** A tool crank-health can invoke ephemerally at a pinned version. */
+/**
+ * A tool crank-health can invoke ephemerally at a pinned version. Keys are npm
+ * package names — that is what `npx` resolves — which is not always the command
+ * name (`typescript` ships `tsc`, `fta-cli` ships `fta`); see
+ * {@link import('./core/exec.ts').ephemeralCommand}.
+ */
 export type PinnedTool = keyof typeof TOOL_MANIFEST
 
 /** The exact version this release pins for `tool`. */

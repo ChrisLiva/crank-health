@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RunRecord } from '../src/core/orchestrator.ts'
-import type { Category, CategoryState, Finding } from '../src/core/types.ts'
+import type { Category, CategoryState, Finding, ToolMetrics } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import type { ReportInput } from '../src/render/json.ts'
 import { buildReport, serializeReport } from '../src/render/json.ts'
@@ -18,6 +18,7 @@ describe('buildReport', () => {
       'mode',
       'selected',
       'categories',
+      'metrics',
       'tools',
       'findings',
       'warnings',
@@ -163,6 +164,7 @@ function input(overrides: Partial<ReportInput> = {}): ReportInput {
     profile: 'quick',
     selected: CATEGORIES,
     categories: allNotAssessed(),
+    metrics: noMetrics(),
     runs: [],
     findings: [],
     warnings: [],
@@ -180,11 +182,18 @@ function allNotAssessed(): Record<Category, CategoryState> {
   return states
 }
 
+function noMetrics(): Record<Category, ToolMetrics> {
+  const metrics = {} as Record<Category, ToolMetrics>
+  for (const category of CATEGORIES) metrics[category] = {}
+  return metrics
+}
+
 function record(): RunRecord {
   return {
     tool: 'oxlint',
     category: 'lint',
     scope: 'js-ts',
+    pinnedVersion: '1.77.0',
     detection: null,
     result: { state: 'ok', findings: [], rawFiles: [], toolVersion: '1.77.0' },
     durationMs: 12,

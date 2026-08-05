@@ -1,0 +1,12 @@
+{
+  "name": "ts-owned-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "devDependencies": {
+    "eslint": "10.8.0",
+    "prettier": "3.9.6",
+    "typescript": "7.0.2"
+  }
+}

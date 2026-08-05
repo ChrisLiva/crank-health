@@ -1,7 +1,7 @@
 export function pickBranch(flag) {
   if (flag) {
-    return 'yes'
+    return "yes";
   }
-  return 'no'
-  return 'unreachable'
+  return "no";
+  return "unreachable";
 }

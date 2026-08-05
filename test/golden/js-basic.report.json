@@ -3,7 +3,7 @@
   "crankHealth": "0.1.0",
   "repo": {
     "path": "<repo>",
-    "commit": "40e92f1edf3895e519704488f0c56ffe5de1f623"
+    "commit": "1ef990be72b477df6dfdf1ea506c796cdcea30ca"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -24,15 +24,15 @@
     },
     "types": {
       "status": "not-assessed",
-      "reason": "no tool available for this category"
+      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
     },
     "dead-code": {
-      "status": "not-assessed",
-      "reason": "no tool available for this category"
+      "status": "graded",
+      "grade": "F"
     },
     "complexity": {
-      "status": "not-assessed",
-      "reason": "no tool available for this category"
+      "status": "graded",
+      "grade": "D"
     },
     "duplication": {
       "status": "not-assessed",
@@ -43,15 +43,99 @@
       "grade": "F"
     },
     "format": {
-      "status": "not-assessed",
-      "reason": "no tool available for this category"
+      "status": "graded",
+      "grade": "C"
     },
     "test-quality": {
       "status": "not-assessed",
       "reason": "not assessed — run `--deep`"
     }
   },
+  "metrics": {
+    "complexity": {
+      "functionsTotal": 9,
+      "functionsOverCeiling": 1
+    },
+    "format": {
+      "formattableFiles": 9
+    }
+  },
   "tools": [
+    {
+      "tool": "tsc",
+      "category": "types",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "7.0.2",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category",
+      "raw": []
+    },
+    {
+      "tool": "fallow-dead-code",
+      "category": "dead-code",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.14.0",
+      "pinned": "3.14.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/fallow-dead-code.json",
+        "raw/fallow-dead-code.stderr.txt"
+      ]
+    },
+    {
+      "tool": "knip",
+      "category": "dead-code",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "6.31.0",
+      "pinned": "6.31.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/knip.json"
+      ]
+    },
+    {
+      "tool": "fallow-health",
+      "category": "complexity",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.14.0",
+      "pinned": "3.14.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/fallow-health.json",
+        "raw/fallow-health.stderr.txt"
+      ]
+    },
+    {
+      "tool": "fta",
+      "category": "complexity",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.0.0",
+      "pinned": "3.0.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/fta.json"
+      ]
+    },
     {
       "tool": "oxlint",
       "category": "lint",
@@ -66,11 +150,77 @@
       "raw": [
         "raw/oxlint.sarif.json"
       ]
+    },
+    {
+      "tool": "prettier",
+      "category": "format",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.9.6",
+      "pinned": "3.9.6",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/prettier.txt"
+      ]
     }
   ],
   "findings": [
     {
-      "id": "fcf1d5838c50fb15",
+      "id": "253438ee03d78183",
+      "category": "dead-code",
+      "tool": "fallow-dead-code",
+      "rule": "fallow/unused-export",
+      "severity": "warning",
+      "file": "src/clean.js",
+      "range": {
+        "startLine": 5,
+        "startCol": 16,
+        "endLine": 5,
+        "endCol": 16
+      },
+      "message": "Export `subtract` is never used",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "0c1770f8cbed82ac",
+      "category": "dead-code",
+      "tool": "knip",
+      "rule": "knip/unused-exports",
+      "severity": "warning",
+      "file": "src/clean.js",
+      "range": {
+        "startLine": 5,
+        "startCol": 17,
+        "endLine": 5,
+        "endCol": 17
+      },
+      "message": "Export `subtract` is never used",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "8a45552307efdbf0",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "src/complex.js",
+      "range": {
+        "startLine": 1,
+        "startCol": 7,
+        "endLine": 1,
+        "endCol": 7
+      },
+      "message": "Function `classify` has cognitive complexity 29 (cyclomatic 18); the ceiling is 15",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "a16f4b14a6ed9d38",
       "category": "lint",
       "tool": "oxlint",
       "rule": "oxc(no-accumulating-spread)",
@@ -87,7 +237,7 @@
       "gradeScope": false
     },
     {
-      "id": "26b34a04b4e0d55a",
+      "id": "682215770e9d14f9",
       "category": "lint",
       "tool": "oxlint",
       "rule": "eslint(no-const-assign)",
@@ -104,7 +254,7 @@
       "gradeScope": true
     },
     {
-      "id": "27641935f1d4f66e",
+      "id": "f3e335d0ec6e9f07",
       "category": "lint",
       "tool": "oxlint",
       "rule": "eslint(no-dupe-keys)",
@@ -121,7 +271,7 @@
       "gradeScope": true
     },
     {
-      "id": "42a37a4c5ff36043",
+      "id": "20bf70285fec5ba4",
       "category": "lint",
       "tool": "oxlint",
       "rule": "eslint(no-unreachable)",
@@ -131,11 +281,29 @@
         "startLine": 6,
         "startCol": 3,
         "endLine": 6,
-        "endCol": 23
+        "endCol": 24
       },
       "message": "Unreachable code.",
       "provenance": "default-config",
       "gradeScope": true
+    },
+    {
+      "id": "7c92932224a5ec62",
+      "category": "format",
+      "tool": "prettier",
+      "rule": "prettier/format",
+      "severity": "warning",
+      "file": "src/unformatted.js",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File does not match prettier’s default formatting",
+      "provenance": "default-config",
+      "gradeScope": true,
+      "fixHint": "npx prettier --write <file>"
     }
   ],
   "warnings": []

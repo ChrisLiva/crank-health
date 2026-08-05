@@ -1,0 +1,11 @@
+{
+  "name": "js-multi-tool-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "eslint": "10.8.0"
+  }
+}

@@ -143,6 +143,34 @@ export interface RunContext {
   readonly timeoutMs: number
 }
 
+/**
+ * Measurements a tool reports about the code as a whole, rather than about one
+ * place in it.
+ *
+ * The ratio grades of spec §3 need a denominator that no list of findings can
+ * carry: "% of functions over cognitive 15" needs the function count, "% of
+ * files failing the formatter" needs the formattable-file count, and
+ * duplication and mutation score are percentages the tool computes itself.
+ * Every field is optional and additive — a runner that measures nothing simply
+ * omits the whole object, and the categories whose tools report nothing stay
+ * `not-assessed` exactly as before.
+ *
+ * The orchestrator merges these per category (`aggregateMetrics`): counts sum
+ * across tools, percentages and denominators take the maximum.
+ */
+export interface ToolMetrics {
+  /** Functions the tool analyzed — the `complexity` denominator. */
+  readonly functionsTotal?: number
+  /** Of those, how many exceed the cognitive-complexity ceiling. */
+  readonly functionsOverCeiling?: number
+  /** Files the tool was able to check formatting for — the `format` denominator. */
+  readonly formattableFiles?: number
+  /** Duplicated-token percentage, as the duplication detector reports it. */
+  readonly duplicationPercent?: number
+  /** Mutation score percentage (`--deep` only); higher is better. */
+  readonly mutationScore?: number
+}
+
 /** A runner's outcome, including the three degradation states of spec §8. */
 export interface ToolResult {
   readonly state: 'ok' | 'error' | 'timeout' | 'not-available'
@@ -152,6 +180,8 @@ export interface ToolResult {
   readonly rawFiles: readonly string[]
   /** Human-readable explanation; required in practice for non-`ok` states. */
   readonly reason?: string
+  /** Whole-codebase measurements this tool produced; see {@link ToolMetrics}. */
+  readonly metrics?: ToolMetrics
 }
 
 /** One tool wrapper: detect how the repo owns it, then run it ephemerally. */
@@ -159,6 +189,14 @@ export interface ToolRunner {
   readonly tool: string
   readonly category: Category
   readonly pinnedVersion: string
+  /**
+   * Set when the tool has no meaning as a default: ESLint and Biome are
+   * first-class *when detected* (spec "Categories and tools"), but crank-health
+   * never imposes them on a repo that did not choose them — oxlint and prettier
+   * are the defaults. A `repoOwnedOnly` runner whose `detect` returns `null` is
+   * skipped entirely rather than run with a bundled config.
+   */
+  readonly repoOwnedOnly?: boolean
   /** `null` = not repo-owned; the runner still runs, with default config. */
   detect(repo: RepoContext): Promise<Detection | null>
   run(ctx: RunContext): Promise<ToolResult>

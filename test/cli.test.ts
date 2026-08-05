@@ -77,7 +77,7 @@ describe('crank-health binary', () => {
     expect(result.exitCode).toBe(0)
     const report = JSON.parse(result.stdout) as { findings: unknown[]; schemaVersion: number }
     expect(report.schemaVersion).toBe(1)
-    expect(report.findings).toHaveLength(4)
+    expect(report.findings).toHaveLength(8)
   })
 
   it('exits 1 when --fail-under is tripped, naming the categories', async () => {

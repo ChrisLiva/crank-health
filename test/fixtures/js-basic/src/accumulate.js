@@ -1,7 +1,7 @@
 export function merge(rows) {
-  let out = []
+  let out = [];
   for (const row of rows) {
-    out = [...out, row]
+    out = [...out, row];
   }
-  return out
+  return out;
 }

@@ -26,9 +26,26 @@ export function repoCommand(binPath: string, args: readonly string[]): ToolComma
 /**
  * Runs the manifest-pinned version through `npx --yes`, which installs into
  * npm's own cache — never into the target repo.
+ *
+ * @param tool npm package name from the manifest
+ * @param binary the command inside that package, when it differs from the
+ * package name (`typescript` → `tsc`, `fta-cli` → `fta`). npx can only guess
+ * the binary when the package ships exactly one, so naming it is the safe form.
  */
-export function ephemeralCommand(tool: PinnedTool, args: readonly string[]): ToolCommand {
-  return { command: 'npx', args: ['--yes', pinnedSpec(tool), ...args], ephemeral: true }
+export function ephemeralCommand(
+  tool: PinnedTool,
+  args: readonly string[],
+  binary?: string,
+): ToolCommand {
+  const spec = pinnedSpec(tool)
+  return {
+    command: 'npx',
+    args:
+      binary === undefined
+        ? ['--yes', spec, ...args]
+        : ['--yes', '--package', spec, '--', binary, ...args],
+    ephemeral: true,
+  }
 }
 
 /** How a tool run ended, in the vocabulary of `ToolResult.state`. */
@@ -160,11 +177,16 @@ function classify(tool: ToolCommand, result: ExecaLike, stderr: string): ToolFai
     return {
       state: 'not-available',
       reason:
-        `could not fetch ${tool.args[1] ?? tool.command}: no network and nothing in the npm ` +
+        `could not fetch ${pinnedArg(tool)}: no network and nothing in the npm ` +
         'cache — run crank-health once with network access to warm the cache',
     }
   }
   return undefined
+}
+
+/** The `name@version` argument inside an npx command line, for error messages. */
+function pinnedArg(tool: ToolCommand): string {
+  return tool.args.find((arg) => arg.lastIndexOf('@') > 0) ?? tool.command
 }
 
 let noticeShown = false

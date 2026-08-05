@@ -7,6 +7,7 @@ import type {
   LanguageAdapter,
   RepoContext,
   RunnerScope,
+  ToolMetrics,
   ToolResult,
   ToolRunner,
 } from './types.ts'
@@ -32,6 +33,8 @@ export interface RunRecord {
   readonly tool: string
   readonly category: Category
   readonly scope: RunnerScope
+  /** The version this release pins for ephemeral runs of this tool (spec §6). */
+  readonly pinnedVersion: string
   readonly detection: Detection | null
   readonly result: ToolResult
   readonly durationMs: number
@@ -44,6 +47,8 @@ export interface ScanResult {
   readonly runs: readonly RunRecord[]
   /** Pre-grading state for every requested category. */
   readonly categories: Readonly<Record<Category, CategoryOutcome>>
+  /** Merged {@link ToolMetrics} per category; see {@link aggregateMetrics}. */
+  readonly metrics: Readonly<Record<Category, ToolMetrics>>
   /** Non-fatal problems that belong in the report but broke nothing. */
   readonly warnings: readonly string[]
 }
@@ -75,8 +80,61 @@ export async function runScan(
     findings: sortFindings(records.flatMap((record) => record.result.findings)),
     runs: records,
     categories: aggregate(requested, records),
+    metrics: aggregateMetrics(records),
     warnings,
   }
+}
+
+/**
+ * Merges the {@link ToolMetrics} of every tool that ran successfully, per
+ * category, with one rule per kind of number:
+ *
+ * - **counts** (`functionsTotal`, `functionsOverCeiling`) sum, because two tools
+ *   measuring different halves of a codebase both contribute to the total;
+ * - **percentages and denominators** (`formattableFiles`, `duplicationPercent`,
+ *   `mutationScore`) take the maximum, because they are already whole-codebase
+ *   figures — summing them would be meaningless, and the maximum is both the
+ *   most complete measurement and independent of the order tools finished in.
+ *
+ * A field no tool reported stays absent, which is how a category ends up
+ * `not-assessed` rather than falsely graded at zero.
+ */
+export function aggregateMetrics(records: readonly RunRecord[]): Record<Category, ToolMetrics> {
+  const merged = {} as Record<Category, ToolMetrics>
+  for (const category of CATEGORIES) {
+    const reported = records
+      .filter((record) => record.category === category && record.result.state === 'ok')
+      .map((record) => record.result.metrics)
+      .filter((metrics): metrics is ToolMetrics => metrics !== undefined)
+
+    merged[category] = {
+      ...combine(reported, 'functionsTotal', sum),
+      ...combine(reported, 'functionsOverCeiling', sum),
+      ...combine(reported, 'formattableFiles', highest),
+      ...combine(reported, 'duplicationPercent', highest),
+      ...combine(reported, 'mutationScore', highest),
+    }
+  }
+  return merged
+}
+
+function combine(
+  reported: readonly ToolMetrics[],
+  field: keyof ToolMetrics,
+  fold: (values: readonly number[]) => number,
+): ToolMetrics {
+  const values = reported
+    .map((metrics) => metrics[field])
+    .filter((value): value is number => value !== undefined && Number.isFinite(value))
+  return values.length === 0 ? {} : { [field]: fold(values) }
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0)
+}
+
+function highest(values: readonly number[]): number {
+  return values.reduce((best, value) => Math.max(best, value), Number.NEGATIVE_INFINITY)
 }
 
 /**
@@ -129,6 +187,7 @@ async function plan(
     }
     if (!applies) continue
 
+    const candidates: Job[] = []
     for (const runner of runners) {
       let detection: Detection | null = null
       try {
@@ -137,11 +196,39 @@ async function plan(
       } catch (error) {
         warnings.push(`${runner.tool}: detection failed, using default config: ${describe(error)}`)
       }
-      jobs.push({ runner, scope: adapter.language, detection, files })
+      // A tool crank-health never imposes as a default is simply absent from a
+      // repo that did not choose it — not a failure, and not a reason for the
+      // category to degrade (spec §1: `ToolRunner.repoOwnedOnly`).
+      if (runner.repoOwnedOnly === true && detection === null) continue
+      candidates.push({ runner, scope: adapter.language, detection, files })
     }
+
+    jobs.push(...withoutRedundantDefaults(candidates))
   }
 
   return jobs
+}
+
+/**
+ * Spec §1's two branches are exclusive: "Owned → run *their* tool with their
+ * config … Not owned → *our* pinned default tool with a bundled config." So a
+ * category this language already owns does not also get our default imposed on
+ * it — a repo formatted with Biome is not badly formatted for disagreeing with
+ * prettier's defaults, and grading it against both would say it was.
+ *
+ * Ownership is per language, not global: Python owning `ruff format` says
+ * nothing about who formats the JavaScript next to it, so this is applied
+ * within one adapter's runners.
+ *
+ * Two repo-owned tools in one category still both run and merge (spec §1's
+ * "multiple tools detected for one category → run all"); it is only the
+ * *default* that steps aside.
+ */
+function withoutRedundantDefaults(candidates: readonly Job[]): Job[] {
+  const owned = new Set(
+    candidates.filter((job) => job.detection !== null).map((job) => job.runner.category),
+  )
+  return candidates.filter((job) => job.detection !== null || !owned.has(job.runner.category))
 }
 
 /** Runs one tool with every failure mode converted into a `ToolResult`. */
@@ -163,6 +250,7 @@ async function execute(repo: RepoContext, job: Job, timeoutMs: number): Promise<
     tool: job.runner.tool,
     category: job.runner.category,
     scope: job.scope,
+    pinnedVersion: job.runner.pinnedVersion,
     detection: job.detection,
     result,
     durationMs: Date.now() - startedAt,

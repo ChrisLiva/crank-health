@@ -11,19 +11,9 @@
           "informationUri": "https://oxc.rs/docs/guide/usage/linter.html",
           "rules": [
             {
-              "id": "oxc(no-accumulating-spread)",
-              "name": "no-accumulating-spread",
-              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/oxc/no-accumulating-spread.html",
-              "properties": {
-                "category": "perf",
-                "plugin": "oxc",
-                "fix": "none"
-              }
-            },
-            {
-              "id": "eslint(no-unreachable)",
-              "name": "no-unreachable",
-              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-unreachable.html",
+              "id": "eslint(no-const-assign)",
+              "name": "no-const-assign",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-const-assign.html",
               "properties": {
                 "category": "correctness",
                 "plugin": "eslint",
@@ -31,9 +21,9 @@
               }
             },
             {
-              "id": "eslint(no-const-assign)",
-              "name": "no-const-assign",
-              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-const-assign.html",
+              "id": "eslint(no-unreachable)",
+              "name": "no-unreachable",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-unreachable.html",
               "properties": {
                 "category": "correctness",
                 "plugin": "eslint",
@@ -49,6 +39,16 @@
                 "plugin": "eslint",
                 "fix": "none"
               }
+            },
+            {
+              "id": "oxc(no-accumulating-spread)",
+              "name": "no-accumulating-spread",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/oxc/no-accumulating-spread.html",
+              "properties": {
+                "category": "perf",
+                "plugin": "oxc",
+                "fix": "none"
+              }
             }
           ]
         }
@@ -56,7 +56,7 @@
       "artifacts": [
         {
           "location": {
-            "uri": "src/accumulate.js"
+            "uri": "src/const-assign.js"
           }
         },
         {
@@ -66,35 +66,35 @@
         },
         {
           "location": {
-            "uri": "src/const-assign.js"
+            "uri": "src/dupe-keys.js"
           }
         },
         {
           "location": {
-            "uri": "src/dupe-keys.js"
+            "uri": "src/accumulate.js"
           }
         }
       ],
       "results": [
         {
-          "ruleId": "oxc(no-accumulating-spread)",
+          "ruleId": "eslint(no-const-assign)",
           "ruleIndex": 0,
-          "level": "warning",
+          "level": "error",
           "message": {
-            "text": "Do not spread accumulators in loops"
+            "text": "Unexpected re-assignment of `const` variable limit."
           },
           "locations": [
             {
               "physicalLocation": {
                 "artifactLocation": {
-                  "uri": "src/accumulate.js",
+                  "uri": "src/const-assign.js",
                   "index": 0
                 },
                 "region": {
                   "startLine": 2,
-                  "startColumn": 7,
+                  "startColumn": 9,
                   "endLine": 2,
-                  "endColumn": 10
+                  "endColumn": 14
                 }
               }
             }
@@ -118,31 +118,7 @@
                   "startLine": 6,
                   "startColumn": 3,
                   "endLine": 6,
-                  "endColumn": 23
-                }
-              }
-            }
-          ]
-        },
-        {
-          "ruleId": "eslint(no-const-assign)",
-          "ruleIndex": 2,
-          "level": "error",
-          "message": {
-            "text": "Unexpected re-assignment of `const` variable limit."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "src/const-assign.js",
-                  "index": 2
-                },
-                "region": {
-                  "startLine": 2,
-                  "startColumn": 9,
-                  "endLine": 2,
-                  "endColumn": 14
+                  "endColumn": 24
                 }
               }
             }
@@ -150,7 +126,7 @@
         },
         {
           "ruleId": "eslint(no-dupe-keys)",
-          "ruleIndex": 3,
+          "ruleIndex": 2,
           "level": "error",
           "message": {
             "text": "Duplicate key 'home'"
@@ -160,13 +136,37 @@
               "physicalLocation": {
                 "artifactLocation": {
                   "uri": "src/dupe-keys.js",
-                  "index": 3
+                  "index": 2
                 },
                 "region": {
                   "startLine": 2,
                   "startColumn": 3,
                   "endLine": 2,
                   "endColumn": 7
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "oxc(no-accumulating-spread)",
+          "ruleIndex": 3,
+          "level": "warning",
+          "message": {
+            "text": "Do not spread accumulators in loops"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/accumulate.js",
+                  "index": 3
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 7,
+                  "endLine": 2,
+                  "endColumn": 10
                 }
               }
             }

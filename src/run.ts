@@ -86,6 +86,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
       profile: 'quick',
       selected,
       categories: await gradeAll(repo, scan, selected),
+      metrics: scan.metrics,
       runs,
       findings: scan.findings,
       warnings: scan.warnings,
@@ -133,9 +134,11 @@ async function gradeAll(
 /**
  * Applies the one formula shape that fits this category (spec §3).
  *
- * `complexity`, `duplication` and `test-quality` grade on a percentage that only
- * their tools can supply, so they stay ungraded until those tools land
- * (M4–M6, M9); a category with no runner never reaches this function anyway.
+ * The ratio categories grade on a percentage no list of findings can carry, so
+ * they read it from the {@link ToolMetrics} the orchestrator merged: complexity
+ * from the function counts, duplication and test quality from the percentage
+ * their tool computed. When no tool reported the measurement the category has
+ * no grade — `undefined` here becomes `not-assessed`, never a flattering zero.
  */
 function gradeOne(
   category: Category,
@@ -144,6 +147,7 @@ function gradeOne(
   sourceFileCount: number,
 ): Grade | undefined {
   const findings = scan.findings.filter((finding) => finding.category === category)
+  const metrics = scan.metrics[category]
   switch (category) {
     case 'security':
       return gradeCategory(category, { shape: 'absolute', findings })
@@ -154,13 +158,31 @@ function gradeOne(
     case 'format':
       return gradeCategory(category, {
         shape: 'ratio',
-        percent: failingFilePercent(findings, category, sourceFileCount),
+        // The formatters report how many files they could check; falling back
+        // to every source file only matters when none of them ran.
+        percent: failingFilePercent(
+          findings,
+          category,
+          metrics.formattableFiles ?? sourceFileCount,
+        ),
       })
     case 'complexity':
+      return ratioGrade(category, percentOf(metrics.functionsOverCeiling, metrics.functionsTotal))
     case 'duplication':
+      return ratioGrade(category, metrics.duplicationPercent)
     case 'test-quality':
-      return undefined
+      return ratioGrade(category, metrics.mutationScore)
   }
+}
+
+function ratioGrade(category: Category, percent: number | undefined): Grade | undefined {
+  return percent === undefined ? undefined : gradeCategory(category, { shape: 'ratio', percent })
+}
+
+/** `undefined` when either half is missing, or when nothing was measured. */
+function percentOf(part: number | undefined, whole: number | undefined): number | undefined {
+  if (part === undefined || whole === undefined || whole <= 0) return undefined
+  return (part / whole) * 100
 }
 
 async function assertDirectory(path: string): Promise<void> {

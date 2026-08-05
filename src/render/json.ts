@@ -1,7 +1,6 @@
 import type { RunRecord } from '../core/orchestrator.ts'
-import type { Category, CategoryState, Finding, RunnerScope } from '../core/types.ts'
+import type { Category, CategoryState, Finding, RunnerScope, ToolMetrics } from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
-import { TOOL_MANIFEST } from '../manifest.ts'
 import { VERSION } from '../version.ts'
 
 /**
@@ -31,6 +30,12 @@ export interface Report {
   readonly selected: readonly Category[]
   /** All eight states, always — including the ones nothing assessed (spec §8). */
   readonly categories: Readonly<Record<Category, CategoryState>>
+  /**
+   * The tool-reported measurements behind the ratio grades, for the categories
+   * where a tool reported any. A grade of "complexity: C" is unreadable without
+   * the numbers it came from.
+   */
+  readonly metrics: Readonly<Partial<Record<Category, ToolMetrics>>>
   readonly tools: readonly ReportTool[]
   readonly findings: readonly Finding[]
   readonly warnings: readonly string[]
@@ -88,6 +93,7 @@ export interface ReportInput {
   readonly profile: 'quick' | 'deep'
   readonly selected: readonly Category[]
   readonly categories: Readonly<Record<Category, CategoryState>>
+  readonly metrics: Readonly<Record<Category, ToolMetrics>>
   readonly runs: readonly ResolvedRun[]
   readonly findings: readonly Finding[]
   readonly warnings: readonly string[]
@@ -112,6 +118,7 @@ export function buildReport(input: ReportInput): Report {
     mode: 'whole-repo',
     selected: CATEGORIES.filter((category) => input.selected.includes(category)),
     categories: orderedCategories(input.categories),
+    metrics: orderedMetrics(input.metrics),
     tools: runs.map((run) => toReportTool(run)),
     findings: input.findings.map((finding) => orderedFinding(finding)),
     warnings: input.warnings.toSorted(compare),
@@ -139,7 +146,7 @@ function toReportTool(run: ResolvedRun): ReportTool {
     execution: installed ? 'repo-installed' : 'ephemeral-pinned',
     provenance: detection === null ? 'default-config' : 'repo-config',
     version: record.result.toolVersion ?? detection?.version ?? null,
-    pinned: pinnedFor(record.tool),
+    pinned: record.pinnedVersion,
     detection:
       detection === null
         ? null
@@ -153,6 +160,33 @@ function toReportTool(run: ResolvedRun): ReportTool {
     reason: record.result.reason ?? null,
     raw: run.raw,
   }
+}
+
+/**
+ * Categories with at least one measurement, in canonical order and with a fixed
+ * key order inside each — an empty object would say "measured nothing", which
+ * is different from "no tool measured this" and would read as noise besides.
+ */
+function orderedMetrics(
+  metrics: Readonly<Record<Category, ToolMetrics>>,
+): Partial<Record<Category, ToolMetrics>> {
+  const ordered: Partial<Record<Category, ToolMetrics>> = {}
+  for (const category of CATEGORIES) {
+    const measured = metrics[category]
+    const fields: ToolMetrics = {
+      ...number('functionsTotal', measured.functionsTotal),
+      ...number('functionsOverCeiling', measured.functionsOverCeiling),
+      ...number('formattableFiles', measured.formattableFiles),
+      ...number('duplicationPercent', measured.duplicationPercent),
+      ...number('mutationScore', measured.mutationScore),
+    }
+    if (Object.keys(fields).length > 0) ordered[category] = fields
+  }
+  return ordered
+}
+
+function number(field: keyof ToolMetrics, value: number | undefined): ToolMetrics {
+  return value === undefined ? {} : { [field]: value }
 }
 
 function orderedCategories(
@@ -188,12 +222,6 @@ function orderedFinding(finding: Finding): Finding {
     gradeScope: finding.gradeScope,
     ...(finding.fixHint === undefined ? {} : { fixHint: finding.fixHint }),
   }
-}
-
-function pinnedFor(tool: string): string | null {
-  return Object.hasOwn(TOOL_MANIFEST, tool)
-    ? TOOL_MANIFEST[tool as keyof typeof TOOL_MANIFEST]
-    : null
 }
 
 function compare(a: string, b: string): number {

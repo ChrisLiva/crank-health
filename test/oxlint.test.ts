@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_CONFIG,
-  batchFiles,
   oxlintRunner,
   parseSarif,
   toPendingFindings,
@@ -29,28 +28,6 @@ describe('parseSarif', () => {
     // this order is not meaningful; `toPendingFindings` is what sorts it.
     expect(report.results).toEqual([
       {
-        ruleId: 'oxc(no-accumulating-spread)',
-        ruleCategory: 'perf',
-        level: 'warning',
-        message: 'Do not spread accumulators in loops',
-        file: 'src/accumulate.js',
-        startLine: 2,
-        startCol: 7,
-        endLine: 2,
-        endCol: 10,
-      },
-      {
-        ruleId: 'eslint(no-unreachable)',
-        ruleCategory: 'correctness',
-        level: 'error',
-        message: 'Unreachable code.',
-        file: 'src/unreachable.js',
-        startLine: 6,
-        startCol: 3,
-        endLine: 6,
-        endCol: 23,
-      },
-      {
         ruleId: 'eslint(no-const-assign)',
         ruleCategory: 'correctness',
         level: 'error',
@@ -62,6 +39,17 @@ describe('parseSarif', () => {
         endCol: 14,
       },
       {
+        ruleId: 'eslint(no-unreachable)',
+        ruleCategory: 'correctness',
+        level: 'error',
+        message: 'Unreachable code.',
+        file: 'src/unreachable.js',
+        startLine: 6,
+        startCol: 3,
+        endLine: 6,
+        endCol: 24,
+      },
+      {
         ruleId: 'eslint(no-dupe-keys)',
         ruleCategory: 'correctness',
         level: 'error',
@@ -71,6 +59,17 @@ describe('parseSarif', () => {
         startCol: 3,
         endLine: 2,
         endCol: 7,
+      },
+      {
+        ruleId: 'oxc(no-accumulating-spread)',
+        ruleCategory: 'perf',
+        level: 'warning',
+        message: 'Do not spread accumulators in loops',
+        file: 'src/accumulate.js',
+        startLine: 2,
+        startCol: 7,
+        endLine: 2,
+        endCol: 10,
       },
     ])
   })
@@ -142,24 +141,6 @@ describe('toPendingFindings', () => {
   it('sorts by location so identity never depends on oxlint’s thread order', () => {
     const shuffled = { version: '1.77.0', results: [...report.results].toReversed() }
     expect(toPendingFindings(shuffled, false)).toEqual(toPendingFindings(report, false))
-  })
-})
-
-describe('batchFiles', () => {
-  it('keeps a small file list in one invocation', () => {
-    expect(batchFiles(['a.js', 'b.js'])).toEqual([['a.js', 'b.js']])
-  })
-
-  it('splits a file list that would overflow the command line', () => {
-    const files = Array.from({ length: 10 }, (_, index) => `src/file-${index}.js`)
-    const batches = batchFiles(files, 40)
-    expect(batches.flat()).toEqual(files)
-    expect(batches.length).toBeGreaterThan(1)
-    expect(batches.every((batch) => batch.length > 0)).toBe(true)
-  })
-
-  it('never drops a file longer than the whole budget', () => {
-    expect(batchFiles(['a-very-long-name.js'], 4)).toEqual([['a-very-long-name.js']])
   })
 })
 
