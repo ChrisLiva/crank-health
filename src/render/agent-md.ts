@@ -236,6 +236,11 @@ function themeKey(finding: Finding): string {
       return `${finding.tool} ${finding.rule}`
     case 'dead-code':
       return deadCodeKind(finding.rule)
+    // Per file: strengthening the tests for one module is one sitting, and the
+    // surviving mutants in it are the checklist for that sitting. Grouping by
+    // mutator instead would spread one module's gaps over a dozen tasks.
+    case 'test-quality':
+      return finding.file
     // One mechanical sweep each; the findings are the list of places.
     case 'complexity':
     case 'duplication':
@@ -262,6 +267,8 @@ function themeTitle(category: Category, key: string, findings: readonly Finding[
       return `De-duplicate ${plural(count, 'copied block')}`
     case 'format':
       return `Format ${plural(fileCount(findings), 'file')}`
+    case 'test-quality':
+      return `Strengthen the tests covering \`${key}\` (${plural(count, 'mutation finding')})`
     default:
       return `Fix ${plural(count, `\`${rule}\` finding`)}`
   }

@@ -1,5 +1,7 @@
 import type { LanguageAdapter, RepoContext } from '../../core/types.ts'
 import { complexipyRunner } from './complexipy.ts'
+import { cosmicRayRunner } from './cosmic-ray.ts'
+import { coverageRunner } from './coverage.ts'
 import { pyrightRunner } from './pyright.ts'
 import { ruffFormatRunner, ruffLintRunner } from './ruff.ts'
 import { tyRunner } from './ty.ts'
@@ -25,5 +27,7 @@ export const pythonAdapter: LanguageAdapter = {
     complexipyRunner,
     ruffLintRunner,
     ruffFormatRunner,
+    cosmicRayRunner,
+    coverageRunner,
   ],
 }

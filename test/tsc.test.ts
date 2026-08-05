@@ -142,6 +142,7 @@ describe('a repo with neither a tsconfig.json nor TypeScript sources', () => {
         scratch,
         detection: null,
         timeoutMs: 5_000,
+        deep: false,
       })
       expect(result.state).toBe('not-available')
       expect(result.reason).toContain('nothing owns the types category')

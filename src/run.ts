@@ -32,8 +32,12 @@ export interface HealthScanOptions {
   readonly out?: string | undefined
   /** `--only`; defaults to every category. */
   readonly only?: readonly Category[] | undefined
+  /** `--deep` (spec §5): add the mutation / test-suite tier. */
+  readonly deep?: boolean | undefined
   readonly concurrency?: number | undefined
   readonly timeoutMs?: number | undefined
+  /** Per-tool budget for the deep runners; see `DEEP_TIMEOUT_MS`. */
+  readonly deepTimeoutMs?: number | undefined
   /** Injectable for tests; production always uses {@link ADAPTERS}. */
   readonly adapters?: readonly LanguageAdapter[] | undefined
 }
@@ -78,7 +82,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
       buildReport({
         repoPath: repoRoot,
         commit,
-        profile: 'quick',
+        profile: options.deep === true ? 'deep' : 'quick',
         selected: tree.selected,
         categories: tree.categories,
         metrics: tree.scan.metrics,
@@ -106,6 +110,8 @@ export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'>
   readonly repoRoot: string
   /** Absolute path to this scan's scratch dir; two scans never share one. */
   readonly scratch: string
+  /** PR mode: the paths this change touched; see {@link RunContext.changedFiles}. */
+  readonly changedFiles?: readonly string[] | undefined
 }
 
 /**
@@ -121,11 +127,18 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   const scan = await runScan(repo, options.adapters ?? ADAPTERS, {
     ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    ...(options.deepTimeoutMs === undefined ? {} : { deepTimeoutMs: options.deepTimeoutMs }),
     ...(options.only === undefined ? {} : { only: options.only }),
+    ...(options.changedFiles === undefined ? {} : { changedFiles: options.changedFiles }),
+    deep: options.deep === true,
   })
 
   const selected = options.only === undefined ? CATEGORIES : options.only
-  return { scan, selected, categories: await gradeAll(repo, scan, selected) }
+  return {
+    scan,
+    selected,
+    categories: await gradeAll(repo, scan, selected, options.deep === true),
+  }
 }
 
 /**
@@ -200,6 +213,7 @@ async function gradeAll(
   repo: RepoContext,
   scan: ScanResult,
   selected: readonly Category[],
+  deep: boolean,
 ): Promise<Record<Category, CategoryState>> {
   const sourceFiles = [...repo.files.byLanguage['js-ts'], ...repo.files.byLanguage.python]
   const kloc = (await countPhysicalLines(repo.repoRoot, sourceFiles)) / 1000
@@ -209,8 +223,16 @@ async function gradeAll(
     const state = toCategoryState(scan.categories[category], () =>
       gradeOne(category, scan, kloc, sourceFiles.length),
     )
+    // Spec §5: in quick mode the reason test quality has no grade is the
+    // profile, whatever the repo contains — no mutation tool was even asked. In
+    // deep mode one was, so the reason it gave (or the orchestrator's, when
+    // there was no tool to ask) is the honest one, and this must not overwrite
+    // it with an instruction to run the flag the user just ran.
     states[category] =
-      category === 'test-quality' && state.status === 'not-assessed' && selected.includes(category)
+      !deep &&
+      category === 'test-quality' &&
+      state.status === 'not-assessed' &&
+      selected.includes(category)
         ? { status: 'not-assessed', reason: QUICK_MODE_TEST_QUALITY_REASON }
         : state
   }

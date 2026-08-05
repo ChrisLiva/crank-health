@@ -300,6 +300,9 @@ function orderedMetrics(
       ...number('formattableFiles', measured.formattableFiles),
       ...number('duplicationPercent', measured.duplicationPercent),
       ...number('mutationScore', measured.mutationScore),
+      ...number('mutantsDetected', measured.mutantsDetected),
+      ...number('mutantsUndetected', measured.mutantsUndetected),
+      ...number('lineCoveragePercent', measured.lineCoveragePercent),
     }
     if (Object.keys(fields).length > 0) ordered[category] = fields
   }

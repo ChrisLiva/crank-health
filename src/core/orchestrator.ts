@@ -19,13 +19,28 @@ export const DEFAULT_CONCURRENCY = 4
 /** Per-tool wall clock budget (spec §5). */
 export const DEFAULT_TIMEOUT_MS = 120_000
 
+/**
+ * Per-tool budget for a {@link ToolRunner.deepOnly} runner — spec §5's "much
+ * larger budget". A mutation run executes the repo's whole test suite once per
+ * mutant; two minutes is not a timeout for that, it is a guarantee of one.
+ * Fifteen minutes is generous enough that a real suite finishes and small enough
+ * that a wedged one still ends.
+ */
+export const DEEP_TIMEOUT_MS = 900_000
+
 export interface ScanOptions {
   /** Max tools in flight. Default {@link DEFAULT_CONCURRENCY}. */
   readonly concurrency?: number
   /** Per-tool timeout handed to each runner and enforced here as a backstop. */
   readonly timeoutMs?: number
+  /** The same, for deep runners. Default {@link DEEP_TIMEOUT_MS}. */
+  readonly deepTimeoutMs?: number
   /** `--only`: restrict the scan to these categories. Default: all of them. */
   readonly only?: readonly Category[]
+  /** `--deep` (spec §5): also run the {@link ToolRunner.deepOnly} runners. */
+  readonly deep?: boolean
+  /** PR mode: the paths this change touched; see {@link RunContext.changedFiles}. */
+  readonly changedFiles?: readonly string[]
 }
 
 /** One runner's full record: what it was, what it found, how it ended. */
@@ -67,13 +82,20 @@ export async function runScan(
   adapters: readonly LanguageAdapter[],
   options: ScanOptions = {},
 ): Promise<ScanResult> {
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const deep = options.deep === true
+  const budgets: Budgets = {
+    normal: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    deep: options.deepTimeoutMs ?? DEEP_TIMEOUT_MS,
+  }
   const requested = options.only === undefined ? CATEGORIES : dedupe(options.only)
   const warnings: string[] = []
 
-  const jobs = await plan(repo, adapters, requested, warnings)
+  const jobs = await plan(repo, adapters, requested, deep, warnings)
   const records = await mapLimit(jobs, options.concurrency ?? DEFAULT_CONCURRENCY, (job) =>
-    execute(repo, job, timeoutMs),
+    execute(repo, job, budgets, {
+      deep,
+      ...(options.changedFiles === undefined ? {} : { changedFiles: options.changedFiles }),
+    }),
   )
 
   return {
@@ -97,9 +119,12 @@ export async function runScan(
  *   sum across languages — which is what keeps a mixed JS+Python repo from
  *   grading its formatting against the file count of whichever language happens
  *   to be bigger.
- * - **percentages** (`duplicationPercent`, `mutationScore`) take the maximum:
- *   they are already whole-codebase figures, summing them would be meaningless,
- *   and the maximum is independent of the order tools finished in.
+ * - **percentages** (`duplicationPercent`, `lineCoveragePercent`) take the
+ *   maximum: they are already whole-codebase figures, summing them would be
+ *   meaningless, and the maximum is independent of the order tools finished in.
+ * - **the mutation score** is the one percentage that is *recomputed* rather
+ *   than merged, out of the detected and undetected counts — see
+ *   {@link combinedMutationScore}.
  *
  * A field no tool reported stays absent, which is how a category ends up
  * `not-assessed` rather than falsely graded at zero.
@@ -110,16 +135,44 @@ export function aggregateMetrics(records: readonly RunRecord[]): Record<Category
     const reported = records.filter(
       (record) => record.category === category && record.result.state === 'ok',
     )
+    const detected = combine(reported, 'mutantsDetected', countAcrossScopes)
+    const undetected = combine(reported, 'mutantsUndetected', countAcrossScopes)
 
     merged[category] = {
       ...combine(reported, 'functionsTotal', countAcrossScopes),
       ...combine(reported, 'functionsOverCeiling', countAcrossScopes),
       ...combine(reported, 'formattableFiles', countAcrossScopes),
       ...combine(reported, 'duplicationPercent', highest),
-      ...combine(reported, 'mutationScore', highest),
+      ...combinedMutationScore(reported, detected, undetected),
+      ...detected,
+      ...undetected,
+      ...combine(reported, 'lineCoveragePercent', highest),
     }
   }
   return merged
+}
+
+/**
+ * The mutation score over every language at once: detected mutants as a share
+ * of the mutants that had a verdict either way.
+ *
+ * The maximum rule the other percentages use would be wrong here, and wrong in
+ * the flattering direction: a repo whose JavaScript scores 90 and whose Python
+ * scores 20 does not have a 90 test-quality. Re-deriving it from the counts is
+ * the same arithmetic each tool did, applied once over the union — which is
+ * exactly spec §3's "one grade per category over combined normalized findings".
+ *
+ * A tool that reported a score but no counts (a format we could not break down)
+ * still contributes through the fallback.
+ */
+function combinedMutationScore(
+  reported: readonly RunRecord[],
+  detected: ToolMetrics,
+  undetected: ToolMetrics,
+): ToolMetrics {
+  const total = (detected.mutantsDetected ?? 0) + (undetected.mutantsUndetected ?? 0)
+  if (total <= 0) return combine(reported, 'mutationScore', highest)
+  return { mutationScore: ((detected.mutantsDetected ?? 0) / total) * 100 }
 }
 
 /** One tool's measurement of one field, tagged with the language it measured. */
@@ -183,12 +236,18 @@ async function plan(
   repo: RepoContext,
   adapters: readonly LanguageAdapter[],
   requested: readonly Category[],
+  deep: boolean,
   warnings: string[],
 ): Promise<Job[]> {
   const jobs: Job[] = []
 
   for (const adapter of adapters) {
-    const runners = adapter.runners.filter((runner) => requested.includes(runner.category))
+    const runners = adapter.runners.filter(
+      // A deep runner in a quick scan is not a job that declined; it is not a
+      // job (spec §5). Nothing is recorded for it, so the category degrades with
+      // the profile's own reason rather than with a tool's.
+      (runner) => requested.includes(runner.category) && (deep || runner.deepOnly !== true),
+    )
     if (runners.length === 0) continue
 
     const files =
@@ -260,9 +319,27 @@ function withoutRedundantDefaults(candidates: readonly Job[]): Job[] {
   )
 }
 
+/** The two per-tool wall-clock budgets: the quick one, and the deep one. */
+interface Budgets {
+  readonly normal: number
+  readonly deep: number
+}
+
+/** What the profile adds to every {@link RunContext} this scan builds. */
+interface Profile {
+  readonly deep: boolean
+  readonly changedFiles?: readonly string[]
+}
+
 /** Runs one tool with every failure mode converted into a `ToolResult`. */
-async function execute(repo: RepoContext, job: Job, timeoutMs: number): Promise<RunRecord> {
+async function execute(
+  repo: RepoContext,
+  job: Job,
+  budgets: Budgets,
+  profile: Profile,
+): Promise<RunRecord> {
   const startedAt = Date.now()
+  const timeoutMs = job.runner.deepOnly === true ? budgets.deep : budgets.normal
   const result = await withTimeout(
     () =>
       job.runner.run({
@@ -271,6 +348,8 @@ async function execute(repo: RepoContext, job: Job, timeoutMs: number): Promise<
         scratch: repo.scratch,
         detection: job.detection,
         timeoutMs,
+        deep: profile.deep,
+        ...(profile.changedFiles === undefined ? {} : { changedFiles: profile.changedFiles }),
       }),
     timeoutMs,
     job.runner.tool,

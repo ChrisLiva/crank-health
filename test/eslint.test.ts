@@ -183,6 +183,7 @@ describe('a repo configured through the legacy eslintrc format', () => {
         scratch,
         detection: { reason: 'config', configFiles: ['.eslintrc.json'], installed: false },
         timeoutMs: 5_000,
+        deep: false,
       })
       expect(result.state).toBe('not-available')
       expect(result.reason).toContain('no longer reads')

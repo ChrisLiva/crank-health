@@ -1,0 +1,14 @@
+[project]
+name = "py-weak-tests"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["cosmic-ray", "coverage", "pytest"]
+
+# Declaring the section is what makes cosmic-ray repo-owned (spec §1). The run
+# itself uses a config crank-health generates in its scratch dir — see
+# `src/adapters/python/cosmic-ray.ts`.
+[tool.cosmic-ray]
+timeout = 20.0

@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -119,10 +119,23 @@ describe('crank-health binary', () => {
     },
   )
 
-  it('refuses the modes this build does not implement instead of scanning anyway', async () => {
-    const result = await runCli(['--deep', fixture.root])
-    expect(result.exitCode).toBe(2)
-    expect(result.stderr).toContain('not implemented in this build')
+  /**
+   * `--deep` on a repo with no mutation tooling: the profile is deep, the run
+   * completes, and test quality is not-assessed for the honest reason rather
+   * than the quick profile's "run `--deep`" (spec §5, §8).
+   */
+  it('runs the deep profile and says why a repo without mutation tooling has no score', async () => {
+    const result = await runCli(['--deep', '--only', 'test-quality', '--out', out, fixture.root])
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain('deep')
+    const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as {
+      profile: string
+      categories: Record<string, { status: string; reason?: string }>
+    }
+    expect(report.profile).toBe('deep')
+    expect(report.categories['test-quality']?.status).toBe('not-assessed')
+    expect(report.categories['test-quality']?.reason).not.toContain('run `--deep`')
   })
 
   it('exits 2 on a --pr base that does not exist here', async () => {

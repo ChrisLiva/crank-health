@@ -1,7 +1,7 @@
 import pc from 'picocolors'
 import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
-import { CATEGORY_LABELS, stateLabel } from './display.ts'
+import { CATEGORY_LABELS, percent, stateLabel } from './display.ts'
 import type { Report, ReportDelta } from './json.ts'
 
 /**
@@ -129,12 +129,17 @@ function categoryLine(report: Report, category: Category, color: Colors): string
     return `  ${color.dim(label)} ${tint(status.padEnd(13))} ${color.dim(state.reason)}`
   }
   const grade = gradeColor(state.grade, color)(state.grade.padEnd(13))
-  return `  ${label} ${grade} ${color.dim(measure(report.findings, category))}`
+  return `  ${label} ${grade} ${color.dim(measure(report, category))}`
 }
 
 /** What the grade was computed from, in the fewest words that are still true. */
-function measure(findings: readonly Finding[], category: Category): string {
-  const mine = findings.filter((finding) => finding.category === category)
+function measure(report: Report, category: Category): string {
+  // Test quality is the one grade whose basis is not a count of findings: the
+  // findings are the surviving mutants, the grade is the score (spec §3).
+  const score = category === 'test-quality' ? report.metrics[category]?.mutationScore : undefined
+  if (score !== undefined) return `mutation score ${percent(score)}`
+
+  const mine = report.findings.filter((finding) => finding.category === category)
   const graded = mine.filter((finding) => finding.gradeScope).length
   const advisory = mine.length - graded
   if (mine.length === 0) return 'no findings'

@@ -4,7 +4,7 @@ import {
   failingFilePercent,
   weightedCount,
 } from '../core/grade.ts'
-import type { Category, Finding, Language, Severity } from '../core/types.ts'
+import type { Category, Finding, Language, Severity, ToolMetrics } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
 import {
   ADVISORY_TAG,
@@ -217,8 +217,17 @@ function measurements(report: Report): string[] {
   if (formattable !== undefined) {
     lines.push(`- Format: ${plural(formattable, 'file')} checked by a formatter.`)
   }
-  const mutation = report.metrics['test-quality']?.mutationScore
-  if (mutation !== undefined) lines.push(`- Test quality: mutation score ${percent(mutation)}.`)
+  const testQuality = report.metrics['test-quality']
+  if (testQuality?.mutationScore !== undefined) {
+    lines.push(
+      `- Test quality: mutation score ${percent(testQuality.mutationScore)}${mutantCounts(testQuality)}.`,
+    )
+  }
+  if (testQuality?.lineCoveragePercent !== undefined) {
+    lines.push(
+      `- Coverage: ${percent(testQuality.lineCoveragePercent)} of lines executed by the test suite (context; the grade is the mutation score).`,
+    )
+  }
   return lines.length === 0 ? [] : ['### Measurements', lines.join('\n')]
 }
 
@@ -376,9 +385,24 @@ function ratioBasis(report: Report, category: Category, graded: readonly Finding
     }
     default: {
       const score = metrics?.mutationScore
-      return score === undefined ? 'No measurement reported.' : `Mutation score ${percent(score)}.`
+      return score === undefined
+        ? 'No measurement reported.'
+        : `Mutation score ${percent(score)}${mutantCounts(metrics)}.`
     }
   }
+}
+
+/**
+ * ` — 7 of 25 mutants detected`: the two numbers the mutation score is a ratio
+ * of. "Detected" is killed plus timed out and "undetected" is survived plus
+ * never covered, which is how the mutation-testing-elements score is defined and
+ * what makes a percentage checkable against the findings under it.
+ */
+function mutantCounts(metrics: ToolMetrics | undefined): string {
+  const detected = metrics?.mutantsDetected
+  const undetected = metrics?.mutantsUndetected
+  if (detected === undefined || undetected === undefined) return ''
+  return ` — ${detected} of ${plural(detected + undetected, 'mutant')} detected`
 }
 
 /** ` (2 error, 1 warning)`, or nothing when there is nothing to break down. */

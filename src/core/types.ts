@@ -158,6 +158,20 @@ export interface RunContext {
   /** `null` → run our bundled default config from `scratch`. */
   readonly detection: Detection | null
   readonly timeoutMs: number
+  /**
+   * `--deep` (spec §5). Only the deep profile may execute the repo's own code,
+   * so a runner that does — mutation testing, a coverage run — checks this
+   * before it starts. {@link ToolRunner.deepOnly} is the declarative form and is
+   * what the orchestrator filters on; this is here for the runners that behave
+   * differently in the two profiles rather than only existing in one.
+   */
+  readonly deep: boolean
+  /**
+   * PR mode: the head-side paths this change touched, stable-sorted (spec §4's
+   * "deep mutation scopes to diff-touched files"). Absent in a whole-repo scan,
+   * which is the difference between "scope to these" and "scope to nothing".
+   */
+  readonly changedFiles?: readonly string[] | undefined
 }
 
 /**
@@ -186,6 +200,16 @@ export interface ToolMetrics {
   readonly duplicationPercent?: number
   /** Mutation score percentage (`--deep` only); higher is better. */
   readonly mutationScore?: number
+  /** Mutants the test suite detected — killed outright or by timing out. */
+  readonly mutantsDetected?: number
+  /** Mutants nothing detected: survived, or never covered by a test at all. */
+  readonly mutantsUndetected?: number
+  /**
+   * Line coverage percentage from the deep-tier coverage run. Reported and
+   * rendered, never graded: spec §3 grades test quality on the mutation score,
+   * and coverage is the context that makes that number readable.
+   */
+  readonly lineCoveragePercent?: number
 }
 
 /** A runner's outcome, including the three degradation states of spec §8. */
@@ -228,6 +252,17 @@ export interface ToolRunner {
    * scan — the exact failure that must never happen quietly.
    */
   readonly complementary?: boolean
+  /**
+   * Set when this runner belongs to the deep profile (spec §5): it executes the
+   * repo's own test suite, which no quick scan may do and no quick budget could
+   * afford. The orchestrator skips these runners entirely without `--deep` —
+   * *without* recording a run, so a quick scan's test-quality category reads
+   * "not assessed — run `--deep`" rather than "a tool declined".
+   *
+   * Deep runners also get their own, much larger, per-tool budget
+   * ({@link import('./orchestrator.ts').DEEP_TIMEOUT_MS}).
+   */
+  readonly deepOnly?: boolean
   /** `null` = not repo-owned; the runner still runs, with default config. */
   detect(repo: RepoContext): Promise<Detection | null>
   run(ctx: RunContext): Promise<ToolResult>

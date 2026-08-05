@@ -11,6 +11,7 @@ import {
   resolveCommit,
 } from './core/git.ts'
 import { createOutputDir } from './core/output.ts'
+import type { Category, CategoryState } from './core/types.ts'
 import { buildReport } from './render/json.ts'
 import type { HealthScanOptions, HealthScanResult } from './run.ts'
 import { adoptRawFiles, resolveRepoRoot, scanTree, writeArtifacts } from './run.ts'
@@ -88,6 +89,14 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
       ...options,
       repoRoot: worktree,
       scratch: await subdir(scratch, 'base-scratch'),
+      // The deep tier is head-only, whatever the profile: mutation testing
+      // executes the repo's test suite, and the base worktree has no installed
+      // dependencies of its own to run it with (see the approximation above).
+      // Running it twice would also double the most expensive thing
+      // crank-health does to answer a question the delta does not ask —
+      // "did this change make the tests weaker" is head's mutation score
+      // against head's code.
+      deep: false,
     })
     // Adopted before the worktree goes: the raw files are staged in scratch,
     // and `base/` keeps them apart from head's same-named evidence.
@@ -98,6 +107,9 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
       ...options,
       repoRoot,
       scratch: await subdir(scratch, 'head-scratch'),
+      // Spec §4: "deep mutation scopes to diff-touched files". Only the head
+      // scan gets them, because only the head scan runs the deep tier.
+      changedFiles: diff.changedFiles,
     })
 
     const delta = computeDelta({
@@ -105,7 +117,7 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
       headFindings: headScan.scan.findings,
       renames: diff.renames,
       touchedLines: diff.touchedLines,
-      baseCategories: baseScan.categories,
+      baseCategories: headOnlyDeepNote(baseScan.categories, options.deep === true),
       headCategories: headScan.categories,
     })
 
@@ -114,7 +126,7 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
       buildReport({
         repoPath: repoRoot,
         commit,
-        profile: 'quick',
+        profile: options.deep === true ? 'deep' : 'quick',
         delta: { ...delta, baseRef: options.base, mergeBase: base },
         selected: headScan.selected,
         categories: headScan.categories,
@@ -140,6 +152,27 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
     // tool promises never to leave. On the happy path both are already done.
     await rm(scratch, { recursive: true, force: true })
     await removeWorktree(repoRoot, worktree)
+  }
+}
+
+/**
+ * Says why the base has no test-quality state in a `--deep --pr` run, in the
+ * one place a reader would otherwise find the quick profile's "run `--deep`" —
+ * which they just did. The base scan really is quick, deliberately; this is the
+ * label for that decision rather than a change to it.
+ */
+function headOnlyDeepNote(
+  categories: Record<Category, CategoryState>,
+  deep: boolean,
+): Record<Category, CategoryState> {
+  const state = categories['test-quality']
+  if (!deep || state.status !== 'not-assessed') return categories
+  return {
+    ...categories,
+    'test-quality': {
+      status: 'not-assessed',
+      reason: 'deep mutation testing runs on the head commit only',
+    },
   }
 }
 

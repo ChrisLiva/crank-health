@@ -66,6 +66,29 @@ export const SYSTEM_TOOL_MANIFEST = {
 } as const satisfies Readonly<Record<string, string>>
 
 /**
+ * The deep tier's tools (spec §5), which crank-health only ever runs from the
+ * repo's own installation.
+ *
+ * They are not pinnable, and the reason is the deep tier itself: mutation
+ * testing and coverage *execute the repo's test suite*, so they have to run
+ * inside the environment that suite needs — the repo's `node_modules` with its
+ * test-runner plugins, the project's virtualenv with pytest and the project's
+ * dependencies. An ephemeral `npx @stryker-mutator/core` has no vitest runner
+ * plugin and an ephemeral `uvx cosmic-ray` cannot import the code it is
+ * mutating. Fetching them would produce a confident failure instead of an
+ * honest "not available" (spec §8), so crank-health does not fetch them.
+ *
+ * The versions here are what this release's parsers were captured and tested
+ * against — a floor for "known to work", the same contract as
+ * {@link SYSTEM_TOOL_MANIFEST}, not a pin crank-health can enforce.
+ */
+export const REPO_TOOL_MANIFEST = {
+  '@stryker-mutator/core': '9.6.1',
+  'cosmic-ray': '8.4.6',
+  coverage: '7.15.3',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
  * A tool crank-health can invoke ephemerally at a pinned version. Keys are npm
  * package names — that is what `npx` resolves — which is not always the command
  * name (`typescript` ships `tsc`, `fta-cli` ships `fta`); see
@@ -79,9 +102,17 @@ export type PinnedPythonTool = keyof typeof PYTHON_TOOL_MANIFEST
 /** A tool crank-health runs from `PATH`; see {@link SYSTEM_TOOL_MANIFEST}. */
 export type SystemTool = keyof typeof SYSTEM_TOOL_MANIFEST
 
+/** A deep-tier tool crank-health runs from the repo; see {@link REPO_TOOL_MANIFEST}. */
+export type RepoTool = keyof typeof REPO_TOOL_MANIFEST
+
 /** The version of `tool` this release was captured and tested against. */
 export function verifiedVersion(tool: SystemTool): string {
   return SYSTEM_TOOL_MANIFEST[tool]
+}
+
+/** The same, for a deep-tier tool; see {@link REPO_TOOL_MANIFEST}. */
+export function verifiedRepoVersion(tool: RepoTool): string {
+  return REPO_TOOL_MANIFEST[tool]
 }
 
 /** The exact version this release pins for `tool`. */

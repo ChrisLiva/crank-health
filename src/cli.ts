@@ -27,15 +27,11 @@ async function run(argv: readonly string[]): Promise<number> {
     process.stdout.write(`${VERSION}\n`)
     return 0
   }
-  // Specified and planned (spec §5) but not in this build. Exiting 2 rather
-  // than silently running a quick scan: a CI job that asked for the deep tier
-  // must not be told everything is fine.
-  if (options.deep) return unimplemented('--deep')
-
   const scan = {
     path: options.path,
     out: options.out,
     only: parseCategories(options.only),
+    deep: options.deep,
   }
   const result =
     options.pr === undefined
@@ -90,14 +86,6 @@ function parseCategories(only: readonly string[] | undefined): Category[] | unde
     }
     return category
   })
-}
-
-function unimplemented(flag: string): number {
-  process.stderr.write(
-    `${pc.red('error')} ${flag} is not implemented in this build (${VERSION}).\n` +
-      `Run ${pc.cyan('crank-health [path]')} for a quick whole-repo scan.\n`,
-  )
-  return 2
 }
 
 function fail(message: string, hint?: string): number {

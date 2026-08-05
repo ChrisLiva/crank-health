@@ -1,0 +1,8 @@
+{
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "node --test"
+  },
+  "coverageAnalysis": "off",
+  "mutate": ["src/**/*.js"]
+}

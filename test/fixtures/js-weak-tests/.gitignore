@@ -1,0 +1,4 @@
+node_modules/
+# The deep test installs the fixture's dependencies on demand; neither the
+# tree nor the lockfile npm writes belongs to the fixture.
+package-lock.json
