@@ -116,6 +116,7 @@ describe('buildReport', () => {
       detection,
       result: { state: 'ok', findings: [], rawFiles: [], configOwned: false },
       durationMs: 7,
+      standby: false,
     }
 
     const [tool] = buildReport(input({ runs: [{ record: declared, raw: [] }] })).tools
@@ -198,6 +199,24 @@ describe('renderTerminal', () => {
     expect(text).toContain('… 1 more in report.json')
   })
 
+  /**
+   * A grade that came from our default config because the repo's own tool could
+   * not run is a grade the reader has to be told about, and the terminal glance
+   * is the only surface most runs are read through.
+   */
+  it('surfaces the run’s warnings', () => {
+    const warned = buildReport(
+      input({
+        warnings: [
+          'oxlint: graded lint on its default config because eslint reported not-available',
+        ],
+      }),
+    )
+    expect(renderTerminal(warned, paths, { color: false })).toContain(
+      'warning: oxlint: graded lint on its default config because eslint reported not-available',
+    )
+  })
+
   it('emits no escape sequences when colour is off, and some when it is on', () => {
     expect(renderTerminal(report, paths, { color: false })).not.toContain('\u001B[')
     expect(renderTerminal(report, paths, { color: true })).toContain('\u001B[')
@@ -215,5 +234,6 @@ function record(): RunRecord {
     detection: null,
     result: { state: 'ok', findings: [], rawFiles: [], toolVersion: '1.77.0' },
     durationMs: 12,
+    standby: false,
   }
 }

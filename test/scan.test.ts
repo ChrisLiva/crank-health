@@ -498,11 +498,20 @@ describe('quick scan of the ts-owned fixture', () => {
     })
   })
 
-  /** Spec §1: owned → their tool; not owned → ours. The branches are exclusive. */
+  /**
+   * Spec §1: owned → their tool; not owned → ours. The branches are exclusive —
+   * but eslint is declared here and not installed, so it has to be fetched
+   * before it can say anything. Our default runs behind it and stands down once
+   * eslint has actually graded lint, which is why the row is still in the report
+   * saying exactly why it contributed nothing.
+   */
   it('stands oxlint down, because this repo already owns a linter', () => {
-    const tools = parse(result.json).tools.map((tool) => tool.tool)
-    expect(tools).toContain('eslint')
-    expect(tools).not.toContain('oxlint')
+    const byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
+    expect([...byTool.keys()]).toContain('eslint')
+    expect(byTool.get('oxlint')).toMatchObject({
+      state: 'ok',
+      reason: 'stood down: lint graded by eslint',
+    })
   })
 
   it('grades types and dead code, which the untooled fixture could not reach', () => {
@@ -543,12 +552,23 @@ describe('quick scan of a repo that owns two linters and a formatter', () => {
   })
 
   it('stands both of our defaults down: this repo owns lint and format', () => {
-    const tools = parse(result.json).tools.map((tool) => tool.tool)
-    expect(tools).toContain('eslint')
-    expect(tools).toContain('biome-lint')
-    expect(tools).toContain('biome-format')
-    expect(tools).not.toContain('oxlint')
-    expect(tools).not.toContain('prettier')
+    const byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
+    expect([...byTool.keys()]).toEqual(
+      expect.arrayContaining(['eslint', 'biome-lint', 'biome-format']),
+    )
+    expect(byTool.get('oxlint')).toMatchObject({
+      state: 'ok',
+      reason: 'stood down: lint graded by biome-lint, eslint',
+    })
+    expect(byTool.get('prettier')).toMatchObject({
+      state: 'ok',
+      reason: 'stood down: format graded by biome-format',
+    })
+  })
+
+  /** And the human report says so in the Notes column, not only the JSON. */
+  it('says in report.md why our defaults contributed nothing', () => {
+    expect(result.markdown).toContain('stood down: lint graded by biome-lint, eslint')
   })
 
   it('grades format from Biome’s verdict alone', () => {

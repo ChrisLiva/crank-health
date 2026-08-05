@@ -142,6 +142,7 @@ describe('renderReportMarkdown', () => {
             detection: null,
             result: { state: 'error', findings: [], rawFiles: [], reason: 'a | b\nc' },
             durationMs: 1,
+            standby: false,
           },
           raw: [],
         },

@@ -269,6 +269,7 @@ describe('each task', () => {
             detection: null,
             result: { state: 'ok', findings: [], rawFiles: [] },
             durationMs: 1,
+            standby: false,
           },
           raw: ['raw/oxlint.sarif.json'],
         },

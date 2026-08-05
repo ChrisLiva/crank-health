@@ -341,6 +341,271 @@ describe('runScan tool selection', () => {
   })
 })
 
+/**
+ * A `repoOwnedOnly` tool the repo declared but did not install has to be fetched
+ * before it can say anything, and that fetch can fail. Suppressing our default
+ * on the strength of a tool that might not run is how a category goes silently
+ * ungraded. So the default is scheduled anyway, as a *standby*: it runs, and
+ * then either stands down (the owner graded the category) or is promoted (the
+ * owner did not, and the repo is told which config the grade came from).
+ */
+describe('runScan standby', () => {
+  const ownedOnly = (
+    tool: string,
+    category: Category,
+    run: (ctx: RunContext) => Promise<ToolResult>,
+    detection: Detection = DETECTION,
+  ): ToolRunner => ({
+    ...fakeRunner(tool, category, run, async () => detection),
+    repoOwnedOnly: true,
+  })
+
+  it('runs our default behind an owner that is not installed, then stands it down', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () =>
+      ok([makeFinding({ id: 'e', tool: 'eslint', category: 'lint' })]),
+    )
+    const oxlint = fakeRunner('oxlint', 'lint', async () =>
+      ok([makeFinding({ id: 'o', tool: 'oxlint', category: 'lint' })]),
+    )
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
+
+    expect(result.runs.map((run) => run.tool)).toEqual(['eslint', 'oxlint'])
+    const stood = result.runs.find((run) => run.tool === 'oxlint')
+    expect(stood?.result.findings).toEqual([])
+    expect(stood?.result.reason).toBe('stood down: lint graded by eslint')
+    expect(stood?.result.state).toBe('ok')
+    expect(result.findings.map((finding) => finding.id)).toEqual(['e'])
+    expect(result.categories.lint).toEqual({ status: 'assessed' })
+  })
+
+  it('promotes the standby when the owner could not run, and says whose config graded', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () => ({
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: 'x',
+    }))
+    const oxlint = fakeRunner('oxlint', 'lint', async () =>
+      ok([makeFinding({ id: 'o', tool: 'oxlint', category: 'lint' })]),
+    )
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
+
+    expect(result.findings.map((finding) => finding.id)).toEqual(['o'])
+    expect(result.categories.lint).toEqual({ status: 'assessed' })
+    expect(result.warnings).toContain(
+      'oxlint: graded lint on its default config because eslint reported not-available',
+    )
+  })
+
+  it('names every owner that failed, in a stable order', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () => ({
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: 'x',
+    }))
+    const biome = ownedOnly('biome-lint', 'lint', async () => ({
+      state: 'error',
+      findings: [],
+      rawFiles: [],
+      reason: 'boom',
+    }))
+    const oxlint = fakeRunner('oxlint', 'lint', async () =>
+      ok([makeFinding({ id: 'o', tool: 'oxlint', category: 'lint' })]),
+    )
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, biome, oxlint])])
+
+    expect(result.warnings).toContain(
+      'oxlint: graded lint on its default config because biome-lint reported error, eslint reported not-available',
+    )
+  })
+
+  /** Nothing graded the category, so there is no config difference to report. */
+  it('says nothing when the standby failed too — the category degrades on its own', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () => ({
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: 'x',
+    }))
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ({
+      state: 'error',
+      findings: [],
+      rawFiles: [],
+      reason: 'crashed: boom',
+    }))
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
+
+    expect(result.warnings).toEqual([])
+    expect(result.categories.lint).toMatchObject({
+      status: 'error',
+      reason: expect.stringContaining('boom'),
+    })
+  })
+
+  it('stands a failed standby down too, keeping the state that explains it', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () => ok())
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ({
+      state: 'error',
+      findings: [],
+      rawFiles: [],
+      reason: 'crashed: boom',
+      metrics: { functionsTotal: 9 },
+    }))
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
+
+    const stood = result.runs.find((run) => run.tool === 'oxlint')
+    expect(stood?.result.state).toBe('error')
+    expect(stood?.result.reason).toBe('stood down: lint graded by eslint')
+    expect('metrics' in (stood?.result ?? {})).toBe(false)
+  })
+
+  it('schedules no standby when the owner is installed and can simply run', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () => ok(), {
+      ...DETECTION,
+      installed: true,
+    })
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
+
+    expect(result.runs.map((run) => run.tool)).toEqual(['eslint'])
+    expect(oxlint.calls).toHaveLength(0)
+  })
+
+  /** Python owning its formatter says nothing about who formats the JavaScript. */
+  it('resolves a standby against its own language, never across scopes', async () => {
+    const ruff = fakeRunner(
+      'ruff-format',
+      'format',
+      async () => ok(),
+      async () => DETECTION,
+    )
+    const biome = ownedOnly('biome-format', 'format', async () => ({
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: 'x',
+    }))
+    const prettier = fakeRunner('prettier', 'format', async () =>
+      ok([makeFinding({ id: 'p', tool: 'prettier', category: 'format' })]),
+    )
+
+    const result = await runScan(REPO, [
+      adapter('python', [ruff]),
+      adapter('js-ts', [biome, prettier]),
+    ])
+
+    expect(result.findings.map((finding) => finding.id)).toEqual(['p'])
+    expect(result.runs.find((run) => run.tool === 'prettier')?.result.reason).toBeUndefined()
+    expect(result.warnings).toContain(
+      'prettier: graded format on its default config because biome-format reported not-available',
+    )
+  })
+
+  /**
+   * The same tool can own a category in two languages and fare differently in
+   * each — `ruff` formats Python and nothing else. So a standby is resolved
+   * against the run in *its* language, not against whichever run happens to
+   * share a name.
+   */
+  it('does not settle a standby against a same-named owner from another language', async () => {
+    const inPython = fakeRunner(
+      'shared-fmt',
+      'format',
+      async () => ok(),
+      async () => DETECTION,
+    )
+    const inJs = ownedOnly('shared-fmt', 'format', async () => ({
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: 'x',
+    }))
+    const prettier = fakeRunner('prettier', 'format', async () =>
+      ok([makeFinding({ id: 'p', tool: 'prettier', category: 'format' })]),
+    )
+
+    const result = await runScan(REPO, [
+      adapter('python', [inPython]),
+      adapter('js-ts', [inJs, prettier]),
+    ])
+
+    expect(result.findings.map((finding) => finding.id)).toEqual(['p'])
+    expect(result.warnings).toContain(
+      'prettier: graded format on its default config because shared-fmt reported not-available',
+    )
+  })
+
+  /**
+   * A complementary runner never conferred ownership, so its success is not the
+   * owner's — it cannot stand our default down, and it is not named as a reason
+   * the default had to grade.
+   */
+  it('is not stood down by a complementary runner that happened to succeed', async () => {
+    const eslint = ownedOnly('eslint', 'lint', async () => ({
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: 'x',
+    }))
+    const extra: ToolRunner = {
+      ...fakeRunner(
+        'lint-extra',
+        'lint',
+        async () => ok([makeFinding({ id: 'x', tool: 'lint-extra', category: 'lint' })]),
+        async () => DETECTION,
+      ),
+      complementary: true,
+    }
+    const oxlint = fakeRunner('oxlint', 'lint', async () =>
+      ok([makeFinding({ id: 'o', tool: 'oxlint', category: 'lint' })]),
+    )
+
+    const result = await runScan(REPO, [adapter('js-ts', [eslint, extra, oxlint])])
+
+    expect(result.warnings).toContain(
+      'oxlint: graded lint on its default config because eslint reported not-available',
+    )
+    expect(result.findings.map((finding) => finding.id)).toContain('o')
+  })
+
+  /** No default beside the owner — as in `test-quality` — is nothing to keep. */
+  it('schedules no standby in a category that has no default of ours', async () => {
+    const stryker = ownedOnly('stryker', 'test-quality', async () => ok())
+    const coverage: ToolRunner = {
+      ...fakeRunner('coverage', 'test-quality', async () => ok()),
+      complementary: true,
+    }
+
+    const result = await runScan(REPO, [adapter('js-ts', [stryker, coverage])], { deep: true })
+
+    expect(result.runs.map((run) => run.tool)).toEqual(['stryker', 'coverage'])
+    expect(result.runs.some((run) => run.result.reason?.startsWith('stood down'))).toBe(false)
+  })
+
+  /** A stood-down measurement is not part of the grade's denominator either. */
+  it('drops a stood-down standby’s metrics before they can merge', async () => {
+    const biome = ownedOnly('biome-format', 'format', async () => ({
+      ...ok(),
+      metrics: { formattableFiles: 4 },
+    }))
+    const prettier = fakeRunner('prettier', 'format', async () => ({
+      ...ok(),
+      metrics: { formattableFiles: 9 },
+    }))
+
+    const result = await runScan(REPO, [adapter('js-ts', [biome, prettier])])
+
+    expect(result.metrics.format).toEqual({ formattableFiles: 4 })
+  })
+})
+
 describe('runScan metrics', () => {
   const measuring = (tool: string, category: Category, metrics: ToolMetrics) =>
     fakeRunner(tool, category, async () => ({ ...ok(), metrics }))

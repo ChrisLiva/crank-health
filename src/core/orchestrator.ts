@@ -53,6 +53,13 @@ export interface RunRecord {
   readonly detection: Detection | null
   readonly result: ToolResult
   readonly durationMs: number
+  /**
+   * True when this runner is our default, scheduled behind an owner that might
+   * not manage to run — see {@link withoutRedundantDefaults}. Internal to the
+   * scan: it is resolved away by {@link resolveStandby} before anything reads
+   * the records, and it is never serialized.
+   */
+  readonly standby: boolean
 }
 
 export interface ScanResult {
@@ -97,12 +104,13 @@ export async function runScan(
       ...(options.changedFiles === undefined ? {} : { changedFiles: options.changedFiles }),
     }),
   )
+  const resolved = resolveStandby(jobs, records, warnings)
 
   return {
-    findings: sortFindings(records.flatMap((record) => record.result.findings)),
-    runs: records,
-    categories: aggregate(requested, records),
-    metrics: aggregateMetrics(records),
+    findings: sortFindings(resolved.flatMap((record) => record.result.findings)),
+    runs: resolved,
+    categories: aggregate(requested, resolved),
+    metrics: aggregateMetrics(resolved),
     warnings,
   }
 }
@@ -229,6 +237,8 @@ interface Job {
   readonly detection: Detection | null
   /** Files this runner gets: its language's subset, or everything for `common`. */
   readonly files: readonly string[]
+  /** Our default, running behind an owner that may not manage to. */
+  readonly standby: boolean
 }
 
 /** Detects languages, then per-runner ownership. Detection never runs a tool. */
@@ -277,7 +287,7 @@ async function plan(
       // repo that did not choose it — not a failure, and not a reason for the
       // category to degrade (spec §1: `ToolRunner.repoOwnedOnly`).
       if (runner.repoOwnedOnly === true && detection === null) continue
-      candidates.push({ runner, scope: adapter.language, detection, files })
+      candidates.push({ runner, scope: adapter.language, detection, files, standby: false })
     }
 
     jobs.push(...withoutRedundantDefaults(candidates))
@@ -304,19 +314,122 @@ async function plan(
  * None of this applies to runners that are not alternatives to each other; see
  * `ToolRunner.complementary`, which takes them out of the rule on both sides —
  * they neither confer ownership nor are stood down by it.
+ *
+ * The exception is an owner that may not be able to speak at all. A
+ * `repoOwnedOnly` tool the repo declared but did not install has to be fetched
+ * before it can grade anything, and that fetch can fail — at which point
+ * dropping our default would leave the category ungraded on the strength of a
+ * tool that never ran. Such an owner therefore *claims* the category without
+ * *suppressing* it: our default is kept as a **standby**, runs, and is resolved
+ * afterwards by {@link resolveStandby} — stood down if the owner graded the
+ * category, promoted if it did not.
  */
 function withoutRedundantDefaults(candidates: readonly Job[]): Job[] {
-  const owned = new Set(
-    candidates
-      .filter((job) => job.detection !== null && job.runner.complementary !== true)
-      .map((job) => job.runner.category),
-  )
-  return candidates.filter(
-    (job) =>
-      job.detection !== null ||
-      job.runner.complementary === true ||
-      !owned.has(job.runner.category),
-  )
+  const suppressed = new Set(candidates.filter(canRun).map((job) => job.runner.category))
+  const claimed = new Set(candidates.filter(owns).map((job) => job.runner.category))
+
+  // A flatMap over the candidates keeps them in candidate order; `runs` is in
+  // job order, and appending the kept standbys at the end would reorder it.
+  return candidates.flatMap((job) => {
+    if (job.detection !== null || job.runner.complementary === true) return [job]
+    if (suppressed.has(job.runner.category)) return []
+    if (claimed.has(job.runner.category)) return [{ ...job, standby: true }]
+    return [job]
+  })
+}
+
+/** This runner claims its category: the repo chose it, and it is an alternative. */
+function owns(job: Job): boolean {
+  return job.detection !== null && job.runner.complementary !== true
+}
+
+/** …and it can be counted on to actually grade it, without a fetch that may fail. */
+function canRun(job: Job): boolean {
+  return owns(job) && (job.runner.repoOwnedOnly !== true || (job.detection?.installed ?? false))
+}
+
+/**
+ * Settles what each standby run was for, once every runner has finished.
+ *
+ * Owner identity comes from the *jobs*, keyed by category and language scope, so
+ * a complementary runner that happened to succeed cannot stand a standby down —
+ * it never conferred ownership in the first place — and nothing depends on
+ * records and jobs lining up by index.
+ *
+ * Records are rebuilt, never mutated.
+ */
+function resolveStandby(
+  jobs: readonly Job[],
+  records: readonly RunRecord[],
+  warnings: string[],
+): RunRecord[] {
+  if (!jobs.some((job) => job.standby)) return [...records]
+
+  const owners = new Map<string, Set<string>>()
+  for (const job of jobs) {
+    if (job.standby || job.detection === null || job.runner.complementary === true) continue
+    const key = ownerKey(job.runner.category, job.scope)
+    const tools = owners.get(key) ?? new Set<string>()
+    tools.add(job.runner.tool)
+    owners.set(key, tools)
+  }
+
+  return records.map((record) => {
+    if (!record.standby) return record
+    const mine = owners.get(ownerKey(record.category, record.scope)) ?? new Set<string>()
+    const ownerRecords = records.filter(
+      (other) =>
+        other.category === record.category && other.scope === record.scope && mine.has(other.tool),
+    )
+
+    const graded = ownerRecords.filter((other) => other.result.state === 'ok')
+    if (graded.length > 0) return stoodDown(record, graded)
+
+    // Nobody who claimed the category managed to grade it, so the standby's
+    // grade is the one the repo gets — on our config, not theirs. That is a
+    // difference the repo has to be told about, in fixed words that name only
+    // tools and states: a runner's own reason can carry local paths.
+    if (ownerRecords.length > 0 && record.result.state === 'ok') {
+      const because = ownerRecords
+        .toSorted((a, b) => compare(a.tool, b.tool))
+        .map((other) => `${other.tool} reported ${other.result.state}`)
+        .join(', ')
+      warnings.push(
+        `${record.tool}: graded ${record.category} on its default config because ${because}`,
+      )
+    }
+    return record
+  })
+}
+
+function ownerKey(category: Category, scope: RunnerScope): string {
+  return `${category} ${scope}`
+}
+
+/**
+ * The owner graded the category, so the standby's own verdict is not part of
+ * the grade — its findings go, and so do its metrics, which would otherwise
+ * merge into a measurement the repo's own tool already made.
+ *
+ * What stays is the evidence: its state, its raw files, the version that ran.
+ * The reason says which tool the grade came from, in fixed words — a runner's
+ * own free-text reason can name machine-specific paths and would break
+ * determinism.
+ */
+function stoodDown(record: RunRecord, graded: readonly RunRecord[]): RunRecord {
+  const { metrics: _metrics, ...result } = record.result
+  const names = graded
+    .map((other) => other.tool)
+    .toSorted()
+    .join(', ')
+  return {
+    ...record,
+    result: {
+      ...result,
+      findings: [],
+      reason: `stood down: ${record.category} graded by ${names}`,
+    },
+  }
 }
 
 /** The two per-tool wall-clock budgets: the quick one, and the deep one. */
@@ -362,6 +475,7 @@ async function execute(
     detection: job.detection,
     result,
     durationMs: Date.now() - startedAt,
+    standby: job.standby,
   }
 }
 
