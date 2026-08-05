@@ -43,6 +43,32 @@ describe('agent.md goldens', () => {
   })
 })
 
+/**
+ * A run whose grade did not come from the tool the repo chose has to say so
+ * where the agent reads, not only in `report.json`. The warnings are the run's
+ * own fixed sentences, so the line is provenance rather than prose — and a run
+ * with nothing to explain renders no line at all, which is why the goldens
+ * above are untouched by this.
+ */
+describe('how this run was graded', () => {
+  const WARNING = 'x: graded lint on its default config because y reported error'
+
+  it('quotes every run warning above the ground rules', async () => {
+    const report = await readGoldenReport('sec-basic')
+    const markdown = renderAgentMarkdown({ ...report, warnings: [WARNING] })
+
+    const line = `> How this run was graded: ${WARNING}`
+    expect(markdown).toContain(line)
+    expect(markdown.indexOf(line)).toBeLessThan(markdown.indexOf('## Ground rules'))
+  })
+
+  it('says nothing when the run had nothing to explain', async () => {
+    const report = await readGoldenReport('sec-basic')
+    expect(report.warnings).toEqual([])
+    expect(renderAgentMarkdown(report)).not.toContain('How this run was graded')
+  })
+})
+
 describe('task priority', () => {
   /**
    * Spec §10's order is fixed — security → types → dead code → complexity →

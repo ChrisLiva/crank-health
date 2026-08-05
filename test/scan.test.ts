@@ -377,6 +377,73 @@ describe('quick scan of the js-library fixture', () => {
   )
 })
 
+/**
+ * The other half of the standby rule: ts-owned proves our default stands down
+ * when the repo's own linter grades the category, and this fixture proves it is
+ * promoted when the owner cannot. ESLint is declared here and configured only
+ * through `.eslintrc.json`, which the pinned ESLint no longer reads, and there
+ * is no `node_modules` to fall back on — so the owner reports `not-available`
+ * and the category would go ungraded if oxlint had been dropped for it.
+ */
+describe('quick scan of the js-legacy-eslint fixture', () => {
+  let fixture: FixtureRepo
+  let scan: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('js-legacy-eslint')
+    scan = await runHealthScan({ path: fixture.root })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('promotes the standby when the repo’s own linter cannot speak', () => {
+    const byTool = new Map(parse(scan.json).tools.map((tool) => [tool.tool, tool]))
+    expect(byTool.get('eslint')).toMatchObject({
+      state: 'not-available',
+      reason: expect.stringContaining('no longer reads') as unknown as string,
+    })
+    // Not stood down: nothing graded lint but oxlint itself.
+    expect(byTool.get('oxlint')).toMatchObject({ state: 'ok', reason: null })
+    expect(scan.report.warnings).toEqual([
+      'oxlint: graded lint on its default config because eslint reported not-available',
+    ])
+  })
+
+  /**
+   * The promotion has to reach the grade, or the warning is only a label: a
+   * graded lint category is what lets `--fail-under` hold this repo to a
+   * standard without `--allow-missing`.
+   */
+  it('grades lint from the promoted standby’s findings', () => {
+    expect(scan.report.categories.lint).toEqual({ status: 'graded', grade: 'F' })
+    expect(
+      scan.report.findings
+        .filter((finding) => finding.category === 'lint')
+        .map((finding) => [finding.tool, finding.rule, finding.severity, finding.gradeScope]),
+    ).toEqual([['oxlint', 'eslint(no-const-assign)', 'error', true]])
+  })
+
+  it('tells the agent where the grade came from', () => {
+    expect(scan.agentMarkdown).toContain(
+      '> How this run was graded: oxlint: graded lint on its default config because eslint reported not-available',
+    )
+  })
+
+  it(
+    'produces byte-identical output when run twice on the same commit',
+    async () => {
+      const second = await runHealthScan({ path: fixture.root })
+      expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
+      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+        scan.report.findings.map((finding) => finding.id),
+      )
+    },
+    SCAN_TIMEOUT_MS,
+  )
+})
+
 describe('quick scan of the ts-owned fixture', () => {
   let fixture: FixtureRepo
   let result: HealthScanResult
@@ -610,7 +677,7 @@ describe('the same rule class under two provenances', () => {
 })
 
 describe('zero footprint', () => {
-  it.each(['js-basic', 'js-owned', 'ts-owned', 'js-multi-tool', 'js-library'])(
+  it.each(['js-basic', 'js-owned', 'ts-owned', 'js-multi-tool', 'js-library', 'js-legacy-eslint'])(
     'leaves %s untouched after a full scan',
     async (name) => {
       const fixture = await createFixtureRepo(name)

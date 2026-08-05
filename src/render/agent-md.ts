@@ -102,6 +102,7 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
     '# Fix plan',
     subtitle(report, delta),
     gradesLine(report),
+    ...gradingProvenance(report),
     ...(delta === undefined ? [] : [deltaLine(delta)]),
     delta === undefined ? GROUND_RULES : `${GROUND_RULES}\n${PR_GROUND_RULES}`,
     '## Tasks',
@@ -334,6 +335,22 @@ function resolvedSection(delta: ReportDelta | undefined): string[] {
     'Context only — nothing to do here.',
     lines.join('\n'),
   ]
+}
+
+/**
+ * Why the grades above are the grades above, where the run had to explain
+ * itself: the standby oxlint that graded lint because the repo's own ESLint
+ * could not, a language whose detection failed. An agent working from a grade
+ * that did not come from the tool the repo chose is owed that fact before it
+ * starts fixing findings against a config the repo never wrote.
+ *
+ * The warnings are the run's own fixed sentences ({@link Report.warnings},
+ * already sorted), quoted verbatim — nothing is composed here. A run with
+ * nothing to explain renders no block at all.
+ */
+function gradingProvenance(report: Report): string[] {
+  if (report.warnings.length === 0) return []
+  return [report.warnings.map((warning) => `> How this run was graded: ${warning}`).join('\n')]
 }
 
 function gradesLine(report: Report): string {
