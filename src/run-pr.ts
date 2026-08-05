@@ -10,11 +10,16 @@ import {
   removeWorktree,
   resolveCommit,
 } from './core/git.ts'
-import { createOutputDir } from './core/output.ts'
 import type { Category, CategoryState } from './core/types.ts'
 import { buildReport } from './render/json.ts'
 import type { HealthScanOptions, HealthScanResult } from './run.ts'
-import { adoptRawFiles, resolveRepoRoot, scanTree, writeArtifacts } from './run.ts'
+import {
+  adoptRawFiles,
+  createRunDirectory,
+  resolveRepoRoot,
+  scanTree,
+  writeArtifacts,
+} from './run.ts'
 
 /**
  * `--pr <base>` — the two-scan delta of spec §4.
@@ -81,7 +86,7 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
   const worktree = join(scratch, 'base')
 
   try {
-    const out = await createOutputDir(repoRoot, options.out)
+    const out = await createRunDirectory(repoRoot, options.out)
     const diff = await readDiffFacts(repoRoot, base)
 
     await addWorktree(repoRoot, worktree, base)

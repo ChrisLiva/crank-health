@@ -13,6 +13,7 @@ import type {
 import { pinnedPythonVersion } from '../../manifest.ts'
 import { detectPythonTool } from '../python/py-project.ts'
 import {
+  OMITTED,
   asArray,
   asNumber,
   asRecord,
@@ -22,6 +23,7 @@ import {
   firstLine,
   identify,
   repoRelative,
+  sanitizeRawResults,
 } from '../support.ts'
 
 /**
@@ -64,6 +66,24 @@ const SEVERITIES: Readonly<Record<string, Severity>> = {
 
 /** Severities that count toward the grade; see the file comment. */
 const GRADED_SEVERITIES: ReadonlySet<Severity> = new Set(['error', 'warning'])
+
+/**
+ * bandit's hardcoded-secret tests: `B105` (string), `B106` (function argument),
+ * `B107` (argument default). Their `issue_text` quotes the literal it found —
+ * "Possible hardcoded password: 'hunter2'" — and a `message` goes into
+ * `report.json`, `report.md` and `agent.md` verbatim.
+ *
+ * A secrets finding must never carry the secret; gitleaks is redacted at the
+ * source (`--redact=100`) and bandit has no such flag, so {@link redactSecret}
+ * is that flag. The reader is told where to look, not what was found.
+ */
+const SECRET_TEST_IDS: ReadonlySet<string> = new Set(['B105', 'B106', 'B107'])
+
+/** The quoted literal in a message, either quoting style. */
+const QUOTED_LITERAL = /(['"])(?:(?!\1).)*\1/g
+
+/** What replaces it. */
+const REDACTED = '<redacted>'
 
 /**
  * What a common-adapter runner says when the repo has nothing of its kind in
@@ -126,8 +146,15 @@ async function runBandit(ctx: RunContext): Promise<ToolResult> {
       { cwd: ctx.scratch, timeoutMs: ctx.timeoutMs },
     )
 
+    // Sanitized before it is staged, never after: `raw/` is copied into the run
+    // directory verbatim, so this is the only place the excerpts can be dropped.
     // eslint-disable-next-line no-await-in-loop
-    rawFiles.push(await writeScratchRaw(ctx.scratch, `bandit${suffix}.json`, execution.stdout))
+    const staged = await writeScratchRaw(
+      ctx.scratch,
+      `bandit${suffix}.json`,
+      sanitizeRawJson(execution.stdout),
+    )
+    rawFiles.push(staged)
     if (execution.stderr.trim().length > 0) {
       // eslint-disable-next-line no-await-in-loop
       const stderr = await writeScratchRaw(
@@ -269,11 +296,33 @@ export function toPendingFindings(
           endLine: issue.endLine,
           endCol: issue.endColumn,
         },
-        message: `${issue.message} (${issue.severity.toLowerCase()} severity, ${issue.confidence.toLowerCase()} confidence)`,
+        message: `${redactSecret(issue.testId, issue.message)} (${issue.severity.toLowerCase()} severity, ${issue.confidence.toLowerCase()} confidence)`,
         provenance: repoConfig ? ('repo-config' as const) : ('default-config' as const),
         gradeScope: repoConfig || GRADED_SEVERITIES.has(severity),
         ...(issue.moreInfo === '' ? {} : { fixHint: `see ${issue.moreInfo}` }),
       }
     })
     .toSorted(byLocation)
+}
+
+/**
+ * The message with its quoted literal removed, for the tests that quote a
+ * secret ({@link SECRET_TEST_IDS}).
+ */
+function redactSecret(testId: string, message: string): string {
+  return SECRET_TEST_IDS.has(testId)
+    ? message.replaceAll(QUOTED_LITERAL, (match) => `${match[0]}${REDACTED}${match[0]}`)
+    : message
+}
+
+/**
+ * bandit's raw JSON with every `code` excerpt replaced — bandit reports a
+ * window of the flagged file around each finding, and a hardcoded credential
+ * (its own `B105`, or one two lines from an unrelated `B602`) would otherwise
+ * be copied into the run directory in full. See {@link sanitizeRawResults}.
+ */
+export function sanitizeRawJson(stdout: string): string {
+  return sanitizeRawResults(stdout, (issue) =>
+    issue['code'] === undefined ? issue : { ...issue, code: OMITTED },
+  )
 }

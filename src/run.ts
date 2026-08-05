@@ -2,13 +2,14 @@ import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ADAPTERS } from './adapters/index.ts'
+import { CliUsageError } from './args.ts'
 import { countPhysicalLines, discoverFiles } from './core/discover.ts'
 import { headCommit } from './core/git.ts'
 import { failingFilePercent, gradeCategory } from './core/grade.ts'
 import { runScan } from './core/orchestrator.ts'
 import type { ScanResult } from './core/orchestrator.ts'
 import type { OutputDir } from './core/output.ts'
-import { createOutputDir } from './core/output.ts'
+import { DEFAULT_OUTPUT_DIRNAME, createOutputDir } from './core/output.ts'
 import type { Category, CategoryState, Grade, LanguageAdapter, RepoContext } from './core/types.ts'
 import { CATEGORIES, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
@@ -74,7 +75,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
   const scratch = await mkdtemp(join(tmpdir(), 'crank-health-'))
 
   try {
-    const out = await createOutputDir(repoRoot, options.out)
+    const out = await createRunDirectory(repoRoot, options.out)
     const tree = await scanTree({ ...options, repoRoot, scratch })
 
     return await writeArtifacts(
@@ -192,6 +193,32 @@ export async function writeArtifacts(out: OutputDir, report: Report): Promise<He
     markdownPath,
     agentPath,
   }
+}
+
+/**
+ * The run directory, with the one `--out` no scan may accept: the repo itself.
+ *
+ * A run directory is crank-health's, not the repo's — it gets a `.gitignore`
+ * that ignores everything in it, and `report.json`, `report.md` and `agent.md`
+ * are written into it on every run. Pointed at the repo root that would mean
+ * three files in the user's source tree and a `.gitignore` collision with
+ * theirs, which is the opposite of the zero-footprint contract (spec §7) and of
+ * acceptance criterion 4. It is a typo a user fixes by re-typing the command,
+ * so it is a usage error (exit 2) rather than a crash.
+ *
+ * @throws {CliUsageError} when `out` resolves to `repoRoot`
+ */
+export async function createRunDirectory(
+  repoRoot: string,
+  out: string | undefined,
+): Promise<OutputDir> {
+  if (out !== undefined && resolve(out) === repoRoot) {
+    throw new CliUsageError(
+      `--out ${out} is the repo itself — crank-health writes its own run directory there, ` +
+        `so give it one of its own (the default is ${DEFAULT_OUTPUT_DIRNAME}/)`,
+    )
+  }
+  return createOutputDir(repoRoot, out)
 }
 
 /** The target path, checked to be a directory before anything else happens. */

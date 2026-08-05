@@ -128,6 +128,15 @@ export interface ExecOptions {
 /** Tool output can be large on big repos; well past that we would rather fail. */
 const MAX_BUFFER_BYTES = 128 * 1024 * 1024
 
+/**
+ * How long a terminated tool has to exit before it is killed outright.
+ *
+ * SIGTERM first, so a tool that wants to remove its own temp files gets the
+ * chance; SIGKILL soon after, because a budget that a process can decline to
+ * honor is not a budget.
+ */
+const FORCE_KILL_AFTER_MS = 2_000
+
 /** How long an ephemeral tool may run before we explain the wait (see below). */
 export const FIRST_RUN_NOTICE_MS = 4_000
 
@@ -147,6 +156,22 @@ export async function execTool(tool: ToolCommand, options: ExecOptions): Promise
       maxBuffer: MAX_BUFFER_BYTES,
       env: { ...NEUTRAL_ENV, ...options.env },
       extendEnv: true,
+      // Almost every tool here is a *tree*: `npx` spawns the analyzer, `uvx`
+      // spawns it inside an ephemeral venv, a repo's `node_modules/.bin` entry
+      // is often a shell wrapper. Terminating only the direct child leaves the
+      // grandchild alive holding the stdout pipe we are still reading, so the
+      // budget expires, the scan moves on with a `timeout` result — and the CLI
+      // cannot exit until the abandoned process finishes on its own. A one-tool
+      // hang would become a scan that never returns.
+      //
+      // `killDescendants` makes every termination path take the whole tree: on
+      // Unix the subprocess leads its own process group and the signal goes to
+      // `-pid`, on Windows execa uses `taskkill /T /F`. It deliberately does
+      // *not* set the user-facing `detached` option, which is what keeps
+      // `cleanup` (on by default) killing the same tree when crank-health
+      // itself exits or is interrupted — so Ctrl-C still leaves nothing behind.
+      killDescendants: true,
+      forceKillAfterDelay: FORCE_KILL_AFTER_MS,
     })
 
     const stdout = String(result.stdout ?? '')

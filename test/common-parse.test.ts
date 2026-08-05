@@ -1,9 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import type { BanditIssue } from '../src/adapters/common/bandit.ts'
 import {
   BANDIT_TOOL,
   parseBanditJson,
+  sanitizeRawJson as sanitizeBanditRaw,
   toPendingFindings as toBanditFindings,
 } from '../src/adapters/common/bandit.ts'
 import {
@@ -20,6 +22,7 @@ import { OPENGREP_RULE_IDS, OPENGREP_RULES } from '../src/adapters/common/opengr
 import {
   parseOpengrepJson,
   ruleOf,
+  sanitizeRawJson as sanitizeOpengrepRaw,
   toPendingFindings as toOpengrepFindings,
 } from '../src/adapters/common/opengrep.ts'
 import {
@@ -314,6 +317,68 @@ describe('parseBanditJson', () => {
     expect(findings.every((finding) => finding.tool === BANDIT_TOOL)).toBe(true)
     expect(findings.every((finding) => finding.category === 'security')).toBe(true)
   })
+
+  /**
+   * bandit's hardcoded-secret tests quote the literal they found, and a
+   * finding's message is copied verbatim into `report.json`, `report.md` and
+   * `agent.md`. A secrets finding that carries the secret has published it.
+   */
+  it.each(['B105', 'B106', 'B107'])('redacts the literal %s quotes', (testId) => {
+    const [finding] = toBanditFindings(
+      [banditIssue({ testId, message: `Possible hardcoded password: '${SECRET}'` })],
+      false,
+    )
+    expect(finding?.message).not.toContain(SECRET)
+    expect(finding?.message).toContain("'<redacted>'")
+  })
+
+  it('leaves every other test’s message alone, quotes included', () => {
+    const [finding] = toBanditFindings(
+      [banditIssue({ testId: 'B602', message: "subprocess call with shell=True: 'tar czf'" })],
+      false,
+    )
+    expect(finding?.message).toContain("'tar czf'")
+  })
+})
+
+/**
+ * `raw/` is the evidence a reader opens and the thing they attach to a ticket.
+ * Both security scanners copy the source line they matched into their reports,
+ * and that is the one line worth keeping out of the run directory.
+ */
+describe('raw evidence sanitizing', () => {
+  it('drops bandit’s code excerpts and keeps everything else', async () => {
+    const sanitized = sanitizeBanditRaw(await read('bandit-1.9.4.json'))
+
+    expect(sanitized).not.toContain('import subprocess\n')
+    expect(sanitized).toContain('"code": "<omitted>"')
+    // Still a bandit report, and still says where to look.
+    expect(parseBanditJson(sanitized, '/repo').map((issue) => [issue.testId, issue.line])).toEqual([
+      ['B404', 3],
+      ['B602', 13],
+    ])
+  })
+
+  it('drops opengrep’s matched lines and keeps everything else', async () => {
+    const sanitized = sanitizeOpengrepRaw(await read('opengrep-1.26.0.json'))
+
+    expect(sanitized).not.toContain('shell=True)')
+    expect(sanitized).toContain('"lines": "<omitted>"')
+    expect(parseOpengrepJson(sanitized).map((result) => [result.rule, result.startLine])).toEqual([
+      ['python-subprocess-shell-true', 13],
+      ['js-eval-call', 2],
+    ])
+  })
+
+  /** Output nothing can be made of is the only clue to why; it is kept as-is. */
+  it.each([
+    ['', ''],
+    ['not json at all', 'not json at all'],
+    ['{"oops":true}', '{"oops":true}'],
+  ])('passes through output that is not a result envelope: %s', (stdout, expected) => {
+    expect(sanitizeBanditRaw(stdout)).toBe(expected)
+    expect(sanitizeOpengrepRaw(stdout)).toBe(expected)
+  })
 })
 
 describe('parseOsvReport', () => {
@@ -408,6 +473,27 @@ describe('parseJscpdReport', () => {
     expect(findings.every((finding) => finding.category === 'duplication')).toBe(true)
   })
 })
+
+/** A synthetic secret, so no real-looking credential is checked in twice. */
+const SECRET = 'hunter2-not-a-real-password'
+
+/** One bandit issue; override only what the assertion is about. */
+function banditIssue(overrides: Partial<BanditIssue> = {}): BanditIssue {
+  return {
+    testId: 'B105',
+    testName: 'hardcoded_password_string',
+    file: 'src/config.py',
+    line: 4,
+    endLine: 4,
+    column: 12,
+    endColumn: 40,
+    message: 'Possible hardcoded password',
+    severity: 'LOW',
+    confidence: 'MEDIUM',
+    moreInfo: '',
+    ...overrides,
+  }
+}
 
 /** A pending finding with an id, for the grading helpers. */
 function identified(finding: Omit<Finding, 'id'> & { readonly anchor?: string }): Finding {

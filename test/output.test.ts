@@ -1,10 +1,12 @@
-import { readFile, readdir, mkdtemp, rm, stat } from 'node:fs/promises'
+import { readFile, readdir, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { execa } from 'execa'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CliUsageError } from '../src/args.ts'
 import { writeScratchRaw } from '../src/core/exec.ts'
 import { DEFAULT_OUTPUT_DIRNAME, createOutputDir } from '../src/core/output.ts'
+import { createRunDirectory } from '../src/run.ts'
 
 describe('createOutputDir', () => {
   let repo: string
@@ -27,6 +29,26 @@ describe('createOutputDir', () => {
   it('writes a .gitignore that hides the whole run directory', async () => {
     const out = await createOutputDir(repo)
     expect(await readFile(join(out.root, '.gitignore'), 'utf8')).toBe('*\n')
+  })
+
+  it('writes that marker into a fresh --out directory too', async () => {
+    const out = await createOutputDir(repo, join(repo, 'fresh-out'))
+    expect(await readFile(join(out.root, '.gitignore'), 'utf8')).toBe('*\n')
+  })
+
+  /**
+   * `--out` can name a directory the user already keeps things in, and their
+   * ignore rules are theirs. Replacing them with `*` is silent data loss — and
+   * it is the run directory's own convenience, not a correctness requirement.
+   */
+  it('never overwrites a .gitignore that is already there', async () => {
+    const target = join(repo, 'existing')
+    await mkdir(target, { recursive: true })
+    await writeFile(join(target, '.gitignore'), 'node_modules\n*.log\n', 'utf8')
+
+    await createOutputDir(repo, target)
+
+    expect(await readFile(join(target, '.gitignore'), 'utf8')).toBe('node_modules\n*.log\n')
   })
 
   it('leaves git status clean in the target repo', async () => {
@@ -97,6 +119,26 @@ describe('createOutputDir', () => {
   it('allows a nested raw path', async () => {
     const out = await createOutputDir(repo)
     expect(out.path('raw/oxlint.json')).toBe(join(out.root, 'raw', 'oxlint.json'))
+  })
+
+  /**
+   * Acceptance criterion 4 says a run leaves `git status --porcelain` empty.
+   * `--out .` cannot: the artifacts land in the source tree and the marker
+   * would have to claim the repo's own `.gitignore`. It is a typo, so it is a
+   * usage error rather than a run that quietly does damage.
+   */
+  it('refuses an --out that is the repo itself', async () => {
+    await expect(createRunDirectory(repo, repo)).rejects.toThrow(CliUsageError)
+    // Including by a relative path — `--out .` from inside the repo.
+    await expect(createRunDirectory(repo, relative(process.cwd(), repo))).rejects.toThrow(
+      /is the repo itself/,
+    )
+    expect(await readdir(repo)).toEqual([])
+  })
+
+  it('accepts a directory inside the repo, which is what the default is', async () => {
+    const out = await createRunDirectory(repo, join(repo, DEFAULT_OUTPUT_DIRNAME))
+    expect(out.root).toBe(join(repo, DEFAULT_OUTPUT_DIRNAME))
   })
 
   it('adopts raw output staged in the scratch dir before scratch is destroyed', async () => {

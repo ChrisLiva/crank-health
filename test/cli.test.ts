@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +21,16 @@ const PR_TIMEOUT_MS = 240_000
 /** Runs the CLI as a real process so exit codes and streams are the real ones. */
 function runCli(args: readonly string[], env: Record<string, string> = {}) {
   return execa('node', [CLI_ENTRY, ...args], { reject: false, env, extendEnv: true })
+}
+
+/** Signal 0 tests for existence without delivering anything. */
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
 }
 
 describe('crank-health binary', () => {
@@ -136,6 +146,83 @@ describe('crank-health binary', () => {
     expect(report.profile).toBe('deep')
     expect(report.categories['test-quality']?.status).toBe('not-assessed')
     expect(report.categories['test-quality']?.reason).not.toContain('run `--deep`')
+  })
+
+  /**
+   * Acceptance criterion 4: a run leaves the target's `git status` empty. With
+   * the repo itself as the run directory it could not — so the run never
+   * starts, and nothing is written.
+   */
+  it('exits 2 when --out is the repo itself, before writing anything', async () => {
+    const result = await execa('node', [CLI_ENTRY, '--out', '.'], {
+      reject: false,
+      cwd: fixture.root,
+      extendEnv: true,
+    })
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('is the repo itself')
+    expect(await fixture.status()).toBe('')
+  })
+
+  /**
+   * Spec §5's "per-tool timeout 120s (configurable)", and the thing a budget
+   * has to mean: the run is over when the budget is.
+   *
+   * The stub is a shell that backgrounds a 60-second sleep and waits on it —
+   * the shape of every real tool here, where `npx`, `uvx` or a `.bin` wrapper
+   * spawns the analyzer. Terminating only the direct child leaves the sleep
+   * holding the stdout pipe crank-health is reading, and the CLI cannot exit
+   * until it finishes on its own: a one-tool hang becomes a run that never
+   * returns. So this asserts three things at once — the budget is honoured, the
+   * process leaves promptly, and the whole tree is gone with it.
+   */
+  it('applies --timeout as the per-tool budget, and takes the tool’s children with it', async () => {
+    const slow = await createFixtureRepo('js-basic')
+    const budgeted = await mkdtemp(join(tmpdir(), 'crank-cli-timeout-'))
+    const pidFile = join(budgeted, 'grandchild.pid')
+    try {
+      await writeFile(join(slow.root, '.oxlintrc.json'), '{}\n')
+      await mkdir(join(slow.root, 'node_modules', '.bin'), { recursive: true })
+      await writeFile(
+        join(slow.root, 'node_modules', '.bin', 'oxlint'),
+        `#!/bin/sh\nsleep 60 &\necho $! > ${pidFile}\nwait\n`,
+        { mode: 0o755 },
+      )
+
+      const startedAt = Date.now()
+      const result = await runCli([
+        '--only',
+        'lint',
+        '--timeout',
+        '1',
+        '--out',
+        budgeted,
+        slow.root,
+      ])
+      const elapsedMs = Date.now() - startedAt
+
+      expect(result.exitCode).toBe(0)
+      const report = JSON.parse(await readFile(join(budgeted, 'report.json'), 'utf8')) as {
+        tools: { tool: string; state: string; reason: string | null }[]
+        categories: Record<string, { status: string }>
+      }
+      expect(report.tools[0]).toMatchObject({ tool: 'oxlint', state: 'timeout' })
+      expect(report.tools[0]?.reason).toContain('budget')
+      expect(report.categories['lint']?.status).toBe('not-assessed')
+
+      // Far inside the 60s the abandoned sleep would otherwise have run for.
+      expect(elapsedMs).toBeLessThan(20_000)
+      expect(isRunning(Number((await readFile(pidFile, 'utf8')).trim()))).toBe(false)
+    } finally {
+      await slow.remove()
+      await rm(budgeted, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it('exits 2 on a --timeout that is not a positive whole number of seconds', async () => {
+    const result = await runCli(['--timeout', '0', fixture.root])
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('--timeout expects a whole number of seconds')
   })
 
   it('exits 2 on a --pr base that does not exist here', async () => {

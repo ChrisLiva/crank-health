@@ -230,6 +230,18 @@ describe('each task', () => {
     }
   })
 
+  /**
+   * Test quality only exists in the deep profile: quick reports it
+   * `not assessed`, and `--fail-under A` counts that as a failure. Without
+   * `--deep` the Verify line could never pass, however good the work was.
+   */
+  it('verifies test-quality work in the profile that assesses it', () => {
+    for (const task of tasks) {
+      expect(parseCliArgs(task.verify).deep).toBe(task.category === 'test-quality')
+    }
+    expect(tasks.some((task) => task.category === 'test-quality')).toBe(true)
+  })
+
   it('renders that command as a runnable npx invocation', () => {
     const markdown = renderAgentMarkdown(everyCategoryFailing())
     expect(markdown).toContain('Verify: `npx crank-health --only security --fail-under A`')

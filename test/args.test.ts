@@ -13,6 +13,7 @@ describe('parseCliArgs', () => {
       out: undefined,
       only: undefined,
       failUnder: undefined,
+      timeoutSeconds: undefined,
       allowMissing: false,
       json: false,
       help: false,
@@ -41,6 +42,8 @@ describe('parseCliArgs', () => {
       'B',
       '--allow-missing',
       '--json',
+      '--timeout',
+      '30',
       'repo',
     ])
     expect(options).toEqual({
@@ -50,12 +53,25 @@ describe('parseCliArgs', () => {
       out: '/tmp/health',
       only: ['lint', 'types', 'security'],
       failUnder: 'B',
+      timeoutSeconds: 30,
       allowMissing: true,
       json: true,
       help: false,
       version: false,
     })
   })
+
+  /** Spec §5: the per-tool budget is "120s (configurable)"; this is the knob. */
+  it('reads --timeout as a whole number of seconds', () => {
+    expect(parseCliArgs(['--timeout', ' 45 ']).timeoutSeconds).toBe(45)
+  })
+
+  it.each(['0', '-5', '1.5', 'soon', ''])(
+    'rejects --timeout %s, which would time every tool out',
+    (value) => {
+      expect(() => parseCliArgs(['--timeout', value])).toThrow(CliUsageError)
+    },
+  )
 
   it('trims and normalizes --only and --fail-under', () => {
     const options = parseCliArgs(['--only', 'lint, types ,', '--fail-under', 'c'])
@@ -96,6 +112,7 @@ describe('HELP_TEXT', () => {
       '--fail-under <B>',
       '--allow-missing',
       '--json',
+      '--timeout <secs>',
       '-h, --help',
       '--version',
     ]) {

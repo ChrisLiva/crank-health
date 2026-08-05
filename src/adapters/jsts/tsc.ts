@@ -126,6 +126,7 @@ async function runTsc(ctx: RunContext): Promise<ToolResult> {
       findings: [],
       rawFiles: [],
       reason: 'no tsconfig.json and no TypeScript sources — nothing owns the types category',
+      configOwned: ownsConfig,
     }
   }
 
@@ -154,38 +155,50 @@ async function runTsc(ctx: RunContext): Promise<ToolResult> {
       findings: [],
       rawFiles,
       reason: execution.failure.reason,
+      configOwned: ownsConfig,
     }
   }
 
-  const diagnostics = parseDiagnostics(execution.stdout)
+  // The findings this run actually produced: parsed, then narrowed to the files
+  // discovery gave us. Both steps drop diagnostics — the parser drops the ones
+  // with no `file(line,col)` prefix, the filter drops the ones about a file
+  // nobody asked us to analyze (`tsconfig.json` itself, a `.d.ts` outside the
+  // inventory) — and the guard below has to see what survived *both*, not what
+  // survived the first. A config that type-checks nothing (`"files": []`,
+  // TS18002) reports only diagnostics of exactly that kind, and calling that
+  // "zero type errors" is the lie this guard exists to prevent.
+  const analyzed = new Set(ctx.files)
+  const pending = toPendingFindings(
+    parseDiagnostics(execution.stdout),
+    ownsConfig,
+    ctx.repoRoot,
+  ).filter((finding) => analyzed.has(finding.file))
 
   // tsc exits non-zero when it emitted diagnostics — but also when the project
-  // itself could not be loaded, and those messages carry no file, so they parse
-  // to nothing. Reporting "zero type errors" there would be a lie.
-  if (diagnostics.length === 0 && execution.exitCode !== 0) {
+  // itself could not be loaded or resolved to no input at all.
+  if (pending.length === 0 && execution.exitCode !== 0) {
     return {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `tsc failed without reporting a diagnostic (exit ${execution.exitCode ?? 'signal'}): ${
-        firstLine(execution.stdout) || firstLine(execution.stderr)
-      }`,
+      reason: `tsc failed without reporting a diagnostic in any analyzed file (exit ${
+        execution.exitCode ?? 'signal'
+      }): ${firstLine(execution.stdout) || firstLine(execution.stderr)}`,
+      configOwned: ownsConfig,
     }
   }
 
-  const analyzed = new Set(ctx.files)
   return {
     state: 'ok',
-    findings: await identify(
-      ctx.repoRoot,
-      toPendingFindings(diagnostics, ownsConfig, ctx.repoRoot).filter((finding) =>
-        analyzed.has(finding.file),
-      ),
-    ),
+    findings: await identify(ctx.repoRoot, pending),
     ...(detection?.version === undefined
       ? { toolVersion: pinnedVersion(TSC_PACKAGE) }
       : { toolVersion: detection.version }),
     rawFiles,
+    // Spec §1: `tsconfig.json` owns the types category, and a *declared*
+    // TypeScript dependency does not. Detection sees both, so the runner is the
+    // only place that knows which config actually decided these findings.
+    configOwned: ownsConfig,
   }
 }
 

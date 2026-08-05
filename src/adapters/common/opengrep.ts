@@ -12,6 +12,7 @@ import type {
 } from '../../core/types.ts'
 import { verifiedVersion } from '../../manifest.ts'
 import {
+  OMITTED,
   asArray,
   asNumber,
   asRecord,
@@ -21,6 +22,7 @@ import {
   firstLine,
   identify,
   repoRelative,
+  sanitizeRawResults,
 } from '../support.ts'
 import { OPENGREP_RULES } from './opengrep-rules.ts'
 import type { SystemToolSpec } from './system-tool.ts'
@@ -117,8 +119,13 @@ async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
     // `opengrep.json` next to the report would read as "scanned, found
     // nothing", which is the opposite of `not-available`.
     if (execution.stdout.trim().length > 0) {
+      // Sanitized before it is staged; see {@link sanitizeRawJson}.
       // eslint-disable-next-line no-await-in-loop
-      const staged = await writeScratchRaw(ctx.scratch, `opengrep${suffix}.json`, execution.stdout)
+      const staged = await writeScratchRaw(
+        ctx.scratch,
+        `opengrep${suffix}.json`,
+        sanitizeRawJson(execution.stdout),
+      )
       rawFiles.push(staged)
     }
     if (execution.stderr.trim().length > 0) {
@@ -235,6 +242,21 @@ export function parseOpengrepJson(stdout: string): OpengrepResult[] {
         severity: asString(extra?.['severity']) ?? 'INFO',
       } satisfies OpengrepResult,
     ]
+  })
+}
+
+/**
+ * opengrep's raw JSON with every `extra.lines` source excerpt replaced —
+ * opengrep quotes the line it matched, and a security scanner's matched line is
+ * exactly the one worth not copying into the run directory. See
+ * {@link sanitizeRawResults}.
+ */
+export function sanitizeRawJson(stdout: string): string {
+  return sanitizeRawResults(stdout, (result) => {
+    const extra = asRecord(result['extra'])
+    return extra === undefined || extra['lines'] === undefined
+      ? result
+      : { ...result, extra: { ...extra, lines: OMITTED } }
   })
 }
 

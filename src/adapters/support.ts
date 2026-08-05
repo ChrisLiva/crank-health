@@ -96,6 +96,49 @@ export function firstLine(text: string): string {
   return text.trim().split('\n')[0] ?? ''
 }
 
+/** What replaces a source excerpt in raw evidence; see {@link sanitizeRawResults}. */
+export const OMITTED = '<omitted>'
+
+/**
+ * Raw tool output with every entry of its `results` array rewritten.
+ *
+ * **Why raw evidence is not always literal.** `raw/` is what a reader opens to
+ * check a finding, and it is also what they attach to a ticket. Security
+ * scanners quote the source line they matched — bandit's `code` window,
+ * opengrep's `extra.lines` — and the line a secrets-adjacent rule matched is
+ * the one line that must not be copied anywhere. The locations, rules and
+ * messages stay; only the excerpts go, and the file they point at is still
+ * right there in the repo.
+ *
+ * Output that is not the tool's result envelope (unparseable, or a different
+ * shape) is returned unchanged: it is the only clue to a failure the runner is
+ * about to report, and it is not a document this can reason about.
+ *
+ * @param sanitize called for each result object; return it unchanged when there
+ * is nothing in it to drop
+ */
+export function sanitizeRawResults(
+  stdout: string,
+  sanitize: (result: Record<string, unknown>) => Record<string, unknown>,
+): string {
+  if (stdout.trim().length === 0) return stdout
+  let document: unknown
+  try {
+    document = JSON.parse(stdout)
+  } catch {
+    return stdout
+  }
+  const record = asRecord(document)
+  const results = asArray(record?.['results'])
+  if (record === undefined || results === undefined) return stdout
+
+  const sanitized = results.map((entry) => {
+    const result = asRecord(entry)
+    return result === undefined ? entry : sanitize(result)
+  })
+  return `${JSON.stringify({ ...record, results: sanitized }, null, 2)}\n`
+}
+
 /** Parses a JSON file, or `undefined` when it is missing or malformed. */
 export async function readJson(path: string): Promise<unknown> {
   try {

@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Category, Finding, LanguageAdapter } from '../src/core/types.ts'
@@ -206,11 +206,12 @@ describe('quick scan of the sec-basic fixture', () => {
    * flagged line. This asserts the property over every artifact a run writes,
    * whether or not gitleaks was there to find it.
    */
-  it('never puts the planted secret into any artifact', () => {
+  it('never puts the planted secret into any artifact, raw evidence included', async () => {
     for (const artifact of [json, scan.markdown, scan.agentMarkdown]) {
       expect(artifact).not.toContain(PLANTED_SECRET)
       expect(artifact).not.toContain('AKIA')
     }
+    await expectNoSecretUnder(scan.outputDir)
   })
 
   it.runIf(installed.has('opengrep'))('reports the planted SAST findings', () => {
@@ -426,6 +427,130 @@ describe('zero footprint', () => {
     SCAN_TIMEOUT_MS,
   )
 })
+
+/**
+ * A stub gitleaks: `version` answers, `dir` writes the canned report to
+ * whatever `--report-path` names. The bytes are shaped exactly like a real
+ * `--redact=100` report — `Secret` and `Match` already `REDACTED` — because
+ * that is the only input this runner is ever given.
+ */
+const STUB_GITLEAKS = `#!/bin/sh
+if [ "$1" = "version" ]; then echo "8.30.1"; exit 0; fi
+report=""
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--report-path" ]; then shift; report="$1"; fi
+  shift
+done
+cat > "$report" <<'JSON'
+[
+  {
+    "RuleID": "aws-access-token",
+    "Description": "Identified a pattern that may indicate AWS credentials",
+    "File": "src/config.py",
+    "StartLine": 8,
+    "StartColumn": 21,
+    "EndLine": 8,
+    "EndColumn": 40,
+    "Secret": "REDACTED",
+    "Match": "REDACTED"
+  }
+]
+JSON
+exit 0
+`
+
+/**
+ * The chain spec §3 cares about most — planted secret → `critical` → security
+ * F, with the value itself never leaving the repo — used to run only on a
+ * machine with gitleaks installed, which is precisely the machine the goldens
+ * do not apply to. A stub on `PATH` runs it everywhere: crank-health only ever
+ * reads the JSON report gitleaks writes, so canned bytes are the same input.
+ *
+ * The leak is pointed at `src/config.py:8`, the line that really does hold the
+ * planted key. Nothing in the run may quote it — a secrets finding anchors on
+ * its rule id rather than on its source line, and that is what this proves.
+ */
+describe('a leaked credential, with gitleaks stubbed onto PATH', () => {
+  let fixture: FixtureRepo
+  let binDirectory: string
+  let originalPath: string
+  let scan: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('sec-basic')
+    binDirectory = await mkdtemp(join(tmpdir(), 'crank-stub-bin-'))
+    await writeFile(join(binDirectory, 'gitleaks'), STUB_GITLEAKS, { mode: 0o755 })
+    originalPath = process.env['PATH'] ?? ''
+    process.env['PATH'] = `${binDirectory}${delimiter}${originalPath}`
+
+    scan = await runHealthScan({ path: fixture.root, only: ['security'] })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    process.env['PATH'] = originalPath
+    await fixture.remove()
+    await rm(binDirectory, { recursive: true, force: true })
+  })
+
+  it('reports the leak as a critical, graded finding', () => {
+    const secrets = scan.report.findings.filter((finding) => finding.tool === 'gitleaks')
+    expect(secrets.map(shape)).toEqual([
+      {
+        category: 'security',
+        tool: 'gitleaks',
+        rule: 'aws-access-token',
+        file: 'src/config.py',
+        startLine: 8,
+        severity: 'critical',
+        gradeScope: true,
+      },
+    ])
+  })
+
+  it('grades security F on that finding alone', () => {
+    expect(scan.report.categories.security).toEqual({ status: 'graded', grade: 'F' })
+  })
+
+  it('writes the secret nowhere in the run directory', async () => {
+    for (const artifact of [scan.json, scan.markdown, scan.agentMarkdown]) {
+      expect(artifact).not.toContain(PLANTED_SECRET)
+      expect(artifact).not.toContain('AKIA')
+    }
+    await expectNoSecretUnder(scan.outputDir)
+  })
+
+  it('tells the reader to rotate the credential rather than quoting it', () => {
+    const secret = scan.report.findings.find((finding) => finding.tool === 'gitleaks')
+    expect(secret?.message).toContain('aws access token')
+    expect(secret?.fixHint).toContain('Rotate the credential')
+  })
+})
+
+/**
+ * The whole run directory, `raw/` included: the artifacts are not the only
+ * thing a user hands to somebody else. Security scanners quote the line they
+ * matched, so this is the assertion that keeps their raw output sanitized (see
+ * `sanitizeRawResults`).
+ */
+async function expectNoSecretUnder(runDirectory: string): Promise<void> {
+  const names = await readdir(runDirectory, { recursive: true })
+  const files: string[] = []
+  for (const name of names) {
+    const path = join(runDirectory, name)
+    // eslint-disable-next-line no-await-in-loop
+    if ((await stat(path)).isFile()) files.push(path)
+  }
+  // A run that wrote nothing would pass this vacuously.
+  expect(files.length).toBeGreaterThan(3)
+
+  for (const file of files) {
+    // eslint-disable-next-line no-await-in-loop
+    const contents = await readFile(file, 'utf8')
+    const where = relative(runDirectory, file)
+    expect(contents, `${where} carries the planted secret`).not.toContain(PLANTED_SECRET)
+    expect(contents, `${where} carries the planted secret`).not.toContain('AKIA')
+  }
+}
 
 /** Tools that are on every machine, because npx and uvx can fetch them. */
 function fromAlwaysAvailableTool(finding: Finding): boolean {

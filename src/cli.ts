@@ -9,6 +9,8 @@ import { runPrScan } from './run-pr.ts'
 import { runHealthScan } from './run.ts'
 import { VERSION } from './version.ts'
 
+const MS_PER_SECOND = 1000
+
 /**
  * Exit codes are part of the CLI contract:
  * 0 scan completed · 1 --fail-under gate tripped · 2 crank-health errored.
@@ -32,6 +34,10 @@ async function run(argv: readonly string[]): Promise<number> {
     out: options.out,
     only: parseCategories(options.only),
     deep: options.deep,
+    // Spec §5's configurable per-tool budget, in the unit a user thinks in.
+    ...(options.timeoutSeconds === undefined
+      ? {}
+      : { timeoutMs: options.timeoutSeconds * MS_PER_SECOND }),
   }
   const result =
     options.pr === undefined

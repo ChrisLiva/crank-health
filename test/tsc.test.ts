@@ -1,10 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
-import type { FileInventory, RepoContext } from '../src/core/types.ts'
+import type { Detection, FileInventory, RepoContext } from '../src/core/types.ts'
 
 /** Captured raw output from the pinned tsc, run against `test/fixtures/ts-owned`. */
 const CAPTURED = fileURLToPath(new URL('./captured/tsc-7.0.2.txt', import.meta.url))
@@ -151,6 +151,70 @@ describe('a repo with neither a tsconfig.json nor TypeScript sources', () => {
       await rm(scratch, { recursive: true, force: true })
     }
   })
+})
+
+/**
+ * The repo's own TypeScript, so these run a real tsc without a network fetch.
+ * `typescript` is a devDependency here and the manifest pins the same version.
+ */
+const LOCAL_TSC = fileURLToPath(new URL('../node_modules/.bin/tsc', import.meta.url))
+
+const OWNED: Detection = {
+  reason: 'config',
+  configFiles: ['tsconfig.json'],
+  installed: true,
+  binPath: LOCAL_TSC,
+}
+
+/**
+ * The failure this pins: tsc exits non-zero and every diagnostic it produced is
+ * about the *project*, not about a file we analyze. A `"files": []` config is
+ * the plainest way to get there — tsc type-checks nothing and says so with
+ * TS18002 against `tsconfig.json`, which is not in any runner's file list.
+ * Dropping those and reporting `ok` graded the repo A for having checked
+ * nothing at all, which is the worst possible answer to "are the types sound".
+ */
+describe('a tsconfig.json that type-checks nothing', () => {
+  let repo: string
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'crank-tsc-empty-'))
+    await mkdir(join(repo, 'src'), { recursive: true })
+    await writeFile(join(repo, 'src', 'a.ts'), 'export const answer: string = 42\n')
+  })
+
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true })
+  })
+
+  it('is an error, not a clean bill of health', async () => {
+    await writeFile(join(repo, 'tsconfig.json'), '{ "files": [] }\n')
+    const result = await run(repo)
+
+    expect(result.state).toBe('error')
+    expect(result.reason).toContain('TS18002')
+    expect(result.findings).toEqual([])
+  })
+
+  it('still reports the type errors when the config does check files', async () => {
+    await writeFile(join(repo, 'tsconfig.json'), '{ "include": ["src"] }\n')
+    const result = await run(repo)
+
+    expect(result.state).toBe('ok')
+    expect(result.findings.map((finding) => [finding.rule, finding.file])).toEqual([
+      ['TS2322', 'src/a.ts'],
+    ])
+  })
+
+  const run = (repoRoot: string) =>
+    tscRunner.run({
+      repoRoot,
+      files: ['src/a.ts'],
+      scratch: repoRoot,
+      detection: OWNED,
+      timeoutMs: 60_000,
+      deep: false,
+    })
 })
 
 function context(repoRoot: string, files: string[]): RepoContext {

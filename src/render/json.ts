@@ -235,7 +235,12 @@ function toReportTool(run: ResolvedRun): ReportTool {
     scope: record.scope,
     ...(run.side === undefined ? {} : { side: run.side }),
     execution: installed ? 'repo-installed' : 'ephemeral-pinned',
-    provenance: detection === null ? 'default-config' : 'repo-config',
+    // The runner's own answer wins when it gave one: detection can be non-null
+    // on a declared-but-unconfigured tool that still ran on our config
+    // (`ToolResult.configOwned`). Detection stays visible either way, so a
+    // reader can see the dependency that was declared and the default config
+    // that decided the findings at the same time.
+    provenance: provenanceOf(record.result.configOwned, detection),
     version: record.result.toolVersion ?? detection?.version ?? null,
     pinned: record.pinnedVersion,
     detection:
@@ -251,6 +256,15 @@ function toReportTool(run: ResolvedRun): ReportTool {
     reason: record.result.reason ?? null,
     raw: run.raw,
   }
+}
+
+/** Whose config decided a tool's findings; see {@link ToolResult.configOwned}. */
+function provenanceOf(
+  configOwned: boolean | undefined,
+  detection: RunRecord['detection'],
+): 'repo-config' | 'default-config' {
+  if (configOwned !== undefined) return configOwned ? 'repo-config' : 'default-config'
+  return detection === null ? 'default-config' : 'repo-config'
 }
 
 /**

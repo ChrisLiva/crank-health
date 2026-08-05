@@ -223,6 +223,19 @@ export interface ToolResult {
   readonly reason?: string
   /** Whole-codebase measurements this tool produced; see {@link ToolMetrics}. */
   readonly metrics?: ToolMetrics
+  /**
+   * Whether the repo's own configuration decided this run's findings — the tool
+   * record's `provenance` in `report.json` (spec §1).
+   *
+   * Detection is not always the answer. A repo can *declare* a tool without
+   * configuring it (`typescript` in `devDependencies` and no `tsconfig.json`),
+   * and then the tool runs against our bundled config: the findings say
+   * `default-config` and the tool record must not say `repo-config`. Only the
+   * runner knows which of its detection signals it actually honored, so it says
+   * so here. Omitted means "detection decides", which is right for every runner
+   * whose config artifacts and dependency signal cannot come apart.
+   */
+  readonly configOwned?: boolean
 }
 
 /** One tool wrapper: detect how the repo owns it, then run it ephemerally. */

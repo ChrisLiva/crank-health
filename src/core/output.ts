@@ -39,6 +39,16 @@ export interface OutputDir {
  * in the `.gitignore` containing `*` that hides the directory — including the
  * `.gitignore` itself — from the target repo.
  *
+ * **The marker never overwrites an existing `.gitignore`** ({@link writeMarker}).
+ * `--out` can name a directory the user already keeps files in, and replacing
+ * their ignore rules with `*` is data loss — silent, and exactly the kind a
+ * tool that promises zero footprint must not commit. The cost is that a
+ * pre-existing `.gitignore` which does not ignore its own directory leaves the
+ * run's artifacts visible to `git status`; that is the user's file and their
+ * choice of `--out`, and preserving it is the correct priority. The default run
+ * directory is unaffected: it is crank-health's own, and the marker lands the
+ * first time it is created.
+ *
  * @param repoRoot absolute path to the target repo
  * @param out `--out` override; relative paths resolve against the cwd
  */
@@ -52,7 +62,7 @@ export async function createOutputDir(repoRoot: string, out?: string): Promise<O
   const raw = join(root, 'raw')
 
   await mkdir(raw, { recursive: true })
-  await writeAtomic(join(root, '.gitignore'), '*\n')
+  await writeMarker(join(root, '.gitignore'))
 
   return {
     root,
@@ -77,6 +87,19 @@ export async function createOutputDir(repoRoot: string, out?: string): Promise<O
       }
       return adopted
     },
+  }
+}
+
+/**
+ * Writes the self-ignoring marker, and only when there is no `.gitignore` there
+ * already — `wx` is the check and the write in one, so two concurrent runs
+ * cannot both decide the file is missing. See {@link createOutputDir}.
+ */
+async function writeMarker(target: string): Promise<void> {
+  try {
+    await writeFile(target, '*\n', { encoding: 'utf8', flag: 'wx' })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
   }
 }
 

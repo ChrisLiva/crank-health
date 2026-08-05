@@ -95,6 +95,44 @@ describe('buildReport', () => {
     ])
   })
 
+  /**
+   * A repo can declare a tool without configuring it — `typescript` in
+   * `devDependencies` and no `tsconfig.json` — and then the tool runs on our
+   * bundled config. Its findings say `default-config`, and the tool record
+   * saying `repo-config` made the two halves of one report disagree.
+   */
+  it('reports the config the runner honoured, not merely that a tool was detected', () => {
+    const detection = {
+      reason: 'dependency' as const,
+      configFiles: [],
+      installed: true,
+      version: '7.0.2',
+    }
+    const declared: RunRecord = {
+      tool: 'tsc',
+      category: 'types',
+      scope: 'js-ts',
+      pinnedVersion: '7.0.2',
+      detection,
+      result: { state: 'ok', findings: [], rawFiles: [], configOwned: false },
+      durationMs: 7,
+    }
+
+    const [tool] = buildReport(input({ runs: [{ record: declared, raw: [] }] })).tools
+    expect(tool?.provenance).toBe('default-config')
+    // The declared dependency is still on the record — that is why tsc ran.
+    expect(tool?.detection).toEqual({ ...detection, configFiles: [] })
+  })
+
+  it('falls back to detection for a runner that says nothing about its config', () => {
+    const owned: RunRecord = {
+      ...record(),
+      detection: { reason: 'config', configFiles: ['.oxlintrc.json'], installed: true },
+    }
+    const [tool] = buildReport(input({ runs: [{ record: owned, raw: [] }] })).tools
+    expect(tool?.provenance).toBe('repo-config')
+  })
+
   it('quarantines everything non-deterministic under timings', () => {
     const report = buildReport(input({ runs: [{ record: record(), raw: [] }] }))
     expect(report.timings).toEqual({

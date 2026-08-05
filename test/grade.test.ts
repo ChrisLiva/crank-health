@@ -18,6 +18,10 @@ const KLOC = 10
 /** `count` security findings of one severity. */
 const security = (severity: Severity, count = 1) => makeFindings(count, severity, 'security')
 
+/** The same, reported but out of grade scope (spec §1). */
+const unscoped = (severity: Severity, count = 1) =>
+  makeFindings(count, severity, 'security', { gradeScope: false })
+
 describe('density grades (lint)', () => {
   it('weights severities error x5, warning x1, info x0.2', () => {
     expect(
@@ -207,9 +211,32 @@ describe('absolute grades (security)', () => {
     expect(gradeAbsolute('security', security('info', 11))).toBe('C')
   })
 
-  it('never counts advisory findings', () => {
-    const advisory = makeFindings(1, 'critical', 'security', { gradeScope: false })
-    expect(gradeAbsolute('security', advisory)).toBe('A')
+  /**
+   * The one place advisory findings still decide a grade. Spec §3's absolute
+   * shape says "any secret or critical → F" with no qualifier, and a report
+   * reading `security: A` above a listed critical finding is the failure mode
+   * this whole category exists to prevent. The tiers read every finding; only
+   * the B/C split — how much low-grade noise is tolerable — counts graded ones.
+   */
+  it('grades the severity tiers on every finding, advisory or not', () => {
+    expect(gradeAbsolute('security', unscoped('critical'))).toBe('F')
+    expect(gradeAbsolute('security', unscoped('error'))).toBe('D')
+  })
+
+  /** A is a clean scan, not a scan whose findings nobody graded. */
+  it('reserves A for a category with no findings at all', () => {
+    expect(gradeAbsolute('security', unscoped('info'))).toBe('B')
+    expect(gradeAbsolute('security', unscoped('warning', 9))).toBe('B')
+  })
+
+  it('counts only graded findings for the B/C split', () => {
+    // Three graded mediums is a C; three advisory ones leave the count at zero.
+    expect(gradeAbsolute('security', security('warning', 3))).toBe('C')
+    expect(gradeAbsolute('security', unscoped('warning', 3))).toBe('B')
+  })
+
+  it('ignores findings from other categories', () => {
+    expect(gradeAbsolute('security', makeFindings(1, 'critical', 'lint'))).toBe('A')
   })
 })
 

@@ -14,6 +14,13 @@ export interface CliOptions {
   only: string[] | undefined
   /** Lowest passing grade for the exit-1 gate; undefined means the gate is off. */
   failUnder: string | undefined
+  /**
+   * `--timeout <seconds>`: the per-tool budget for the quick tier (spec §5,
+   * "per-tool timeout 120s (configurable)"). Undefined leaves the default.
+   * The deep tier keeps its own, much larger budget — a mutation run and a
+   * linter are not the same kind of wait, and one number cannot serve both.
+   */
+  timeoutSeconds: number | undefined
   /** Do not trip the `--fail-under` gate on not-assessed categories. */
   allowMissing: boolean
   /** Print report.json to stdout instead of the terminal summary. */
@@ -44,6 +51,7 @@ Options:
   --fail-under <B>    exit 1 if any category grades below B (off by default)
   --allow-missing     not-assessed categories do not trip the gate
   --json              print report.json to stdout instead of terminal summary
+  --timeout <secs>    per-tool budget for the quick tier (default 120)
   -h, --help          show this help
   --version           print version
 
@@ -94,11 +102,28 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     out: values.out,
     only,
     failUnder,
+    timeoutSeconds: parseTimeout(values.timeout),
     allowMissing: values['allow-missing'] ?? false,
     json: values.json ?? false,
     help: values.help ?? false,
     version: values.version ?? false,
   }
+}
+
+/**
+ * `--timeout <seconds>`, as a whole number of seconds greater than zero. A
+ * fractional or zero budget is a typo, not a very short scan: every tool would
+ * time out and the report would say `not-assessed` eight times over.
+ *
+ * @throws {CliUsageError} on anything that is not a positive integer
+ */
+function parseTimeout(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const seconds = Number(value.trim())
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) {
+    throw new CliUsageError(`--timeout expects a whole number of seconds, got "${value}"`)
+  }
+  return seconds
 }
 
 /** parseArgs, with its errors restated as CliUsageError. */
@@ -123,6 +148,7 @@ const OPTION_CONFIG = {
   'fail-under': { type: 'string' },
   'allow-missing': { type: 'boolean' },
   json: { type: 'boolean' },
+  timeout: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean' },
 } as const

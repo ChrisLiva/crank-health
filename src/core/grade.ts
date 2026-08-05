@@ -213,16 +213,30 @@ export function gradeRatio(category: Category, percent: number): Grade {
 }
 
 /**
- * Security, never normalized (spec §3): any critical (secrets map to critical)
- * → F; any error/high → D; zero graded findings → A; otherwise B or C by the
- * medium/low counts.
+ * Security, never normalized (spec §3): any secret or critical → F; any high →
+ * at best D; else A/B/C by the medium/low counts, and **A means zero findings**.
+ *
+ * The one place `gradeScope` does not decide, and deliberately. Everywhere else
+ * an advisory finding is a tool's opinion the repo never signed up for, and
+ * dropping it is what keeps a default config from grading a repo on style. A
+ * credential-class finding is not an opinion: spec §3 says "any secret or
+ * critical → F" with no qualifier, and a report that says `security: A` while
+ * listing a critical finding is the one output nobody would look at twice and
+ * the one that matters most. So the severity tiers here read *every* finding in
+ * the category, whatever its scope, and only the B/C split — which is about how
+ * much low-grade noise is tolerable — counts graded findings alone.
+ *
+ * A is therefore reserved for a category with nothing in it at all. A repo with
+ * advisory findings and no graded ones lands at B: something was found, and the
+ * grade should not read the same as a clean scan.
  */
 export function gradeAbsolute(category: Category, findings: readonly Finding[]): Grade {
   const rule = ruleOfShape(category, 'absolute')
+  const inCategory = findings.filter((finding) => finding.category === category)
+  if (inCategory.some((finding) => finding.severity === 'critical')) return 'F'
+  if (inCategory.some((finding) => finding.severity === 'error')) return 'D'
+  if (inCategory.length === 0) return 'A'
   const counted = graded(findings, category)
-  if (counted.some((finding) => finding.severity === 'critical')) return 'F'
-  if (counted.some((finding) => finding.severity === 'error')) return 'D'
-  if (counted.length === 0) return 'A'
   const warnings = counted.filter((finding) => finding.severity === 'warning').length
   const infos = counted.filter((finding) => finding.severity === 'info').length
   return warnings <= rule.b.warning && infos <= rule.b.info ? 'B' : 'C'

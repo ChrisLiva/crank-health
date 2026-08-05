@@ -193,8 +193,19 @@ function toTask(
     gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
     findings: theme.findings,
     evidence,
-    verify: ['--only', theme.category, '--fail-under', TARGET_GRADE],
+    verify: verifyArgv(theme.category),
   }
+}
+
+/**
+ * The Verify command's argv tail. Test quality only exists in the deep profile
+ * (spec §5) — a quick run reports it `not assessed`, and `--fail-under A`
+ * counts a not-assessed category as a failure, so the command without `--deep`
+ * could never pass however well the agent did its work.
+ */
+function verifyArgv(category: Category): string[] {
+  const argv = ['--only', category, '--fail-under', TARGET_GRADE]
+  return category === 'test-quality' ? [...argv, '--deep'] : argv
 }
 
 /* ------------------------------------------------------------------ themes */

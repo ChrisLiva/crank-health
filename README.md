@@ -48,6 +48,7 @@ is unaffected.
 | `--fail-under <B>`          | Exit 1 if any selected category grades below `B`              |
 | `--allow-missing`           | Not-assessed categories do not trip that gate                 |
 | `--json`                    | Print `report.json` to stdout instead of the terminal summary |
+| `--timeout <secs>`          | Per-tool budget for the quick tier (default 120 s)            |
 | `-h`, `--help`, `--version` |                                                               |
 
 ### Exit codes
@@ -140,7 +141,21 @@ shows up in your working tree:
 | `report.json` | The contract. Every finding, category state, metric, resolved tool version.                                                                                                                                                                             |
 | `report.md`   | The human report: grades, provenance tags, remediation.                                                                                                                                                                                                 |
 | `agent.md`    | The coding-agent brief: ≤ 20 themed tasks in a deterministic priority order (security → types → dead code → complexity → duplication → lint → format, worst grade first), each with a stable ID, a grade impact, an evidence link and a verify command. |
-| `raw/`        | Each tool's untouched output, as evidence.                                                                                                                                                                                                              |
+| `raw/`        | Each tool's own output, as evidence — source excerpts excepted, see below.                                                                                                                                                                              |
+
+### Secrets stay in your repo
+
+Nothing crank-health writes quotes a credential. gitleaks runs under `--redact=100`, so the value
+never enters this process; a secrets finding is anchored on the rule rather than on the flagged
+line, and it tells you where to look instead of what was found. bandit's hardcoded-secret tests
+(`B105`/`B106`/`B107`) quote the literal in their message, so the quoted value is replaced with
+`<redacted>` before the finding exists.
+
+`raw/` follows the same rule, which is why it is evidence rather than a transcript: the security
+scanners that copy source lines into their reports — bandit's `code` window, opengrep's
+`extra.lines` — have those excerpts replaced with `<omitted>`. Rules, locations, severities and
+messages are all still there, and the file they point at is still in your repo. That is what makes
+a run directory safe to attach to a ticket.
 
 ## Zero footprint
 
@@ -176,8 +191,8 @@ brew install osv-scanner    # dependency vulnerabilities
 ```
 
 Missing `uv` degrades the Python categories the same way. A tool that crashes or emits unparseable
-output becomes `error` with its stderr in `raw/`; a tool that overruns its budget (120 s by default)
-becomes `not-assessed(timeout)`.
+output becomes `error` with its stderr in `raw/`; a tool that overruns its budget (120 s by default,
+`--timeout <secs>` to change it) becomes `not-assessed(timeout)`.
 
 ## The deep tier
 
