@@ -281,6 +281,102 @@ describe('quick scan of the js-basic fixture', () => {
   })
 })
 
+/**
+ * Every rule id that names an *export*-kind dead-code result. These are the
+ * ones a library demotes: its exports are the product, consumed from outside
+ * the repo, so "nothing here imports it" is not evidence they are dead.
+ */
+const DEMOTED_EXPORT_RULES = new Set([
+  'knip/unused-exports',
+  'knip/unused-types',
+  'knip/unused-enumMembers',
+  'knip/unused-namespaceMembers',
+  'fallow/unused-export',
+])
+
+describe('quick scan of the js-library fixture', () => {
+  let fixture: FixtureRepo
+  let scan: HealthScanResult
+  let findings: readonly Finding[]
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('js-library')
+    scan = await runHealthScan({ path: fixture.root })
+    findings = scan.report.findings
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  /**
+   * `src/util.js` is byte-identical to js-basic's `src/clean.js`, where the
+   * same two findings are graded. The only difference is the manifest: this one
+   * declares `exports`/`types`, so both tools' verdicts are still reported, at
+   * the same severity, rule and anchor, and neither one moves the grade.
+   */
+  it('reports both tools’ unused-export findings, and grades neither', () => {
+    const exports = findings.filter((finding) => DEMOTED_EXPORT_RULES.has(finding.rule))
+    expect(
+      exports.map((finding) => ({ ...shape(finding), provenance: finding.provenance })),
+    ).toEqual([
+      {
+        category: 'dead-code',
+        tool: 'fallow-dead-code',
+        rule: 'fallow/unused-export',
+        file: 'src/util.js',
+        startLine: 5,
+        severity: 'warning',
+        gradeScope: false,
+        provenance: 'default-config',
+      },
+      {
+        category: 'dead-code',
+        tool: 'knip',
+        rule: 'knip/unused-exports',
+        file: 'src/util.js',
+        startLine: 5,
+        severity: 'warning',
+        gradeScope: false,
+        provenance: 'default-config',
+      },
+    ])
+    // The demotion has to reach the grade, or "advisory" is only a label: the
+    // identical fixture with an application manifest grades dead-code F.
+    expect(scan.report.categories['dead-code']).toEqual({ status: 'graded', grade: 'A' })
+  })
+
+  it('marks them advisory in report.md, under their own heading', () => {
+    expect(scan.markdown).toContain('Advisory findings — reported, not counted toward the grade')
+    expect(scan.markdown).toMatch(/`fallow\/unused-export`.*\[advisory\]/)
+    expect(scan.markdown).toMatch(/`knip\/unused-exports`.*\[advisory\]/)
+    expect(scan.markdown).toContain('`src/util.js:5`')
+  })
+
+  /**
+   * agent.md asks a coding agent to *do* something, and there is nothing to do
+   * here: a category at A produces no task (`needsWork`). That absence is the
+   * demotion arriving at the artifact an agent actually reads — an advisory
+   * finding is reported in report.md and never becomes work.
+   */
+  it('raises no agent task for an advisory finding', () => {
+    expect(scan.agentMarkdown).toContain('No tasks: every assessed category is graded A.')
+    expect(scan.agentMarkdown).not.toContain('src/util.js')
+  })
+
+  it(
+    'produces byte-identical output when run twice on the same commit',
+    async () => {
+      const second = await runHealthScan({ path: fixture.root })
+      expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
+      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+        findings.map((finding) => finding.id),
+      )
+    },
+    SCAN_TIMEOUT_MS,
+  )
+})
+
 describe('quick scan of the ts-owned fixture', () => {
   let fixture: FixtureRepo
   let result: HealthScanResult
@@ -494,7 +590,7 @@ describe('the same rule class under two provenances', () => {
 })
 
 describe('zero footprint', () => {
-  it.each(['js-basic', 'js-owned', 'ts-owned', 'js-multi-tool'])(
+  it.each(['js-basic', 'js-owned', 'ts-owned', 'js-multi-tool', 'js-library'])(
     'leaves %s untouched after a full scan',
     async (name) => {
       const fixture = await createFixtureRepo(name)
