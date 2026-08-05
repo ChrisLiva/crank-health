@@ -299,11 +299,32 @@ describe('runScan metrics', () => {
   const measuring = (tool: string, category: Category, metrics: ToolMetrics) =>
     fakeRunner(tool, category, async () => ({ ...ok(), metrics }))
 
-  it('sums the counts two tools each measured part of', async () => {
+  /**
+   * Two tools in one language are counting the same files, so the count is the
+   * better-informed of the two — never their sum, which would invent functions.
+   */
+  it('takes the larger count when two tools measured the same language', async () => {
     const result = await runScan(REPO, [
       adapter('js-ts', [
         measuring('fallow-health', 'complexity', { functionsTotal: 40, functionsOverCeiling: 3 }),
         measuring('other', 'complexity', { functionsTotal: 10, functionsOverCeiling: 1 }),
+      ]),
+    ])
+    expect(result.metrics.complexity).toEqual({ functionsTotal: 40, functionsOverCeiling: 3 })
+  })
+
+  /**
+   * Two languages are counting disjoint files, so a mixed repo's denominator is
+   * their sum — this is what keeps a JS+Python repo from being graded against
+   * the file count of whichever language happens to be bigger.
+   */
+  it('adds the counts across languages', async () => {
+    const result = await runScan(REPO, [
+      adapter('js-ts', [
+        measuring('fallow-health', 'complexity', { functionsTotal: 40, functionsOverCeiling: 3 }),
+      ]),
+      adapter('python', [
+        measuring('complexipy', 'complexity', { functionsTotal: 10, functionsOverCeiling: 1 }),
       ]),
     ])
     expect(result.metrics.complexity).toEqual({ functionsTotal: 50, functionsOverCeiling: 4 })

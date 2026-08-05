@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execa } from 'execa'
-import type { PinnedTool } from '../manifest.ts'
-import { pinnedSpec } from '../manifest.ts'
+import type { PinnedPythonTool, PinnedTool } from '../manifest.ts'
+import { pinnedPythonSpec, pinnedPythonVersion, pinnedSpec } from '../manifest.ts'
 
 /**
  * The shared subprocess layer every adapter runs its tool through. It exists so
@@ -10,17 +10,23 @@ import { pinnedSpec } from '../manifest.ts'
  * zero footprint (spec §7) — are decided once, here, instead of per adapter.
  */
 
+/**
+ * Who fetches a pinned tool: npm's runner for the JS/TS side, uv's for the
+ * Python side. Both install into their own caches, never into the target repo.
+ */
+export type EphemeralFetcher = 'npx' | 'uvx'
+
 /** A resolved command line: the binary plus its arguments. */
 export interface ToolCommand {
   readonly command: string
   readonly args: readonly string[]
-  /** True when the tool is fetched by `npx` rather than run from the repo. */
-  readonly ephemeral: boolean
+  /** The fetcher that resolves the tool, or `null` for the repo's own binary. */
+  readonly ephemeral: EphemeralFetcher | null
 }
 
 /** Runs the repo's own installed binary (spec §1: repo-owned and installed). */
 export function repoCommand(binPath: string, args: readonly string[]): ToolCommand {
-  return { command: binPath, args, ephemeral: false }
+  return { command: binPath, args, ephemeral: null }
 }
 
 /**
@@ -44,7 +50,36 @@ export function ephemeralCommand(
       binary === undefined
         ? ['--yes', spec, ...args]
         : ['--yes', '--package', spec, '--', binary, ...args],
-    ephemeral: true,
+    ephemeral: 'npx',
+  }
+}
+
+/**
+ * The Python half of {@link ephemeralCommand}: runs the manifest-pinned version
+ * through `uvx`, which resolves the distribution into uv's own tool cache and
+ * an ephemeral virtualenv — never into the target repo, and never into a venv
+ * the repo owns.
+ *
+ * `uvx <dist>@<version>` is uv's exact-pin form and is what we use whenever the
+ * command and the distribution share a name (all five Python tools do today).
+ * `uvx --from <dist>==<version> <command>` is the form for the other case, and
+ * is what `binary` selects.
+ *
+ * @param tool PyPI distribution name from the manifest
+ * @param binary the command inside that distribution, when it differs
+ */
+export function uvxCommand(
+  tool: PinnedPythonTool,
+  args: readonly string[],
+  binary?: string,
+): ToolCommand {
+  return {
+    command: 'uvx',
+    args:
+      binary === undefined
+        ? [pinnedPythonSpec(tool), ...args]
+        : ['--from', `${tool}==${pinnedPythonVersion(tool)}`, binary, ...args],
+    ephemeral: 'uvx',
   }
 }
 
@@ -87,7 +122,7 @@ export const FIRST_RUN_NOTICE_MS = 4_000
  * guarantee (spec §8) starts here.
  */
 export async function execTool(tool: ToolCommand, options: ExecOptions): Promise<ToolExecution> {
-  const notice = tool.ephemeral ? scheduleFirstRunNotice() : undefined
+  const notice = tool.ephemeral === null ? undefined : scheduleFirstRunNotice()
   try {
     const result = await execa(tool.command, [...tool.args], {
       cwd: options.cwd,
@@ -143,17 +178,42 @@ const NEUTRAL_ENV: Readonly<Record<string, string>> = {
   NPM_CONFIG_PROGRESS: 'false',
 }
 
-/** Stderr markers that mean "npx could not fetch the tool", not "tool failed". */
-const OFFLINE_MARKERS: readonly RegExp[] = [
-  /ENOTFOUND/,
-  /EAI_AGAIN/,
-  /ECONNREFUSED/,
-  /ETIMEDOUT/,
-  /ERR_SOCKET_TIMEOUT/,
-  /request to https?:\/\/\S+ failed/i,
-  /offline mode/i,
-  /npm error code E\d{3}/,
-]
+/**
+ * Stderr markers that mean "the fetcher could not get the tool", not "the tool
+ * failed". Each fetcher words it its own way, and both wordings matter: this is
+ * the difference between `not-available` with an actionable reason and a
+ * mystery `error` (spec §8).
+ */
+const OFFLINE_MARKERS: Readonly<Record<EphemeralFetcher, readonly RegExp[]>> = {
+  npx: [
+    /ENOTFOUND/,
+    /EAI_AGAIN/,
+    /ECONNREFUSED/,
+    /ETIMEDOUT/,
+    /ERR_SOCKET_TIMEOUT/,
+    /request to https?:\/\/\S+ failed/i,
+    /offline mode/i,
+    /npm error code E\d{3}/,
+  ],
+  uvx: [
+    // uv reports an unfetchable pin as an unsolvable requirement, and says why.
+    /No solution found when resolving tool dependencies/i,
+    /network was disabled/i,
+    /failed to fetch/i,
+    /failed to download/i,
+    /error sending request/i,
+    /Request failed after \d+ retries/i,
+    /Could not connect/i,
+  ],
+}
+
+/** What to tell the user when a fetcher itself is missing (spec §8). */
+const MISSING_FETCHER: Readonly<Record<EphemeralFetcher, string>> = {
+  npx: '`npx` is not on PATH — install Node.js 20+ so pinned tools can be fetched',
+  uvx:
+    '`uvx` is not on PATH — install uv (https://docs.astral.sh/uv/getting-started/installation/) ' +
+    'so pinned Python tools can be fetched',
+}
 
 /** The parts of an execa result that decide whether the process itself failed. */
 interface ExecaLike {
@@ -168,25 +228,27 @@ function classify(tool: ToolCommand, result: ExecaLike, stderr: string): ToolFai
   if (result.code === 'ENOENT') {
     return {
       state: 'not-available',
-      reason: tool.ephemeral
-        ? '`npx` is not on PATH — install Node.js 20+ so pinned tools can be fetched'
-        : `${tool.command} is not executable`,
+      reason:
+        tool.ephemeral === null
+          ? `${tool.command} is not executable`
+          : MISSING_FETCHER[tool.ephemeral],
     }
   }
-  if (tool.ephemeral && OFFLINE_MARKERS.some((marker) => marker.test(stderr))) {
+  if (tool.ephemeral !== null && OFFLINE_MARKERS[tool.ephemeral].some((m) => m.test(stderr))) {
     return {
       state: 'not-available',
       reason:
-        `could not fetch ${pinnedArg(tool)}: no network and nothing in the npm ` +
-        'cache — run crank-health once with network access to warm the cache',
+        `could not fetch ${pinnedArg(tool)}: no network and nothing in the ` +
+        `${tool.ephemeral === 'npx' ? 'npm' : 'uv'} cache — run crank-health once with ` +
+        'network access to warm the cache',
     }
   }
   return undefined
 }
 
-/** The `name@version` argument inside an npx command line, for error messages. */
+/** The pinned `name@version`/`name==version` argument, for error messages. */
 function pinnedArg(tool: ToolCommand): string {
-  return tool.args.find((arg) => arg.lastIndexOf('@') > 0) ?? tool.command
+  return tool.args.find((arg) => arg.lastIndexOf('@') > 0 || arg.includes('==')) ?? tool.command
 }
 
 let noticeShown = false

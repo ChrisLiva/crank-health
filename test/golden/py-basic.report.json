@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "crankHealth": "0.1.0",
+  "repo": {
+    "path": "<repo>",
+    "commit": "b56bfa4385957a69ba6c188096dd29abd4eecf1b"
+  },
+  "profile": "quick",
+  "mode": "whole-repo",
+  "selected": [
+    "security",
+    "types",
+    "dead-code",
+    "complexity",
+    "duplication",
+    "lint",
+    "format",
+    "test-quality"
+  ],
+  "categories": {
+    "security": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "types": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "dead-code": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "complexity": {
+      "status": "graded",
+      "grade": "D"
+    },
+    "duplication": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "lint": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "format": {
+      "status": "graded",
+      "grade": "C"
+    },
+    "test-quality": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    }
+  },
+  "metrics": {
+    "complexity": {
+      "functionsTotal": 7,
+      "functionsOverCeiling": 1
+    },
+    "format": {
+      "formattableFiles": 6
+    }
+  },
+  "languages": {
+    "python": {
+      "types": 1,
+      "dead-code": 2,
+      "complexity": 1,
+      "lint": 2,
+      "format": 1
+    }
+  },
+  "tools": [
+    {
+      "tool": "pyright",
+      "category": "types",
+      "scope": "python",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.1.411",
+      "detection": null,
+      "state": "not-available",
+      "reason": "standing down: this project has no virtualenv, so ty type-checks it",
+      "raw": []
+    },
+    {
+      "tool": "ty",
+      "category": "types",
+      "scope": "python",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.0.66",
+      "pinned": "0.0.66",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/ty.gitlab.json"
+      ]
+    },
+    {
+      "tool": "vulture",
+      "category": "dead-code",
+      "scope": "python",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "2.16",
+      "pinned": "2.16",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/vulture.txt"
+      ]
+    },
+    {
+      "tool": "complexipy",
+      "category": "complexity",
+      "scope": "python",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "6.2.0",
+      "pinned": "6.2.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/complexipy.json",
+        "raw/complexipy.sarif.json"
+      ]
+    },
+    {
+      "tool": "ruff-lint",
+      "category": "lint",
+      "scope": "python",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.16.1",
+      "pinned": "0.16.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/ruff-lint.json"
+      ]
+    },
+    {
+      "tool": "ruff-format",
+      "category": "format",
+      "scope": "python",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.16.1",
+      "pinned": "0.16.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/ruff-format.json"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "748144d089911a47",
+      "category": "types",
+      "tool": "ty",
+      "rule": "unresolved-reference",
+      "severity": "error",
+      "file": "undefined_name.py",
+      "range": {
+        "startLine": 2,
+        "startCol": 23,
+        "endLine": 2,
+        "endCol": 35
+      },
+      "message": "Name `missing_name` used when not defined",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "7e7d79fc1bfb7e4d",
+      "category": "dead-code",
+      "tool": "vulture",
+      "rule": "vulture/unused-import",
+      "severity": "warning",
+      "file": "dead.py",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "Unused import `os` (90% confidence)",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "93b7836b489e9f98",
+      "category": "dead-code",
+      "tool": "vulture",
+      "rule": "vulture/unused-function",
+      "severity": "info",
+      "file": "dead.py",
+      "range": {
+        "startLine": 8,
+        "startCol": 1,
+        "endLine": 8,
+        "endCol": 1
+      },
+      "message": "Unused function `never_called` (60% confidence)",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "9270563a9545a99b",
+      "category": "complexity",
+      "tool": "complexipy",
+      "rule": "complexipy/cognitive-complexity",
+      "severity": "warning",
+      "file": "complex.py",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 28,
+        "endCol": 1
+      },
+      "message": "Function 'classify' has a cognitive complexity of 38, which exceeds the maximum allowed complexity of 15.",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "02f45494e8b91de1",
+      "category": "lint",
+      "tool": "ruff-lint",
+      "rule": "F401",
+      "severity": "warning",
+      "file": "dead.py",
+      "range": {
+        "startLine": 1,
+        "startCol": 8,
+        "endLine": 1,
+        "endCol": 10
+      },
+      "message": "`os` imported but unused",
+      "provenance": "default-config",
+      "gradeScope": true,
+      "fixHint": "see https://docs.astral.sh/ruff/rules/unused-import"
+    },
+    {
+      "id": "ed2b10e9d447ad4e",
+      "category": "lint",
+      "tool": "ruff-lint",
+      "rule": "F821",
+      "severity": "error",
+      "file": "undefined_name.py",
+      "range": {
+        "startLine": 2,
+        "startCol": 23,
+        "endLine": 2,
+        "endCol": 35
+      },
+      "message": "Undefined name `missing_name`",
+      "provenance": "default-config",
+      "gradeScope": true,
+      "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
+    },
+    {
+      "id": "0abf368d94ffed05",
+      "category": "format",
+      "tool": "ruff-format",
+      "rule": "ruff/format",
+      "severity": "warning",
+      "file": "unformatted.py",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File does not match ruff’s default formatting",
+      "provenance": "default-config",
+      "gradeScope": true,
+      "fixHint": "uvx ruff format <file>"
+    }
+  ],
+  "warnings": []
+}

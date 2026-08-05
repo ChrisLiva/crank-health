@@ -1,0 +1,29 @@
+{
+    "version": "1.1.411",
+    "time": "1785898633971",
+    "generalDiagnostics": [
+        {
+            "file": "/repo/app.py",
+            "severity": "error",
+            "message": "Type \"int\" is not assignable to return type \"str\"\n  \"int\" is not assignable to \"str\"",
+            "range": {
+                "start": {
+                    "line": 5,
+                    "character": 11
+                },
+                "end": {
+                    "line": 5,
+                    "character": 16
+                }
+            },
+            "rule": "reportReturnType"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 2,
+        "errorCount": 1,
+        "warningCount": 0,
+        "informationCount": 0,
+        "timeInSec": 0.127
+    }
+}

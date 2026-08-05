@@ -1,5 +1,13 @@
+import { languageOf } from '../core/discover.ts'
 import type { RunRecord } from '../core/orchestrator.ts'
-import type { Category, CategoryState, Finding, RunnerScope, ToolMetrics } from '../core/types.ts'
+import type {
+  Category,
+  CategoryState,
+  Finding,
+  Language,
+  RunnerScope,
+  ToolMetrics,
+} from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
 import { VERSION } from '../version.ts'
 
@@ -36,6 +44,14 @@ export interface Report {
    * the numbers it came from.
    */
   readonly metrics: Readonly<Partial<Record<Category, ToolMetrics>>>
+  /**
+   * The per-language breakdown spec §3 asks for in a mixed repo: how many
+   * findings each language contributed to each category. The *grade* is one
+   * number over the combined findings — "one grade per category over combined
+   * normalized findings" — and this is what tells a reader which language it
+   * came from.
+   */
+  readonly languages: Readonly<Partial<Record<Language, Partial<Record<Category, number>>>>>
   readonly tools: readonly ReportTool[]
   readonly findings: readonly Finding[]
   readonly warnings: readonly string[]
@@ -119,6 +135,7 @@ export function buildReport(input: ReportInput): Report {
     selected: CATEGORIES.filter((category) => input.selected.includes(category)),
     categories: orderedCategories(input.categories),
     metrics: orderedMetrics(input.metrics),
+    languages: countByLanguage(input.findings),
     tools: runs.map((run) => toReportTool(run)),
     findings: input.findings.map((finding) => orderedFinding(finding)),
     warnings: input.warnings.toSorted(compare),
@@ -183,6 +200,35 @@ function orderedMetrics(
     if (Object.keys(fields).length > 0) ordered[category] = fields
   }
   return ordered
+}
+
+/** Languages in a fixed order, so the breakdown never depends on find order. */
+const LANGUAGES: readonly Language[] = ['js-ts', 'python']
+
+/**
+ * Findings per language per category, counted from the file each finding names
+ * — the same extension mapping discovery classified the repo with, so the
+ * breakdown cannot disagree with the file inventory.
+ *
+ * Only non-empty entries appear: a language with no findings in a category says
+ * nothing, and a language that is not in the repo at all should not show up as
+ * a row of zeroes. Advisory findings are counted like any other; whether one
+ * moved a grade is `gradeScope` on the finding itself.
+ */
+function countByLanguage(
+  findings: readonly Finding[],
+): Partial<Record<Language, Partial<Record<Category, number>>>> {
+  const breakdown: Partial<Record<Language, Partial<Record<Category, number>>>> = {}
+  for (const language of LANGUAGES) {
+    const mine = findings.filter((finding) => languageOf(finding.file) === language)
+    const counts: Partial<Record<Category, number>> = {}
+    for (const category of CATEGORIES) {
+      const total = mine.filter((finding) => finding.category === category).length
+      if (total > 0) counts[category] = total
+    }
+    if (Object.keys(counts).length > 0) breakdown[language] = counts
+  }
+  return breakdown
 }
 
 function number(field: keyof ToolMetrics, value: number | undefined): ToolMetrics {

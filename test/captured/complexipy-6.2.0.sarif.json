@@ -1,0 +1,60 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "complexipy",
+          "version": "6.2.0",
+          "informationUri": "https://rohaquinlop.github.io/complexipy/",
+          "rules": [
+            {
+              "id": "CC001",
+              "name": "CognitiveComplexity",
+              "shortDescription": {
+                "text": "Cognitive complexity exceeds threshold"
+              },
+              "helpUri": "https://rohaquinlop.github.io/complexipy/understanding-scores/",
+              "properties": {
+                "tags": [
+                  "maintainability",
+                  "readability"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CC001",
+          "level": "warning",
+          "message": {
+            "text": "Function 'classify' has a cognitive complexity of 38, which exceeds the maximum allowed complexity of 15."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/repo/complex.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 1,
+                  "endLine": 28
+                }
+              },
+              "logicalLocations": [
+                {
+                  "name": "classify",
+                  "kind": "function"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

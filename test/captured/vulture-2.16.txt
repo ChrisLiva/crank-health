@@ -1,0 +1,2 @@
+dead.py:1: unused import 'os' (90% confidence)
+dead.py:8: unused function 'never_called' (60% confidence)

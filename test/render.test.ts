@@ -19,6 +19,7 @@ describe('buildReport', () => {
       'selected',
       'categories',
       'metrics',
+      'languages',
       'tools',
       'findings',
       'warnings',

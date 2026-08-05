@@ -1,0 +1,21 @@
+[
+  {
+    "check_name": "unresolved-reference",
+    "description": "unresolved-reference: Name `missing_name` used when not defined",
+    "severity": "major",
+    "fingerprint": "95fc2bf9adc2648d",
+    "location": {
+      "path": "undefined_name.py",
+      "positions": {
+        "begin": {
+          "line": 2,
+          "column": 23
+        },
+        "end": {
+          "line": 2,
+          "column": 35
+        }
+      }
+    }
+  }
+]

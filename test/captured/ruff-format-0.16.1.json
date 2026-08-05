@@ -1,0 +1,37 @@
+[
+  {
+    "cell": null,
+    "code": "unformatted",
+    "end_location": {
+      "column": 29,
+      "row": 2
+    },
+    "filename": "/repo/unformatted.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "text):\n    return text.upper() + ",
+          "end_location": {
+            "column": 29,
+            "row": 2
+          },
+          "location": {
+            "column": 11,
+            "row": 1
+          }
+        }
+      ],
+      "message": null
+    },
+    "location": {
+      "column": 11,
+      "row": 1
+    },
+    "message": "File would be reformatted",
+    "name": "unformatted",
+    "noqa_row": null,
+    "severity": "error",
+    "url": null
+  }
+]

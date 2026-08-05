@@ -60,6 +60,14 @@
       "formattableFiles": 9
     }
   },
+  "languages": {
+    "js-ts": {
+      "dead-code": 2,
+      "complexity": 1,
+      "lint": 4,
+      "format": 1
+    }
+  },
   "tools": [
     {
       "tool": "tsc",

@@ -89,12 +89,17 @@ export async function runScan(
  * Merges the {@link ToolMetrics} of every tool that ran successfully, per
  * category, with one rule per kind of number:
  *
- * - **counts** (`functionsTotal`, `functionsOverCeiling`) sum, because two tools
- *   measuring different halves of a codebase both contribute to the total;
- * - **percentages and denominators** (`formattableFiles`, `duplicationPercent`,
- *   `mutationScore`) take the maximum, because they are already whole-codebase
- *   figures — summing them would be meaningless, and the maximum is both the
- *   most complete measurement and independent of the order tools finished in.
+ * - **counts** (`functionsTotal`, `functionsOverCeiling`, `formattableFiles`)
+ *   are counts of *things in the repo*, and each tool only counts the things it
+ *   was given. Two tools in the same language are looking at the same files, so
+ *   the larger measurement wins; two tools in different languages are looking at
+ *   disjoint files, so their measurements add. Hence: maximum within a language,
+ *   sum across languages — which is what keeps a mixed JS+Python repo from
+ *   grading its formatting against the file count of whichever language happens
+ *   to be bigger.
+ * - **percentages** (`duplicationPercent`, `mutationScore`) take the maximum:
+ *   they are already whole-codebase figures, summing them would be meaningless,
+ *   and the maximum is independent of the order tools finished in.
  *
  * A field no tool reported stays absent, which is how a category ends up
  * `not-assessed` rather than falsely graded at zero.
@@ -102,15 +107,14 @@ export async function runScan(
 export function aggregateMetrics(records: readonly RunRecord[]): Record<Category, ToolMetrics> {
   const merged = {} as Record<Category, ToolMetrics>
   for (const category of CATEGORIES) {
-    const reported = records
-      .filter((record) => record.category === category && record.result.state === 'ok')
-      .map((record) => record.result.metrics)
-      .filter((metrics): metrics is ToolMetrics => metrics !== undefined)
+    const reported = records.filter(
+      (record) => record.category === category && record.result.state === 'ok',
+    )
 
     merged[category] = {
-      ...combine(reported, 'functionsTotal', sum),
-      ...combine(reported, 'functionsOverCeiling', sum),
-      ...combine(reported, 'formattableFiles', highest),
+      ...combine(reported, 'functionsTotal', countAcrossScopes),
+      ...combine(reported, 'functionsOverCeiling', countAcrossScopes),
+      ...combine(reported, 'formattableFiles', countAcrossScopes),
       ...combine(reported, 'duplicationPercent', highest),
       ...combine(reported, 'mutationScore', highest),
     }
@@ -118,23 +122,37 @@ export function aggregateMetrics(records: readonly RunRecord[]): Record<Category
   return merged
 }
 
+/** One tool's measurement of one field, tagged with the language it measured. */
+interface ScopedValue {
+  readonly scope: RunnerScope
+  readonly value: number
+}
+
 function combine(
-  reported: readonly ToolMetrics[],
+  reported: readonly RunRecord[],
   field: keyof ToolMetrics,
-  fold: (values: readonly number[]) => number,
+  fold: (values: readonly ScopedValue[]) => number,
 ): ToolMetrics {
-  const values = reported
-    .map((metrics) => metrics[field])
-    .filter((value): value is number => value !== undefined && Number.isFinite(value))
+  const values = reported.flatMap((record) => {
+    const value = record.result.metrics?.[field]
+    return value === undefined || !Number.isFinite(value)
+      ? []
+      : [{ scope: record.scope, value } satisfies ScopedValue]
+  })
   return values.length === 0 ? {} : { [field]: fold(values) }
 }
 
-function sum(values: readonly number[]): number {
-  return values.reduce((total, value) => total + value, 0)
+/** Maximum within each language, summed across them. See {@link aggregateMetrics}. */
+function countAcrossScopes(values: readonly ScopedValue[]): number {
+  const perScope = new Map<RunnerScope, number>()
+  for (const { scope, value } of values) {
+    perScope.set(scope, Math.max(perScope.get(scope) ?? Number.NEGATIVE_INFINITY, value))
+  }
+  return [...perScope.values()].reduce((total, value) => total + value, 0)
 }
 
-function highest(values: readonly number[]): number {
-  return values.reduce((best, value) => Math.max(best, value), Number.NEGATIVE_INFINITY)
+function highest(values: readonly ScopedValue[]): number {
+  return values.reduce((best, { value }) => Math.max(best, value), Number.NEGATIVE_INFINITY)
 }
 
 /**

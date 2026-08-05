@@ -1,0 +1,29 @@
+import type { LanguageAdapter, RepoContext } from '../../core/types.ts'
+import { complexipyRunner } from './complexipy.ts'
+import { pyrightRunner } from './pyright.ts'
+import { ruffFormatRunner, ruffLintRunner } from './ruff.ts'
+import { tyRunner } from './ty.ts'
+import { vultureRunner } from './vulture.ts'
+
+/**
+ * The Python language adapter. It answers one question — does this repo contain
+ * Python at all — and owns the runners that then get to look at it. Discovery
+ * already classified every `.py`/`.pyi` file, so detection is a lookup.
+ *
+ * Runners are listed in category order (spec §10's remediation priority). The
+ * two type checkers are both listed because which of them runs depends on the
+ * repo: ty by default, pyright once there is a virtualenv, and whichever of
+ * them the repo owns (see `ty.ts` and `pyright.ts`).
+ */
+export const pythonAdapter: LanguageAdapter = {
+  language: 'python',
+  detect: (repo: RepoContext) => Promise.resolve(repo.files.byLanguage.python.length > 0),
+  runners: [
+    tyRunner,
+    pyrightRunner,
+    vultureRunner,
+    complexipyRunner,
+    ruffLintRunner,
+    ruffFormatRunner,
+  ],
+}

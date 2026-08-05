@@ -2,7 +2,13 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ephemeralCommand, execTool, repoCommand, writeScratchRaw } from '../src/core/exec.ts'
+import {
+  ephemeralCommand,
+  execTool,
+  repoCommand,
+  uvxCommand,
+  writeScratchRaw,
+} from '../src/core/exec.ts'
 
 /**
  * The subprocess layer's whole job is that nothing a tool does can throw at the
@@ -66,8 +72,61 @@ describe('ephemeralCommand', () => {
     expect(ephemeralCommand('oxlint', ['--format', 'sarif'])).toEqual({
       command: 'npx',
       args: ['--yes', 'oxlint@1.77.0', '--format', 'sarif'],
-      ephemeral: true,
+      ephemeral: 'npx',
     })
+  })
+})
+
+describe('uvxCommand', () => {
+  it('pins an exact version of a Python tool the same way', () => {
+    expect(uvxCommand('ruff', ['check'])).toEqual({
+      command: 'uvx',
+      args: ['ruff@0.16.1', 'check'],
+      ephemeral: 'uvx',
+    })
+  })
+
+  /** `uvx <dist>@<v>` runs the command named like the distribution; this is the rest. */
+  it('names the command explicitly when it differs from the distribution', () => {
+    expect(uvxCommand('ruff', ['--version'], 'ruff-lsp')).toEqual({
+      command: 'uvx',
+      args: ['--from', 'ruff==0.16.1', 'ruff-lsp', '--version'],
+      ephemeral: 'uvx',
+    })
+  })
+
+  it('explains how to get uv when it is not installed, instead of failing opaquely', async () => {
+    const scratch = await mkdtemp(join(tmpdir(), 'crank-uvx-'))
+    try {
+      const execution = await execTool(
+        { command: 'crank-no-such-uvx', args: [], ephemeral: 'uvx' },
+        { cwd: scratch, timeoutMs: 5_000 },
+      )
+      expect(execution.failure?.state).toBe('not-available')
+      expect(execution.failure?.reason).toContain('install uv')
+    } finally {
+      await rm(scratch, { recursive: true, force: true })
+    }
+  })
+
+  it('reads uv’s unsolvable-requirement wording as "could not fetch", not as a tool failure', async () => {
+    const scratch = await mkdtemp(join(tmpdir(), 'crank-uvx-'))
+    try {
+      const execution = await execTool(
+        {
+          command: '/bin/sh',
+          args: ['-c', 'echo "No solution found when resolving tool dependencies" 1>&2; exit 1'],
+          ephemeral: 'uvx',
+        },
+        { cwd: scratch, timeoutMs: 5_000 },
+      )
+      expect(execution.failure).toEqual({
+        state: 'not-available',
+        reason: expect.stringContaining('uv cache') as unknown as string,
+      })
+    } finally {
+      await rm(scratch, { recursive: true, force: true })
+    }
   })
 })
 
