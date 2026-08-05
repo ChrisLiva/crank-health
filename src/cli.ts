@@ -39,7 +39,13 @@ async function run(argv: readonly string[]): Promise<number> {
   })
 
   process.stdout.write(
-    options.json ? result.json : renderTerminal(result.report, result.reportPath),
+    options.json
+      ? result.json
+      : renderTerminal(result.report, {
+          markdown: result.markdownPath,
+          agent: result.agentPath,
+          json: result.reportPath,
+        }),
   )
 
   if (options.failUnder === undefined) return 0

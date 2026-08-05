@@ -1,6 +1,7 @@
 import pc from 'picocolors'
 import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
+import { CATEGORY_LABELS } from './display.ts'
 import type { Report } from './json.ts'
 
 /**
@@ -16,28 +17,26 @@ export interface TerminalOptions {
   readonly maxFindings?: number | undefined
 }
 
-const DEFAULT_MAX_FINDINGS = 10
-
-/** Human labels for the wire-format category ids. */
-const LABELS: Readonly<Record<Category, string>> = {
-  security: 'security',
-  types: 'types',
-  'dead-code': 'dead code',
-  complexity: 'complexity',
-  duplication: 'duplication',
-  lint: 'lint',
-  format: 'format',
-  'test-quality': 'test quality',
+/** Where a run left its artifacts (spec §9); every one of them gets named. */
+export interface ArtifactPaths {
+  /** Absolute path of `report.md`, the full human report. */
+  readonly markdown: string
+  /** Absolute path of `agent.md`, the task list for a coding agent. */
+  readonly agent: string
+  /** Absolute path of `report.json`. */
+  readonly json: string
 }
+
+const DEFAULT_MAX_FINDINGS = 10
 
 /**
  * Renders the whole summary, trailing newline included.
  *
- * @param reportPath where the full `report.json` was written
+ * @param artifacts where this run wrote its artifacts
  */
 export function renderTerminal(
   report: Report,
-  reportPath: string,
+  artifacts: ArtifactPaths,
   options: TerminalOptions = {},
 ): string {
   const color = pc.createColors(options.color ?? pc.isColorSupported)
@@ -67,7 +66,13 @@ export function renderTerminal(
 
   for (const warning of report.warnings) lines.push(color.yellow(`  warning: ${warning}`))
 
-  lines.push('', color.dim(`Report: ${reportPath}`), '')
+  lines.push(
+    '',
+    color.dim(`Report: ${artifacts.markdown}`),
+    color.dim(`Agent:  ${artifacts.agent}`),
+    color.dim(`Data:   ${artifacts.json}`),
+    '',
+  )
   return lines.join('\n')
 }
 
@@ -80,7 +85,7 @@ function header(report: Report, color: Colors): string {
 
 function categoryLine(report: Report, category: Category, color: Colors): string {
   const state = report.categories[category]
-  const label = LABELS[category].padEnd(13)
+  const label = CATEGORY_LABELS[category].padEnd(13)
 
   // Pad before colouring: escape sequences have length but no width.
   if (state.status !== 'graded') {

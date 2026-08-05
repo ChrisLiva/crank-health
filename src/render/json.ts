@@ -59,6 +59,24 @@ export interface Report {
   readonly timings: ReportTimings
 }
 
+/**
+ * The PR-mode delta of spec §4 — provisional, and deliberately small.
+ *
+ * M8 computes this in `core/delta.ts`, adds `readonly delta?: ReportDelta` to
+ * {@link Report}, and fills it from the base-vs-head fingerprint diff. It lives
+ * here already because all three renderers accept it today and render nothing
+ * when it is absent: turning delta rendering on is then a change inside each
+ * renderer, not a signature change across the pipeline.
+ */
+export interface ReportDelta {
+  /** The base ref `--pr` was given. */
+  readonly base: string
+  /** Findings present at head and not at the merge-base. */
+  readonly newFindings: readonly Finding[]
+  /** Findings present at the merge-base and gone at head. */
+  readonly resolvedFindings: readonly Finding[]
+}
+
 export interface ReportRepo {
   readonly path: string
   /** `null` in a repo with no commits yet. */

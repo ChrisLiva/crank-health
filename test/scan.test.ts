@@ -8,7 +8,7 @@ import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
-import { normalizeReport } from './support/report.ts'
+import { normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
 /**
@@ -22,6 +22,8 @@ import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
  */
 
 const GOLDEN = fileURLToPath(new URL('./golden/js-basic.report.json', import.meta.url))
+const GOLDEN_MD = fileURLToPath(new URL('./golden/js-basic.report.md', import.meta.url))
+const GOLDEN_AGENT = fileURLToPath(new URL('./golden/js-basic.agent.md', import.meta.url))
 
 /** Roomy: the first run of a suite may be fetching tools from the npm cache. */
 const SCAN_TIMEOUT_MS = 180_000
@@ -109,15 +111,16 @@ const CLEAN_FILES = new Set(['src/index.js', 'src/util/format.js'])
 describe('quick scan of the js-basic fixture', () => {
   let fixture: FixtureRepo
   let outside: string
+  let scan: HealthScanResult
   let json: string
   let findings: readonly Finding[]
 
   beforeAll(async () => {
     fixture = await createFixtureRepo('js-basic')
     outside = await mkdtemp(join(tmpdir(), 'crank-out-'))
-    const result = await runHealthScan({ path: fixture.root })
-    json = result.json
-    findings = result.report.findings
+    scan = await runHealthScan({ path: fixture.root })
+    json = scan.json
+    findings = scan.report.findings
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -211,6 +214,22 @@ describe('quick scan of the js-basic fixture', () => {
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
     expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
+  })
+
+  /** Spec §9: one run, four artifacts — and the bytes on disk are the bytes it returned. */
+  it('writes report.md and agent.md alongside report.json', async () => {
+    expect(await readFile(scan.markdownPath, 'utf8')).toBe(scan.markdown)
+    expect(await readFile(scan.agentPath, 'utf8')).toBe(scan.agentMarkdown)
+    expect(await readdir(join(fixture.root, '.codebase-health'))).toEqual(
+      expect.arrayContaining(['report.json', 'report.md', 'agent.md', 'raw']),
+    )
+  })
+
+  it.runIf(GOLDEN_TOOLCHAIN)('matches the golden report.md and agent.md', async () => {
+    expect(normalizeMarkdown(scan.markdown, fixture.root)).toBe(await readFile(GOLDEN_MD, 'utf8'))
+    expect(normalizeMarkdown(scan.agentMarkdown, fixture.root)).toBe(
+      await readFile(GOLDEN_AGENT, 'utf8'),
+    )
   })
 
   it(

@@ -10,8 +10,10 @@ import type { ScanResult } from './core/orchestrator.ts'
 import { createOutputDir } from './core/output.ts'
 import type { Category, CategoryState, Grade, LanguageAdapter, RepoContext } from './core/types.ts'
 import { CATEGORIES, toCategoryState } from './core/types.ts'
+import { renderAgentMarkdown } from './render/agent-md.ts'
 import type { Report, ResolvedRun } from './render/json.ts'
 import { buildReport, serializeReport } from './render/json.ts'
+import { renderReportMarkdown } from './render/report-md.ts'
 
 /**
  * The whole scan, from a path to a written `report.json`. `cli.ts` is a thin
@@ -39,10 +41,18 @@ export interface HealthScanResult {
   readonly report: Report
   /** The exact bytes written to `report.json`. */
   readonly json: string
+  /** The exact bytes written to `report.md`. */
+  readonly markdown: string
+  /** The exact bytes written to `agent.md`. */
+  readonly agentMarkdown: string
   /** Absolute path of the run directory. */
   readonly outputDir: string
   /** Absolute path of `report.json`. */
   readonly reportPath: string
+  /** Absolute path of `report.md`. */
+  readonly markdownPath: string
+  /** Absolute path of `agent.md`. */
+  readonly agentPath: string
 }
 
 /**
@@ -94,9 +104,28 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
       durationMs: Date.now() - startedAt,
     })
 
+    // All three artifacts, every run (spec §9): the JSON is the contract, the
+    // markdown is the report a person reads, and agent.md is the one an agent
+    // works from. A run that wrote only some of them would leave a reader
+    // looking at a stale file from an earlier scan.
     const json = serializeReport(report)
-    const reportPath = await out.write('report.json', json)
-    return { report, json, outputDir: out.root, reportPath }
+    const markdown = renderReportMarkdown(report)
+    const agentMarkdown = renderAgentMarkdown(report)
+    const [reportPath, markdownPath, agentPath] = await Promise.all([
+      out.write('report.json', json),
+      out.write('report.md', markdown),
+      out.write('agent.md', agentMarkdown),
+    ])
+    return {
+      report,
+      json,
+      markdown,
+      agentMarkdown,
+      outputDir: out.root,
+      reportPath,
+      markdownPath,
+      agentPath,
+    }
   } finally {
     await rm(scratch, { recursive: true, force: true })
   }

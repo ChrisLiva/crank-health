@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { RunRecord } from '../src/core/orchestrator.ts'
-import type { Category, CategoryState, Finding, ToolMetrics } from '../src/core/types.ts'
+import type { Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
-import type { ReportInput } from '../src/render/json.ts'
 import { buildReport, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
-import { makeFinding } from './factories.ts'
+import { allNotAssessed, makeFinding, makeReportInput } from './factories.ts'
 import { normalizeReport } from './support/report.ts'
 
 describe('buildReport', () => {
@@ -131,63 +130,43 @@ describe('renderTerminal', () => {
     }),
   )
 
+  const paths = { markdown: '/out/report.md', agent: '/out/agent.md', json: '/out/report.json' }
+
   it('lists every category with its grade or its reason', () => {
-    const text = renderTerminal(report, '/out/report.json', { color: false })
+    const text = renderTerminal(report, paths, { color: false })
     for (const label of ['security', 'types', 'dead code', 'complexity', 'test quality']) {
       expect(text).toContain(label)
     }
     expect(text).toMatch(/lint\s+F\s+1 graded, 1 advisory findings/)
     expect(text).toMatch(/types\s+error\s+tsc crashed/)
+  })
+
+  /** Spec §9: a run writes four artifacts, and the glance names all of them. */
+  it('points at every artifact the run wrote', () => {
+    const text = renderTerminal(report, paths, { color: false })
+    expect(text).toContain('/out/report.md')
+    expect(text).toContain('/out/agent.md')
     expect(text).toContain('/out/report.json')
   })
 
   it('marks advisory findings so nobody grades themselves on them', () => {
-    const text = renderTerminal(report, '/out/report.json', { color: false })
+    const text = renderTerminal(report, paths, { color: false })
     expect(text).toContain('src/b.js:1:1')
     expect(text).toContain('[advisory]')
   })
 
   it('caps the finding list and says how many are left', () => {
-    const text = renderTerminal(report, '/out/report.json', { color: false, maxFindings: 1 })
+    const text = renderTerminal(report, paths, { color: false, maxFindings: 1 })
     expect(text).toContain('… 1 more in report.json')
   })
 
   it('emits no escape sequences when colour is off, and some when it is on', () => {
-    expect(renderTerminal(report, '/out/report.json', { color: false })).not.toContain('\u001B[')
-    expect(renderTerminal(report, '/out/report.json', { color: true })).toContain('\u001B[')
+    expect(renderTerminal(report, paths, { color: false })).not.toContain('\u001B[')
+    expect(renderTerminal(report, paths, { color: true })).toContain('\u001B[')
   })
 })
 
-function input(overrides: Partial<ReportInput> = {}): ReportInput {
-  return {
-    repoPath: '/repo',
-    commit: 'abc123',
-    profile: 'quick',
-    selected: CATEGORIES,
-    categories: allNotAssessed(),
-    metrics: noMetrics(),
-    runs: [],
-    findings: [],
-    warnings: [],
-    generatedAt: '2024-01-01T00:00:00.000Z',
-    durationMs: 42,
-    ...overrides,
-  }
-}
-
-function allNotAssessed(): Record<Category, CategoryState> {
-  const states = {} as Record<Category, CategoryState>
-  for (const category of CATEGORIES) {
-    states[category] = { status: 'not-assessed', reason: 'no tool available for this category' }
-  }
-  return states
-}
-
-function noMetrics(): Record<Category, ToolMetrics> {
-  const metrics = {} as Record<Category, ToolMetrics>
-  for (const category of CATEGORIES) metrics[category] = {}
-  return metrics
-}
+const input = makeReportInput
 
 function record(): RunRecord {
   return {
