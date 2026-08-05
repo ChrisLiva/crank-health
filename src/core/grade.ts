@@ -37,6 +37,30 @@ import { GRADES } from './types.ts'
  * tool's false positives would encode that tool's defaults into the grading
  * table and desensitize every repo where the same tool is accurate, so the
  * per-category notes below record the cause instead.
+ *
+ * **Re-probe (v0.2.0).** The three OSS repos again, at the same pinned tags,
+ * after the v0.2.0 rule changes: zizmor's unpinned-* hygiene audits demoted to
+ * warning, bandit's high severity gated on high confidence, a library's unused
+ * *export* findings made advisory, and our default linter put on standby behind
+ * a repo-owned one. No constant moved. The categories no rule touched came back
+ * identical to the v0.1.0 column (requests lint 5.35 and format 30.6%,
+ * datasette 7.97 and 53.7%, every complexity and duplication cell), which is
+ * what says the two columns below are the rules and not the weather:
+ *
+ * | repo | security | dead |
+ * |---|---|---|
+ * | zustand v5.0.3 | D (47 graded: 1 error, 46 warning) | 3.98 |
+ * | requests v2.32.3 | D (131 graded: 4 error, 127 warning) | 0.98 |
+ * | datasette 0.65.1 | D (111 graded: 9 error, 102 warning) | 0.51 |
+ *
+ * (security is the absolute shape, so its cell is the grade and the counts it
+ * was read from; dead code is weighted findings/KLOC as above. Probed on a
+ * machine with none of gitleaks, opengrep or osv-scanner on PATH.)
+ *
+ * One measurement outside those two categories is worth recording: zustand's
+ * lint, `—` in v0.1.0 because its own eslint cannot run without an install, is
+ * now F — eslint errored and oxlint came off standby to grade the category on
+ * our default config, which the report says in as many words.
  */
 export const GRADE_TABLE = {
   /**
@@ -77,6 +101,15 @@ export const GRADE_TABLE = {
    * are its own tests. The band is not what is wrong there, so it did not move;
    * the fix is to know a library's entry points, or to make default-config
    * unused-*export* findings advisory — both rules, not constants.
+   *
+   * Re-probe (v0.2.0): unmoved — zustand v5.0.3 3.98, requests v2.32.3 0.98,
+   * datasette 0.65.1 0.51. Making a library's unused-*export* findings advisory
+   * did not touch zustand, because all 35 of its findings are knip
+   * `unused-file`, whose scope turns on whether knip resolved *an* entry point,
+   * not on whether the package publishes one. They are still its published
+   * modules (`src/middleware.ts`, `src/shallow.ts`, `src/traditional.ts`, …),
+   * its tests and its examples — the same false positive, reached by a rule the
+   * library check does not cover. Still a rule, still not this constant.
    */
   'dead-code': { shape: 'density', bands: { A: 0.5, B: 2, C: 5, D: 10 } },
 
@@ -123,6 +156,17 @@ export const GRADE_TABLE = {
    * bandit's B602/B608 are high), so no number below can change it. If the
    * category is to discriminate between well-kept repos, the lever is the
    * adapters' severity mapping, not this table.
+   *
+   * Re-probe (v0.2.0), after that lever was pulled: all three OSS repos still
+   * D, but requests v2.32.3 (4 error of 131 graded) and datasette 0.65.1 (9 of
+   * 111) now hold it on bandit findings that are high severity *and* high
+   * confidence — B324 weak MD5/SHA1, B602 `shell=True` — which is a D a
+   * maintainer would recognize. zizmor's `unpinned-uses` no longer counts
+   * toward it anywhere. What still needs an eye is zustand v5.0.3 (1 error of
+   * 47): its whole D rests on one zizmor `cache-poisoning`, high severity at
+   * *low* confidence, so the severity mapping has one more question in it than
+   * v0.2.0 answered. No probe repo reached `b`, so the B/C split remains the
+   * one constant here that a real repo has never exercised.
    */
   security: { shape: 'absolute', b: { warning: 2, info: 10 } },
 } as const satisfies Readonly<Record<Category, GradeRule>>

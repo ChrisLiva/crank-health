@@ -128,8 +128,9 @@ good grade are different answers, and `report.json` says which one it is and why
 
 The constants are calibrated first guesses; the formula _shapes_ and the rules are fixed. Version
 0.1.0's numbers were probed against zustand v5.0.3, requests v2.32.3, datasette 0.65.1 and this
-repo, and none moved — the measurements and the reasoning are in the comments on `GRADE_TABLE`.
-Changing a threshold is a version bump.
+repo; version 0.2.0 re-probed the same three at the same tags, to see what its rule changes did to
+the security and dead-code grades. No constant moved in either round — the measurements from both,
+and the reasoning, are in the comments on `GRADE_TABLE`. Changing a threshold is a version bump.
 
 ## Output
 
