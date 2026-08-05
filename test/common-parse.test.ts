@@ -233,7 +233,7 @@ describe('parseZizmorJson', () => {
       ['dangerous-triggers', 'error', 'on'],
       ['excessive-permissions', 'warning', 'jobs.build'],
       ['artipacked', 'warning', 'jobs.build.steps.0'],
-      ['unpinned-uses', 'error', 'jobs.build.steps.0.uses'],
+      ['unpinned-uses', 'warning', 'jobs.build.steps.0.uses'],
     ])
     expect(findings.every((finding) => finding.gradeScope)).toBe(true)
   })
@@ -282,7 +282,38 @@ describe('parseZizmorJson', () => {
       )[0],
     ).toMatchObject({ gradeScope: true, provenance: 'repo-config' })
   })
+
+  /**
+   * Pin-a-digest audits are chores, not exploitable weaknesses: they stay
+   * graded, but they may not cap the category at D on their own (see
+   * `zizmor.ts`'s severity mapping).
+   */
+  it('demotes pure-hygiene audits to warning, whatever severity zizmor gives them', () => {
+    const hygiene = toZizmorFindings([zizmorFinding({ ident: 'unpinned-images' })], false)
+    expect(hygiene[0]).toMatchObject({ severity: 'warning', gradeScope: true })
+    // The control: the same High/High shape under an exploitable ident.
+    const exploitable = toZizmorFindings([zizmorFinding({ ident: 'dangerous-triggers' })], false)
+    expect(exploitable[0]).toMatchObject({ severity: 'error', gradeScope: true })
+  })
 })
+
+/** A High/High zizmor finding; override the one field a test is about. */
+function zizmorFinding(overrides: { ident: string }) {
+  return {
+    description: 'a workflow problem',
+    url: '',
+    severity: 'High',
+    confidence: 'High',
+    file: '.github/workflows/ci.yml',
+    startLine: 1,
+    startCol: 1,
+    endLine: 1,
+    endCol: 1,
+    annotation: '',
+    route: 'on',
+    ...overrides,
+  }
+}
 
 describe('parseBanditJson', () => {
   it('reads test id, severity, confidence and range from real output', async () => {

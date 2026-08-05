@@ -73,7 +73,8 @@ const PLANTED = [
     rule: 'unpinned-uses',
     file: '.github/workflows/ci.yml',
     startLine: 8,
-    severity: 'error',
+    // A pin-a-digest chore: demoted from zizmor's High, still graded.
+    severity: 'warning',
     gradeScope: true,
   },
   {
@@ -167,6 +168,28 @@ describe('quick scan of the sec-basic fixture', () => {
         severity: 'error',
         gradeScope: true,
       },
+    ])
+  })
+
+  /**
+   * A finding's id is hash(category, tool, rule, file, anchor, occurrence) —
+   * never its severity (see `fingerprint.ts`). Re-tiering an audit therefore
+   * has to leave every id where it was, or a PR delta would report the whole
+   * security category as fixed-and-reintroduced. These ids are frozen: only the
+   * two tools every machine has, so the list does not depend on the toolchain.
+   */
+  it('keeps finding ids stable across a severity change', () => {
+    const stable = findings.filter(
+      (finding) =>
+        finding.category === 'security' && (finding.tool === 'zizmor' || finding.tool === 'bandit'),
+    )
+    expect(stable.map((finding) => `${finding.tool}/${finding.rule} ${finding.id}`)).toEqual([
+      'zizmor/dangerous-triggers ddcf1cc8f8861c2e',
+      'zizmor/excessive-permissions 7cdf78dbce1787a4',
+      'zizmor/artipacked 5f7e4c17a696413a',
+      'zizmor/unpinned-uses 963be61c2e2585e1',
+      'bandit/B404 13559debab826f4d',
+      'bandit/B602 2dda43453c99d548',
     ])
   })
 

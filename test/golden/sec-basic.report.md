@@ -6,7 +6,7 @@
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | D | 5 graded findings (3 error, 2 warning). 1 advisory finding did not count toward the grade. |
+| security | D | 5 graded findings (2 error, 3 warning). 1 advisory finding did not count toward the grade. |
 | types | A | Nothing counted toward the grade. |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 5 functions over cognitive complexity 15 (0.0%). 2 advisory findings did not count toward the grade. |
@@ -33,7 +33,7 @@
 
 ## security — D
 
-5 graded findings (3 error, 2 warning). 1 advisory finding did not count toward the grade.
+5 graded findings (2 error, 3 warning). 1 advisory finding did not count toward the grade.
 
 Graded on absolute counts, never normalized: any critical → F, any error → D, no graded finding → A, otherwise B or C by the warning and info counts.
 
@@ -55,7 +55,7 @@ Graded on absolute counts, never normalized: any critical → F, any error → D
   - fix: see https://docs.zizmor.sh/audits/#excessive-permissions
 - warning `.github/workflows/ci.yml:8` `artipacked` — Credential persistence through GitHub Actions artifacts — does not set persist-credentials: false (medium severity, low confidence) (zizmor) [default-config]
   - fix: see https://docs.zizmor.sh/audits/#artipacked
-- error `.github/workflows/ci.yml:8` `unpinned-uses` — Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence) (zizmor) [default-config]
+- warning `.github/workflows/ci.yml:8` `unpinned-uses` — Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence) (zizmor) [default-config]
   - fix: see https://docs.zizmor.sh/audits/#unpinned-uses
 - error `src/config.py:13` `B602` — subprocess call with shell=True identified, security issue. (high severity, high confidence) (bandit) [default-config]
   - fix: see https://bandit.readthedocs.io/en/1.9.4/plugins/b602_subprocess_popen_with_shell_equals_true.html

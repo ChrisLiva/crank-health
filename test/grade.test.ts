@@ -9,14 +9,15 @@ import {
   isBelow,
   weightedCount,
 } from '../src/core/grade.ts'
-import type { Grade, Severity } from '../src/core/types.ts'
+import type { Finding, Grade, Severity } from '../src/core/types.ts'
 import { makeFinding, makeFindings } from './factories.ts'
 
 /** 10 KLOC keeps the hand arithmetic trivial: weighted total / 10. */
 const KLOC = 10
 
 /** `count` security findings of one severity. */
-const security = (severity: Severity, count = 1) => makeFindings(count, severity, 'security')
+const security = (severity: Severity, count = 1, overrides: Partial<Finding> = {}) =>
+  makeFindings(count, severity, 'security', overrides)
 
 /** The same, reported but out of grade scope (spec §1). */
 const unscoped = (severity: Severity, count = 1) =>
@@ -237,6 +238,22 @@ describe('absolute grades (security)', () => {
 
   it('ignores findings from other categories', () => {
     expect(gradeAbsolute('security', makeFindings(1, 'critical', 'lint'))).toBe('A')
+  })
+
+  /**
+   * The budget a demoted hygiene audit lands in. zizmor rates `unpinned-uses`
+   * High, but a pin-a-digest chore is not a reachable weakness, so it arrives
+   * here as a `warning` (see `zizmor.ts`). What that has to buy is a grade that
+   * is neither the D an exploitable finding earns nor the A a clean scan earns:
+   * a couple of chores is a B, and the warning budget — not the severity — is
+   * what pushes it to C.
+   */
+  it('grades a hygiene-only security scan on the warning budget, never D and never A', () => {
+    const hygiene = (count: number) =>
+      security('warning', count, { tool: 'zizmor', rule: 'unpinned-uses' })
+    expect(gradeAbsolute('security', hygiene(1))).toBe('B')
+    expect(gradeAbsolute('security', hygiene(2))).toBe('B')
+    expect(gradeAbsolute('security', hygiene(3))).toBe('C')
   })
 })
 

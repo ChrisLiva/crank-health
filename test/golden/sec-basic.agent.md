@@ -34,17 +34,7 @@ Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizm
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T3 — Fix 1 `unpinned-uses` finding reported by zizmor
-
-Grade impact: security · D → A
-
-- `.github/workflows/ci.yml:8` `unpinned-uses` — Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence)
-
-Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
-
-Verify: `npx crank-health --only security --fail-under A`
-
-### T4 — Fix 1 `artipacked` finding reported by zizmor
+### T3 — Fix 1 `artipacked` finding reported by zizmor
 
 Grade impact: security · D → A
 
@@ -54,11 +44,21 @@ Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizm
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T5 — Fix 1 `excessive-permissions` finding reported by zizmor
+### T4 — Fix 1 `excessive-permissions` finding reported by zizmor
 
 Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:5` `excessive-permissions` — Overly broad permissions — default permissions used due to no permissions: block (medium severity, medium confidence)
+
+Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
+
+Verify: `npx crank-health --only security --fail-under A`
+
+### T5 — Fix 1 `unpinned-uses` finding reported by zizmor
+
+Grade impact: security · D → A
+
+- `.github/workflows/ci.yml:8` `unpinned-uses` — Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence)
 
 Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
 

@@ -55,6 +55,8 @@ const ACTION_PATTERN = /(?:^|\/)action\.ya?ml$/
  * zizmor's severity levels, mapped to ours (spec §2). `critical` is reserved
  * for leaked secrets (spec §3), so `High` — the worst zizmor reports — maps to
  * `error`, which spec §3's absolute shape already caps the category at D.
+ *
+ * Except for hygiene: see {@link HYGIENE_IDENTS}.
  */
 const SEVERITIES: Readonly<Record<string, Severity>> = {
   High: 'error',
@@ -66,6 +68,24 @@ const SEVERITIES: Readonly<Record<string, Severity>> = {
 
 /** Levels that count toward the grade; the rest are advisory (spec §1). */
 const GRADED_SEVERITIES: ReadonlySet<Severity> = new Set(['error', 'warning'])
+
+/**
+ * Audits that are pure hygiene, demoted to `warning` whatever severity zizmor
+ * gives them.
+ *
+ * zizmor rates both of these `High`, and on its own terms that is right: an
+ * unpinned action or container image is a supply-chain risk if its publisher is
+ * ever compromised. But the finding is a chore — pin the digest — not a
+ * weakness someone can reach today, and `error` is the tier that says "a
+ * specific thing here is exploitable". Since almost no repo hash-pins every
+ * `uses:`, leaving these at `error` capped nearly every workflow-bearing repo
+ * at security D and left the grade unable to tell a careless repo from a
+ * careful one — the calibration finding recorded on `GRADE_TABLE.security` in
+ * `core/grade.ts`, which names this severity mapping as the lever rather than
+ * the band constants. `warning` keeps them graded: enough of them still costs a
+ * B, and three costs a C.
+ */
+const HYGIENE_IDENTS: ReadonlySet<string> = new Set(['unpinned-uses', 'unpinned-images'])
 
 export const zizmorRunner: ToolRunner = {
   tool: ZIZMOR_TOOL,
@@ -287,7 +307,9 @@ export function toPendingFindings(
 ): PendingFinding[] {
   return results
     .map((result) => {
-      const severity = SEVERITIES[result.severity] ?? ('info' as const)
+      const severity = HYGIENE_IDENTS.has(result.ident)
+        ? ('warning' as const)
+        : (SEVERITIES[result.severity] ?? ('info' as const))
       return {
         category: 'security' as const,
         tool: ZIZMOR_TOOL,

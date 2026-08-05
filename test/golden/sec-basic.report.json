@@ -414,7 +414,7 @@
       "category": "security",
       "tool": "zizmor",
       "rule": "unpinned-uses",
-      "severity": "error",
+      "severity": "warning",
       "file": ".github/workflows/ci.yml",
       "range": {
         "startLine": 8,
