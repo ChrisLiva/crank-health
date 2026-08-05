@@ -93,9 +93,10 @@ alone.
 - **Not owned** → crank-health's own pinned default tool runs against a bundled config kept in a
   temp directory, and only correctness-class rules count toward the grade. Style and pedantic
   findings are still reported, marked `[advisory]`.
-- **Owned, not installed, and never imposed on you** (ESLint, Biome, the `--deep` mutation tools) →
-  the owner claims the category but might never manage to speak, so our default runs behind it as a
-  **standby** instead of standing aside — counted only if no owner graded the category.
+- **Owned, not installed, and never imposed on you** (ESLint, Biome) → the owner claims the
+  category but might never manage to speak, so our default runs behind it as a **standby** instead
+  of standing aside — counted only if no owner graded the category. A standby exists only where
+  crank-health has a default of its own, which today means lint and format.
 
 Every finding carries `provenance: "repo-config" | "default-config"` and a `gradeScope` flag, and
 when a default tool steps aside for a repo-owned one, `report.json` records that it did.
@@ -209,9 +210,10 @@ brew install opengrep       # SAST
 brew install osv-scanner    # dependency vulnerabilities
 ```
 
-An owner crank-health declines to impose is the other way a tool goes missing. ESLint and Biome run
-only from your own install — an ephemeral copy would be graded on the wrong plugin set — so a repo
-that declares one without installing it has an owner that may never run. That no longer silences
+An owner crank-health declines to impose is the other way a tool goes missing. ESLint and Biome are
+never imposed on a repo that did not choose them, and an owner declared without an install may never
+manage to run: the ephemeral copy honors your config but can crash on plugins only a real install
+provides, and a legacy-only `.eslintrc*` is a config ESLint no longer reads. That no longer silences
 the default: our tool runs as a **standby** and is resolved once everything has finished. If the
 owner graded the category, the standby is stood down — its findings and metrics drop out, and its
 row in the tool table reads `stood down: lint graded by eslint`. If the owner errored or timed out,

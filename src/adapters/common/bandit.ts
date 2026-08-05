@@ -59,7 +59,13 @@ export const BANDIT_CONFIG_FILES: readonly string[] = ['.bandit', 'bandit.yaml',
 /** `pyproject.toml` sections that make bandit repo-owned. */
 const BANDIT_SECTIONS: readonly string[] = ['tool.bandit']
 
-/** bandit's severities, mapped to ours (spec §2). */
+/**
+ * bandit's severities, mapped to ours (spec §2).
+ *
+ * Except for `HIGH`: it counts as `error` only at `HIGH` confidence — the gate
+ * in {@link toPendingFindings} branches before this table, so the `HIGH` row
+ * here documents the un-gated ceiling; below `HIGH` confidence it is `warning`.
+ */
 const SEVERITIES: Readonly<Record<string, Severity>> = {
   HIGH: 'error',
   MEDIUM: 'warning',
