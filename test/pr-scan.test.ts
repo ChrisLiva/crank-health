@@ -371,11 +371,13 @@ describe('the PR goldens', () => {
   })
 
   it('matches the golden report.md', async () => {
-    expect(normalizePrMarkdown(result.markdown, repo.root)).toBe(await golden('pr-lint.report.md'))
+    expect(normalizePrMarkdown(result.markdown, result.report.repo.path)).toBe(
+      await golden('pr-lint.report.md'),
+    )
   })
 
   it('matches the golden agent.md', async () => {
-    expect(normalizePrMarkdown(result.agentMarkdown, repo.root)).toBe(
+    expect(normalizePrMarkdown(result.agentMarkdown, result.report.repo.path)).toBe(
       await golden('pr-lint.agent.md'),
     )
   })

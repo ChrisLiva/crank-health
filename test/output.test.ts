@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CliUsageError } from '../src/args.ts'
 import { writeScratchRaw } from '../src/core/exec.ts'
 import { DEFAULT_OUTPUT_DIRNAME, createOutputDir } from '../src/core/output.ts'
-import { createRunDirectory } from '../src/run.ts'
+import { createRunDirectory, resolveRepoRoot } from '../src/run.ts'
 
 describe('createOutputDir', () => {
   let repo: string
@@ -171,5 +171,47 @@ describe('createOutputDir', () => {
     expect(adopted).toEqual(['raw/oxlint.sarif.json'])
     await rm(scratch, { recursive: true, force: true })
     expect(await readFile(join(out.raw, 'oxlint.sarif.json'), 'utf8')).toBe('{"runs":[]}\n')
+  })
+})
+
+describe('resolveRepoRoot', () => {
+  let dir: string
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'crank-resolve-'))
+  })
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('returns the physical path when the target is reached through a symlink', async () => {
+    const real = join(dir, 'real')
+    await mkdir(real)
+    const link = join(dir, 'link')
+    await symlink(real, link)
+    expect(await resolveRepoRoot(link)).toBe(await realpath(real))
+  })
+
+  it('resolves a relative target against the cwd, then realpaths it', async () => {
+    expect(await resolveRepoRoot(relative(process.cwd(), dir))).toBe(await realpath(dir))
+  })
+
+  it('rejects a nonexistent target', async () => {
+    await expect(resolveRepoRoot(join(dir, 'nope'))).rejects.toThrow(
+      `no such directory: ${join(dir, 'nope')}`,
+    )
+  })
+
+  it('rejects a target that is a file', async () => {
+    const file = join(dir, 'f.txt')
+    await writeFile(file, '')
+    await expect(resolveRepoRoot(file)).rejects.toThrow(`not a directory: ${file}`)
+  })
+
+  it('rejects a dangling symlink as a missing directory', async () => {
+    const dangling = join(dir, 'dangling')
+    await symlink(join(dir, 'gone'), dangling)
+    await expect(resolveRepoRoot(dangling)).rejects.toThrow(`no such directory: ${dangling}`)
   })
 })

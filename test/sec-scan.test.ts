@@ -298,8 +298,10 @@ describe('quick scan of the sec-basic fixture', () => {
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden report.md and agent.md', async () => {
-    expect(normalizeMarkdown(scan.markdown, fixture.root)).toBe(await readFile(GOLDEN_MD, 'utf8'))
-    expect(normalizeMarkdown(scan.agentMarkdown, fixture.root)).toBe(
+    expect(normalizeMarkdown(scan.markdown, scan.report.repo.path)).toBe(
+      await readFile(GOLDEN_MD, 'utf8'),
+    )
+    expect(normalizeMarkdown(scan.agentMarkdown, scan.report.repo.path)).toBe(
       await readFile(GOLDEN_AGENT, 'utf8'),
     )
   })
