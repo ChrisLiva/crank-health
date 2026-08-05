@@ -4,6 +4,16 @@
   "description": "Deterministic codebase health grades for JS/TS and Python repos",
   "type": "module",
   "license": "MIT",
+  "author": "Chris Liva",
+  "keywords": [
+    "code-quality",
+    "static-analysis",
+    "lint",
+    "codebase-health",
+    "typescript",
+    "python",
+    "cli"
+  ],
   "bin": {
     "crank-health": "dist/cli.js"
   },

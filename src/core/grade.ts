@@ -14,13 +14,50 @@ import { GRADES } from './types.ts'
  * Only findings with `gradeScope: true` ever count (spec §1): on default
  * configs the style/pedantic rules stay advisory, and low-confidence tiers
  * (vulture 60%) are advisory too.
+ *
+ * **Calibration (v0.1.0).** Every constant below was probed against three
+ * pinned OSS repos plus this one, and none moved. The measurements, so the next
+ * person to reach for a number starts from evidence rather than from taste:
+ *
+ * | repo | KLOC | lint | format | types | dead | cplx | dup |
+ * |---|---|---|---|---|---|---|---|
+ * | zustand v5.0.3 | 8.8 | — | 8.2% | — | 3.98 | 0.08% | 21.7% |
+ * | requests v2.32.3 | 11.2 | 5.35 | 30.6% | 27.7 | 0.98 | 2.18% | 2.5% |
+ * | datasette 0.65.1 | 39.5 | 7.97 | 53.7% | 74.6 | 0.51 | 4.10% | 2.6% |
+ * | crank-health | 22.1 | 0.54 | 1.6% | 0.68 | 7.16 | 0.78% | 4.2% |
+ *
+ * (density categories in weighted findings/KLOC, ratio categories as their
+ * percentage; `—` is a category no tool graded on that repo.)
+ *
+ * The bands separate these repos the way a reader would: complexity and
+ * duplication discriminate cleanly, lint puts two untooled repos at C, and the
+ * grades that look harsh — dead code on the two JS/TS libraries, types on the
+ * two untyped Python repos — are harsh because of *which findings the tools
+ * produce*, not because of where the bands sit. Widening a band to absorb a
+ * tool's false positives would encode that tool's defaults into the grading
+ * table and desensitize every repo where the same tool is accurate, so the
+ * per-category notes below record the cause instead.
  */
 export const GRADE_TABLE = {
-  /** Weighted findings/KLOC. A ≤1, B ≤5, C ≤15, D ≤40, else F. */
+  /**
+   * Weighted findings/KLOC. A ≤1, B ≤5, C ≤15, D ≤40, else F.
+   *
+   * Calibration: a repo that lints in CI sits near zero (this one, 0.54 → A);
+   * the two that do not landed at 5.35 and 7.97 → C, on rules a maintainer
+   * would recognize (ruff F401 in re-export shims, F811 in test fixtures). F
+   * still means roughly eight errors per KLOC, which nothing well-kept reaches.
+   */
   lint: { shape: 'density', bands: { A: 1, B: 5, C: 15, D: 40 } },
   /**
    * Type errors only — warnings and info from a type checker are advisory.
    * Weighted the same way, so one error/KLOC scores 5. A =0, B ≤1, C ≤5, D ≤15.
+   *
+   * Calibration: untyped Python under `ty` measures 27.7 (requests) and 74.6
+   * (datasette) — F, and no band that still distinguishes a type-clean project
+   * could rescue either. That is the honest reading of "this code has no type
+   * safety", so the band stays; if it should read differently, the question is
+   * whether a default-config checker's findings belong in `gradeScope` at all,
+   * which is a rule, not a number.
    */
   types: {
     shape: 'density',
@@ -31,14 +68,44 @@ export const GRADE_TABLE = {
    * High-confidence dead code only; the low-confidence tier arrives with
    * `gradeScope: false` and is filtered before we get here.
    * A ≤0.5, B ≤2, C ≤5, D ≤10.
+   *
+   * Calibration: the Python side behaves — vulture's ≥90% tier measured 0.51
+   * and 0.98 → B on two large repos. The JS/TS side is inflated by *default*
+   * knip and fallow, which have no entry points to reason from: all 35 of
+   * zustand's findings (3.98 → C) are its own public entry modules, its tests
+   * and its examples, and this repo's 7.16 → D is exports whose only consumers
+   * are its own tests. The band is not what is wrong there, so it did not move;
+   * the fix is to know a library's entry points, or to make default-config
+   * unused-*export* findings advisory — both rules, not constants.
    */
   'dead-code': { shape: 'density', bands: { A: 0.5, B: 2, C: 5, D: 10 } },
 
-  /** % of files failing the formatter. A ≤1, B ≤10, C ≤30, D ≤60. */
+  /**
+   * % of files failing the formatter. A ≤1, B ≤10, C ≤30, D ≤60.
+   *
+   * Calibration: the measure is binary per file, so it is bimodal in practice —
+   * a repo that formats in CI sits at 0–2% and one that does not sits high.
+   * requests (30.6%) and datasette (53.7%) are both *formatted*, just by an
+   * older black than ruff-format 0.16 agrees with; D is the right size of
+   * complaint for that, and the 60% ceiling keeps F for repos that never format
+   * at all.
+   */
   format: { shape: 'ratio', bands: { A: 1, B: 10, C: 30, D: 60 } },
-  /** % of functions over cognitive complexity 15. A ≤2, B ≤5, C ≤10, D ≤20. */
+  /**
+   * % of functions over cognitive complexity 15. A ≤2, B ≤5, C ≤10, D ≤20.
+   *
+   * Calibration: the cleanest discriminator of the eight — 0.08%, 0.78%, 2.18%,
+   * 4.10% across the probe repos, spread neatly over A and B with room left.
+   */
   complexity: { shape: 'ratio', bands: { A: 2, B: 5, C: 10, D: 20 } },
-  /** jscpd duplicated-token %. A ≤3, B ≤5, C ≤10, D ≤20. */
+  /**
+   * jscpd duplicated-token %. A ≤3, B ≤5, C ≤10, D ≤20.
+   *
+   * Calibration: 2.5%, 2.6% and 4.2% on three repos, and 21.7% → F on zustand,
+   * where 120 of 124 clones are its test suite. The F is what the measurement
+   * says; jscpd's own default CI threshold (10%) lands on our C/D edge, which is
+   * the second opinion this band was checked against.
+   */
   duplication: { shape: 'ratio', bands: { A: 3, B: 5, C: 10, D: 20 } },
   /** Mutation score — higher is better. A ≥80, B ≥65, C ≥50, D ≥35. */
   'test-quality': { shape: 'ratio', higherIsBetter: true, bands: { A: 80, B: 65, C: 50, D: 35 } },
@@ -48,6 +115,14 @@ export const GRADE_TABLE = {
    * Secrets are mapped to `critical` by their adapters.
    * any critical → F · any error (high) → D · zero findings → A ·
    * otherwise B while the medium/low counts stay at or under `b`, else C.
+   *
+   * Calibration: all four probe repos graded D, and none of them reached `b` —
+   * the B/C split is the one constant here that real repos never exercised. The
+   * D is the frozen rule meeting the tools' own severities (zizmor's
+   * `unpinned-uses` is high on any workflow that does not hash-pin its actions;
+   * bandit's B602/B608 are high), so no number below can change it. If the
+   * category is to discriminate between well-kept repos, the lever is the
+   * adapters' severity mapping, not this table.
    */
   security: { shape: 'absolute', b: { warning: 2, info: 10 } },
 } as const satisfies Readonly<Record<Category, GradeRule>>
