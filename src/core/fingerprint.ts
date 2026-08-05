@@ -86,6 +86,9 @@ export function computeAnchors(
         anchor,
         occurrence,
       ),
+      // Kept so a PR delta can re-hash this finding under a renamed path
+      // without re-reading a tree that may no longer be checked out.
+      identity: { anchor, occurrence },
     }
   }
 

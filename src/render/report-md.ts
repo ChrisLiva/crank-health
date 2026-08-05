@@ -6,8 +6,16 @@ import {
 } from '../core/grade.ts'
 import type { Category, Finding, Language, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
-import { ADVISORY_TAG, CATEGORY_LABELS, location, percent, plural, stateLabel } from './display.ts'
-import type { Report, ReportDelta, ReportTool } from './json.ts'
+import {
+  ADVISORY_TAG,
+  CATEGORY_LABELS,
+  TOUCHED_TAG,
+  location,
+  percent,
+  plural,
+  stateLabel,
+} from './display.ts'
+import type { Report, ReportDelta, ReportNewFinding, ReportTool } from './json.ts'
 
 /**
  * `report.md` — the full human report (spec §9): every category's grade, what
@@ -33,10 +41,12 @@ export interface ReportMarkdownOptions {
   /** Findings listed per category before the rest is left to `report.json`. */
   readonly maxFindingsPerCategory?: number | undefined
   /**
-   * PR-mode delta (spec §4). M8 fills this in; today it is accepted and not
-   * rendered, so adding the delta section is a change inside this file.
+   * PR-mode delta (spec §4). A `--pr` report carries its own, so this is an
+   * override for callers that render a delta the report does not have.
    */
   readonly delta?: ReportDelta | undefined
+  /** New and resolved findings listed in the delta block. */
+  readonly maxDeltaFindings?: number | undefined
 }
 
 const DEFAULT_MAX_FINDINGS = 20
@@ -44,30 +54,95 @@ const DEFAULT_MAX_FINDINGS = 20
 /** Renders the whole report, trailing newline included. */
 export function renderReportMarkdown(report: Report, options: ReportMarkdownOptions = {}): string {
   const limit = options.maxFindingsPerCategory ?? DEFAULT_MAX_FINDINGS
+  const delta = options.delta ?? report.delta
   const blocks: string[] = [
     '# Codebase health',
-    subtitle(report),
+    subtitle(report, delta),
     '## Grades',
-    gradesTable(report),
+    gradesTable(report, delta),
     ...languageBreakdown(report),
     ...measurements(report),
-    ...CATEGORIES.flatMap((category) => categorySection(report, category, limit)),
+    ...deltaSection(delta, options.maxDeltaFindings ?? DEFAULT_MAX_FINDINGS),
+    ...CATEGORIES.flatMap((category) => categorySection(report, category, limit, delta)),
     trailer(report),
   ]
   return `${blocks.join('\n\n')}\n`
 }
 
-function subtitle(report: Report): string {
+function subtitle(report: Report, delta: ReportDelta | undefined): string {
   const commit = report.repo.commit ?? 'no commits yet'
-  return `\`${report.repo.path}\` @ \`${commit}\` · crank-health ${report.crankHealth} · ${report.profile} profile`
+  const mode =
+    delta === undefined
+      ? ''
+      : ` · PR vs \`${delta.baseRef}\` (merge-base \`${short(delta.mergeBase)}\`)`
+  return `\`${report.repo.path}\` @ \`${commit}\` · crank-health ${report.crankHealth} · ${report.profile} profile${mode}`
+}
+
+/* ------------------------------------------------------------- the PR delta */
+
+/**
+ * What this change did (spec §4), between the whole-repo summary above and the
+ * per-category detail below — because the delta is only readable next to the
+ * grades it moved, and the grades are head's either way.
+ *
+ * The movement table lists every category, including the ones that did not
+ * move: a PR that changes nothing in `security` should be able to say so, and
+ * the base column is where a base-only tool failure becomes visible.
+ */
+function deltaSection(delta: ReportDelta | undefined, limit: number): string[] {
+  if (delta === undefined) return []
+
+  const { counts } = delta
+  const blocks: string[] = [
+    '## PR delta',
+    `Against \`${delta.baseRef}\`, merge-base \`${short(delta.mergeBase)}\`. ` +
+      `${plural(counts.new, 'new finding')} (${counts.touchedLine} on lines this change touched), ` +
+      `${counts.resolved} resolved, ${counts.unchanged} unchanged.`,
+    table(
+      ['Category', 'Base', 'Head', 'New', 'Resolved'],
+      delta.categories.map((movement) =>
+        row([
+          CATEGORY_LABELS[movement.category],
+          stateLabel(movement.base),
+          stateLabel(movement.head),
+          String(movement.newFindings),
+          String(movement.resolvedFindings),
+        ]),
+      ),
+    ),
+  ]
+
+  // Only where it changes how a number should be read: a category nothing
+  // assessed on either side has no movement to misread.
+  const unreliable = delta.categories.filter(
+    (movement) =>
+      movement.base.status !== 'graded' &&
+      (movement.head.status === 'graded' || movement.resolvedFindings > 0),
+  )
+  if (unreliable.length > 0) {
+    blocks.push(
+      `Nothing could assess ${unreliable.map((movement) => CATEGORY_LABELS[movement.category]).join(', ')} ` +
+        'at the base, so there is no "before" to compare against: the counts above are what the ' +
+        'base scan happened to see, not what was there.',
+    )
+  }
+
+  blocks.push(...findingList('New findings', delta.newFindings, limit))
+  blocks.push(...findingList('Resolved findings', delta.resolvedFindings, limit))
+  return blocks
+}
+
+/** `abc1234` — enough of a sha to identify it, short enough to read. */
+function short(sha: string): string {
+  return sha.slice(0, 8)
 }
 
 /* -------------------------------------------------------------- the summary */
 
-function gradesTable(report: Report): string {
+function gradesTable(report: Report, delta: ReportDelta | undefined): string {
   const rows = CATEGORIES.map((category) => {
     const state = report.categories[category]
-    const basis = state.status === 'graded' ? gradeBasis(report, category) : state.reason
+    const basis = state.status === 'graded' ? gradeBasis(report, category, delta) : state.reason
     return row([CATEGORY_LABELS[category], stateLabel(state), basis])
   })
   return table(['Category', 'Grade', 'Basis'], rows)
@@ -149,7 +224,12 @@ function measurements(report: Report): string[] {
 
 /* ---------------------------------------------------------- category detail */
 
-function categorySection(report: Report, category: Category, limit: number): string[] {
+function categorySection(
+  report: Report,
+  category: Category,
+  limit: number,
+  delta: ReportDelta | undefined,
+): string[] {
   const state = report.categories[category]
   const mine = report.findings.filter((finding) => finding.category === category)
   const tools = report.tools.filter((tool) => tool.category === category)
@@ -159,7 +239,7 @@ function categorySection(report: Report, category: Category, limit: number): str
   const blocks: string[] = [
     `## ${CATEGORY_LABELS[category]} — ${stateLabel(state)}`,
     state.status === 'graded'
-      ? `${gradeBasis(report, category)}\n\nGraded on ${bandText(category)}`
+      ? `${gradeBasis(report, category, delta)}\n\nGraded on ${bandText(category)}`
       : `Not graded: ${state.reason}`,
   ]
 
@@ -186,16 +266,20 @@ function categorySection(report: Report, category: Category, limit: number): str
  * and the reader has to be able to see that without opening `report.json`.
  */
 function toolTable(tools: readonly ReportTool[]): string {
+  // In PR mode the same tool ran twice, and which run a row is about is the
+  // difference between "this change fixed it" and "the base scan failed".
+  const sided = tools.some((tool) => tool.side !== undefined)
   const rows = tools.map((tool) =>
     row([
       tool.tool,
+      ...(sided ? [tool.side ?? '—'] : []),
       tool.state === 'not-available' ? 'not available' : tool.state,
       `[${tool.provenance}]`,
       versionCell(tool),
       tool.reason ?? '—',
     ]),
   )
-  return table(['Tool', 'State', 'Config', 'Version', 'Notes'], rows)
+  return table(['Tool', ...(sided ? ['Scan'] : []), 'State', 'Config', 'Version', 'Notes'], rows)
 }
 
 /** What ran, and what this release pins — the two can differ for PATH tools. */
@@ -205,7 +289,11 @@ function versionCell(tool: ReportTool): string {
   return `${tool.version} (pinned ${tool.pinned})`
 }
 
-function findingList(title: string, findings: readonly Finding[], limit: number): string[] {
+function findingList(
+  title: string,
+  findings: readonly (Finding | ReportNewFinding)[],
+  limit: number,
+): string[] {
   if (findings.length === 0) return []
   const shown = findings.slice(0, limit)
   const lines = shown.map((finding) => findingLine(finding))
@@ -215,8 +303,9 @@ function findingList(title: string, findings: readonly Finding[], limit: number)
   return [`**${title}** (${findings.length})`, lines.join('\n')]
 }
 
-function findingLine(finding: Finding): string {
-  const tags = `(${finding.tool}) [${finding.provenance}]${finding.gradeScope ? '' : ` ${ADVISORY_TAG}`}`
+function findingLine(finding: Finding | ReportNewFinding): string {
+  const touched = 'touchedLine' in finding && finding.touchedLine ? ` ${TOUCHED_TAG}` : ''
+  const tags = `(${finding.tool}) [${finding.provenance}]${finding.gradeScope ? '' : ` ${ADVISORY_TAG}`}${touched}`
   const fix = finding.fixHint === undefined ? '' : `\n  - fix: ${finding.fixHint}`
   return `- ${finding.severity} \`${location(finding)}\` \`${finding.rule}\` — ${finding.message} ${tags}${fix}`
 }
@@ -228,12 +317,15 @@ function findingLine(finding: Finding): string {
  * (spec §3): counts for the absolute shape, the measured percentage for the
  * ratio shapes, weighted findings for the density shapes.
  */
-function gradeBasis(report: Report, category: Category): string {
+function gradeBasis(report: Report, category: Category, delta: ReportDelta | undefined): string {
   const mine = report.findings.filter((finding) => finding.category === category)
   const graded = mine.filter((finding) => finding.gradeScope)
   const advisory = mine.length - graded.length
   const note =
-    advisory === 0 ? '' : ` ${plural(advisory, 'advisory finding')} did not count toward the grade.`
+    (advisory === 0
+      ? ''
+      : ` ${plural(advisory, 'advisory finding')} did not count toward the grade.`) +
+    deltaNote(delta, category)
 
   switch (GRADE_TABLE[category].shape) {
     case 'absolute':
@@ -247,6 +339,14 @@ function gradeBasis(report: Report, category: Category): string {
     case 'ratio':
       return `${ratioBasis(report, category, graded)}${note}`
   }
+}
+
+/** ` This change: 2 new, 1 resolved.` — silent where nothing moved. */
+function deltaNote(delta: ReportDelta | undefined, category: Category): string {
+  const movement = delta?.categories.find((entry) => entry.category === category)
+  if (movement === undefined) return ''
+  if (movement.newFindings === 0 && movement.resolvedFindings === 0) return ''
+  return ` This change: ${movement.newFindings} new, ${movement.resolvedFindings} resolved.`
 }
 
 function ratioBasis(report: Report, category: Category, graded: readonly Finding[]): string {

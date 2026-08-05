@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,9 +8,15 @@ import { HELP_TEXT } from '../src/args.ts'
 import { VERSION } from '../src/version.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import type { HistoryRepo } from './support/history.ts'
+import { createHistoryRepo } from './support/history.ts'
+import { CLEAN, CONST_ASSIGN } from './support/pr-fixture.ts'
 import { GOLDEN_TOOLCHAIN } from './support/system-tools.ts'
 
 const CLI_ENTRY = fileURLToPath(new URL('../src/cli.ts', import.meta.url))
+
+/** A `--pr` run is two full scans, either of which may be fetching tools. */
+const PR_TIMEOUT_MS = 240_000
 
 /** Runs the CLI as a real process so exit codes and streams are the real ones. */
 function runCli(args: readonly string[], env: Record<string, string> = {}) {
@@ -114,12 +120,51 @@ describe('crank-health binary', () => {
   )
 
   it('refuses the modes this build does not implement instead of scanning anyway', async () => {
-    const results = await Promise.all(
-      [['--pr', 'main'], ['--deep']].map((args) => runCli([...args, fixture.root])),
-    )
-    for (const result of results) {
-      expect(result.exitCode).toBe(2)
-      expect(result.stderr).toContain('not implemented in this build')
-    }
+    const result = await runCli(['--deep', fixture.root])
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('not implemented in this build')
+  })
+
+  it('exits 2 on a --pr base that does not exist here', async () => {
+    const result = await runCli(['--pr', 'no-such-branch', '--out', out, fixture.root])
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('unknown base ref "no-such-branch"')
+  })
+})
+
+describe('crank-health --pr', () => {
+  let repo: HistoryRepo
+  let out: string
+
+  beforeAll(async () => {
+    repo = await createHistoryRepo({
+      base: { 'src/a.js': CLEAN },
+      head: [{ write: 'src/a.js', content: CONST_ASSIGN }],
+    })
+    out = await mkdtemp(join(tmpdir(), 'crank-cli-pr-'))
+  })
+
+  afterAll(async () => {
+    await repo.remove()
+    await rm(out, { recursive: true, force: true })
+  })
+
+  it(
+    'prints the delta summary and exits 0',
+    async () => {
+      const result = await runCli(['--pr', 'main', '--out', out, repo.root], { NO_COLOR: '1' })
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('PR delta vs main')
+      expect(result.stdout).toContain('+1 new (1 on changed lines) · -0 resolved')
+      expect(result.stdout).toContain('Top new findings')
+      expect(result.stdout).toContain('eslint(no-const-assign)')
+    },
+    PR_TIMEOUT_MS,
+  )
+
+  it('leaves the target repo clean, with no leftover worktree', async () => {
+    expect(await repo.status()).toBe('')
+    expect(await repo.worktrees()).toEqual([await realpath(repo.root)])
   })
 })

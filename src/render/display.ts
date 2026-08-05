@@ -21,6 +21,13 @@ export const CATEGORY_LABELS: Readonly<Record<Category, string>> = {
 /** The marker on a finding that was reported but did not move a grade (spec §1). */
 export const ADVISORY_TAG = '[advisory]'
 
+/**
+ * The marker on a new PR finding sitting on a line the change touched — spec
+ * §4's "directly-actionable". Its absence on a new finding is meaningful too:
+ * that one is a non-local regression, caused from somewhere else.
+ */
+export const TOUCHED_TAG = '[in-diff]'
+
 /** A grade letter, or the degradation state, in the fewest words that are true. */
 export function stateLabel(state: CategoryState): string {
   if (state.status === 'graded') return state.grade

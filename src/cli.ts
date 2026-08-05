@@ -5,6 +5,7 @@ import type { Category, Grade } from './core/types.ts'
 import { CATEGORIES } from './core/types.ts'
 import type { Report } from './render/json.ts'
 import { renderTerminal } from './render/terminal.ts'
+import { runPrScan } from './run-pr.ts'
 import { runHealthScan } from './run.ts'
 import { VERSION } from './version.ts'
 
@@ -26,17 +27,20 @@ async function run(argv: readonly string[]): Promise<number> {
     process.stdout.write(`${VERSION}\n`)
     return 0
   }
-  // Both modes are specified and planned (spec §4, §5) but not in this build.
-  // Exiting 2 rather than silently running a quick whole-repo scan: a CI job
-  // that asked for a PR delta must not be told everything is fine.
-  if (options.pr !== undefined) return unimplemented('--pr')
+  // Specified and planned (spec §5) but not in this build. Exiting 2 rather
+  // than silently running a quick scan: a CI job that asked for the deep tier
+  // must not be told everything is fine.
   if (options.deep) return unimplemented('--deep')
 
-  const result = await runHealthScan({
+  const scan = {
     path: options.path,
     out: options.out,
     only: parseCategories(options.only),
-  })
+  }
+  const result =
+    options.pr === undefined
+      ? await runHealthScan(scan)
+      : await runPrScan({ ...scan, base: options.pr })
 
   process.stdout.write(
     options.json

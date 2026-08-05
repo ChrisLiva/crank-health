@@ -1,7 +1,14 @@
 import { SEVERITY_WEIGHTS } from '../core/grade.ts'
 import type { Category, Finding, Grade } from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
-import { ADVISORY_TAG, CATEGORY_LABELS, location, plural, stateLabel } from './display.ts'
+import {
+  ADVISORY_TAG,
+  CATEGORY_LABELS,
+  TOUCHED_TAG,
+  location,
+  plural,
+  stateLabel,
+} from './display.ts'
 import type { Report, ReportDelta } from './json.ts'
 
 /**
@@ -46,6 +53,12 @@ export interface AgentTask {
   /** Stable within one report: `T1`, `T2`, … in the order tasks are emitted. */
   readonly id: string
   readonly category: Category
+  /**
+   * PR mode only: at least one of this task's findings sits on a line the
+   * change touched (spec §4's directly-actionable). Always `false` for a
+   * whole-repo report, where nothing is more "in the diff" than anything else.
+   */
+  readonly directlyActionable: boolean
   /** Imperative, and counted: "Remove 14 unused exports". */
   readonly title: string
   /**
@@ -67,26 +80,35 @@ export interface AgentMarkdownOptions {
   /** Defaults to {@link MAX_TASKS}. */
   readonly maxTasks?: number | undefined
   /**
-   * PR-mode delta (spec §4): new findings only, resolved ones noted at the
-   * bottom. M8 fills this in; today it is accepted and not rendered, so adding
-   * the delta section is a change inside this file.
+   * PR-mode delta (spec §4): tasks come from the new findings only, and the
+   * resolved ones are noted at the bottom as context. A `--pr` report carries
+   * its own delta, so this is an override for callers that render one the
+   * report does not have.
    */
   readonly delta?: ReportDelta | undefined
 }
 
+/** Resolved findings listed at the bottom before the rest is left to the JSON. */
+const RESOLVED_LIMIT = 15
+
 /** Renders the whole file, trailing newline included. */
 export function renderAgentMarkdown(report: Report, options: AgentMarkdownOptions = {}): string {
   const limit = options.maxTasks ?? MAX_TASKS
-  const all = buildAgentTasks(report)
+  const delta = options.delta ?? report.delta
+  const all = buildAgentTasks(report, delta)
   const tasks = all.slice(0, limit)
 
   const blocks: string[] = [
     '# Fix plan',
-    subtitle(report),
+    subtitle(report, delta),
     gradesLine(report),
-    GROUND_RULES,
+    ...(delta === undefined ? [] : [deltaLine(delta)]),
+    delta === undefined ? GROUND_RULES : `${GROUND_RULES}\n${PR_GROUND_RULES}`,
     '## Tasks',
-    ...(tasks.length === 0 ? [NOTHING_TO_DO] : tasks.map((task) => renderTask(task))),
+    ...(tasks.length === 0
+      ? [delta === undefined ? NOTHING_TO_DO : NOTHING_NEW]
+      : tasks.map((task) => renderTask(task))),
+    ...resolvedSection(delta),
     footer(report, all.length, tasks.length),
   ]
   return `${blocks.join('\n\n')}\n`
@@ -95,29 +117,51 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
 /**
  * The task list, in emission order, with ids already assigned.
  *
- * Only categories graded worse than A produce tasks: a category nothing could
- * assess has nothing to fix, and a category at A is done. Advisory findings are
- * carried inside their theme rather than dropped — duplication and complexity
- * grade on a measured percentage, so their findings are all advisory and
- * excluding them would leave an F with no task under it.
+ * **Whole-repo:** only categories graded worse than A produce tasks — a
+ * category nothing could assess has nothing to fix, and a category at A is
+ * done. Advisory findings are carried inside their theme rather than dropped:
+ * duplication and complexity grade on a measured percentage, so their findings
+ * are all advisory and excluding them would leave an F with no task under it.
+ *
+ * **PR mode:** the source is the delta's new findings, and the grade filter is
+ * dropped — a category can be graded A and still have a regression this change
+ * introduced, and that regression is the whole reason for the run. Nothing that
+ * was already there becomes a task; it is not this change's to fix.
+ *
+ * Ordering is spec §10's fixed category priority first, always. Within a
+ * category, PR mode puts the themes that touch changed lines ahead of the
+ * non-local ones, and then both fall back to the whole-repo rule: heaviest
+ * findings, then most findings, then theme key.
  */
-export function buildAgentTasks(report: Report): AgentTask[] {
+export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined): AgentTask[] {
+  const source = delta ?? report.delta
   const rawByTool = new Map(report.tools.map((tool) => [tool.tool, tool.raw]))
-  const ordered = CATEGORIES.filter((category) => needsWork(report, category)).flatMap((category) =>
+  const findings: readonly Finding[] = source === undefined ? report.findings : source.newFindings
+  const touched = new Set(
+    source === undefined
+      ? []
+      : source.newFindings.filter((finding) => finding.touchedLine).map((finding) => finding.id),
+  )
+
+  const ordered = CATEGORIES.filter(
+    (category) => source !== undefined || needsWork(report, category),
+  ).flatMap((category) =>
     themesOf(
       category,
-      report.findings.filter((finding) => finding.category === category),
+      findings.filter((finding) => finding.category === category),
     ),
   )
+
   return ordered
     .toSorted(
       (a, b) =>
         categoryRank(a.category) - categoryRank(b.category) ||
+        Number(isDirect(b, touched)) - Number(isDirect(a, touched)) ||
         severityWeight(b.findings) - severityWeight(a.findings) ||
         b.findings.length - a.findings.length ||
         compare(a.key, b.key),
     )
-    .map((theme, index) => toTask(theme, index + 1, report, rawByTool))
+    .map((theme, index) => toTask(theme, index + 1, report, rawByTool, touched))
 }
 
 function needsWork(report: Report, category: Category): boolean {
@@ -125,11 +169,16 @@ function needsWork(report: Report, category: Category): boolean {
   return state.status === 'graded' && state.grade !== TARGET_GRADE
 }
 
+function isDirect(theme: Theme, touched: ReadonlySet<string>): boolean {
+  return theme.findings.some((finding) => touched.has(finding.id))
+}
+
 function toTask(
   theme: Theme,
   ordinal: number,
   report: Report,
   rawByTool: ReadonlyMap<string, readonly string[]>,
+  touched: ReadonlySet<string>,
 ): AgentTask {
   const state = report.categories[theme.category]
   const current = state.status === 'graded' ? state.grade : stateLabel(state)
@@ -139,6 +188,7 @@ function toTask(
   return {
     id: `T${ordinal}`,
     category: theme.category,
+    directlyActionable: isDirect(theme, touched),
     title: theme.title,
     gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
     findings: theme.findings,
@@ -230,9 +280,42 @@ function deadCodeKind(rule: string): string {
 
 /* --------------------------------------------------------------- rendering */
 
-function subtitle(report: Report): string {
+function subtitle(report: Report, delta: ReportDelta | undefined): string {
   const commit = report.repo.commit ?? 'no commits yet'
-  return `\`${report.repo.path}\` @ \`${commit}\` · crank-health ${report.crankHealth} · ${report.profile} profile`
+  const mode =
+    delta === undefined
+      ? ''
+      : ` · PR vs \`${delta.baseRef}\` (merge-base \`${delta.mergeBase.slice(0, 8)}\`)`
+  return `\`${report.repo.path}\` @ \`${commit}\` · crank-health ${report.crankHealth} · ${report.profile} profile${mode}`
+}
+
+function deltaLine(delta: ReportDelta): string {
+  return (
+    `This change: ${plural(delta.counts.new, 'new finding')} ` +
+    `(${delta.counts.touchedLine} on lines it touched), ` +
+    `${delta.counts.resolved} resolved, ${delta.counts.unchanged} unchanged.`
+  )
+}
+
+/**
+ * The resolved findings, as context and nothing more (spec §10: "PR mode: new
+ * findings only; resolved noted at bottom as context"). They are below the
+ * tasks and carry no task id, because there is nothing here to do.
+ */
+function resolvedSection(delta: ReportDelta | undefined): string[] {
+  if (delta === undefined || delta.resolvedFindings.length === 0) return []
+  const shown = delta.resolvedFindings.slice(0, RESOLVED_LIMIT)
+  const lines = shown.map(
+    (finding) => `- \`${location(finding)}\` \`${finding.rule}\` — ${finding.message}`,
+  )
+  if (delta.resolvedFindings.length > shown.length) {
+    lines.push(`- … ${delta.resolvedFindings.length - shown.length} more in \`report.json\`.`)
+  }
+  return [
+    `## Resolved by this change (${delta.resolvedFindings.length})`,
+    'Context only — nothing to do here.',
+    lines.join('\n'),
+  ]
 }
 
 function gradesLine(report: Report): string {
@@ -250,12 +333,17 @@ const GROUND_RULES = `## Ground rules
 - Verify before you call a task done: run its Verify command and read the grade it prints.
 - A task’s grade impact is its whole category: \`security · F → A\` means security reaches A once every security task is done, not this one alone.`
 
+const PR_GROUND_RULES = `- This is a PR delta: the tasks below are what *this change* introduced. Findings that were already there are not yours to fix here.
+- Findings marked ${TOUCHED_TAG} are on lines this change touched — fix those first. A new finding without the marker was caused from elsewhere in the change; it is still a regression.`
+
 const NOTHING_TO_DO =
   'No tasks: every assessed category is graded A. Categories nothing could assess are listed above with the reason.'
 
+const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
+
 function renderTask(task: AgentTask): string {
   const lines = [
-    `### ${task.id} — ${task.title}`,
+    `### ${task.id} — ${task.title}${task.directlyActionable ? ` ${TOUCHED_TAG}` : ''}`,
     '',
     `Grade impact: ${task.gradeImpact}`,
     '',
@@ -271,10 +359,12 @@ function renderTask(task: AgentTask): string {
 /** Findings inline while the list is short enough to act on; files after that. */
 function findingBlock(findings: readonly Finding[]): string[] {
   if (findings.length <= INLINE_FINDING_LIMIT) {
-    return findings.map(
-      (finding) =>
-        `- \`${location(finding)}\` \`${finding.rule}\` — ${finding.message}${finding.gradeScope ? '' : ` ${ADVISORY_TAG}`}`,
-    )
+    return findings.map((finding) => {
+      const advisory = finding.gradeScope ? '' : ` ${ADVISORY_TAG}`
+      const touched =
+        'touchedLine' in finding && finding.touchedLine === true ? ` ${TOUCHED_TAG}` : ''
+      return `- \`${location(finding)}\` \`${finding.rule}\` — ${finding.message}${advisory}${touched}`
+    })
   }
   const counts = new Map<string, number>()
   for (const finding of findings) counts.set(finding.file, (counts.get(finding.file) ?? 0) + 1)

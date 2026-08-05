@@ -17,6 +17,30 @@ export function normalizeReport(json: string): string {
 }
 
 /**
+ * The determinism contract for a `--pr` report, which has two more varying
+ * things in it: the commit shas of a scripted history. They are deterministic
+ * for a given fixture, but recording them in a golden would mean regenerating
+ * three files whenever a fixture's contents move by a byte, so they are
+ * normalized away and the shas themselves are asserted directly instead.
+ */
+export function normalizePrReport(json: string): string {
+  return withoutShas(normalizeReport(json))
+}
+
+/** {@link normalizeMarkdown} for a `--pr` artifact; see {@link normalizePrReport}. */
+export function normalizePrMarkdown(markdown: string, repoPath: string): string {
+  return withoutShas(normalizeMarkdown(markdown, repoPath))
+}
+
+/**
+ * Commit shas, full and abbreviated, replaced by placeholders. Finding ids are
+ * 16 hex characters and so match neither pattern.
+ */
+export function withoutShas(text: string): string {
+  return text.replaceAll(/\b[0-9a-f]{40}\b/g, '<sha>').replaceAll(/\b[0-9a-f]{7,12}\b/g, '<short>')
+}
+
+/**
  * The same normalization for the markdown artifacts. `report.md` quarantines
  * everything a clock produced behind {@link TIMINGS_MARKER}, so cutting there
  * leaves exactly the part two runs must agree on; `agent.md` has no trailer and

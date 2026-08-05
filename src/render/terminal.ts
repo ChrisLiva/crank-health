@@ -1,8 +1,8 @@
 import pc from 'picocolors'
 import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
-import { CATEGORY_LABELS } from './display.ts'
-import type { Report } from './json.ts'
+import { CATEGORY_LABELS, stateLabel } from './display.ts'
+import type { Report, ReportDelta } from './json.ts'
 
 /**
  * The terminal summary (spec §9): every category's grade, then the findings
@@ -47,12 +47,18 @@ export function renderTerminal(
     lines.push(categoryLine(report, category, color))
   }
 
-  const shown = report.findings.slice(0, limit)
+  if (report.delta !== undefined) lines.push('', ...deltaLines(report.delta, color))
+
+  // In PR mode the findings worth a glance are the ones this change introduced;
+  // the pre-existing ones are in report.md, and listing them here would bury
+  // the regression under a wall of things the author did not do.
+  const source = report.delta?.newFindings ?? report.findings
+  const shown = source.slice(0, limit)
   if (shown.length > 0) {
-    lines.push('', color.bold('Top findings'))
+    lines.push('', color.bold(report.delta === undefined ? 'Top findings' : 'Top new findings'))
     for (const finding of shown) lines.push(findingLine(finding, color))
-    if (report.findings.length > shown.length) {
-      lines.push(color.dim(`  … ${report.findings.length - shown.length} more in report.json`))
+    if (source.length > shown.length) {
+      lines.push(color.dim(`  … ${source.length - shown.length} more in report.json`))
     }
   }
 
@@ -60,7 +66,10 @@ export function renderTerminal(
   if (degraded.length > 0) {
     lines.push('', color.bold('Tools that did not complete'))
     for (const tool of degraded) {
-      lines.push(`  ${color.red(tool.state)} ${tool.tool}: ${tool.reason ?? 'no reason given'}`)
+      const side = tool.side === undefined ? '' : ` (${tool.side} scan)`
+      lines.push(
+        `  ${color.red(tool.state)} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}`,
+      )
     }
   }
 
@@ -77,6 +86,32 @@ export function renderTerminal(
 }
 
 type Colors = ReturnType<typeof pc.createColors>
+
+/**
+ * The PR delta at a glance (spec §4): the three counts, then the categories
+ * whose state actually moved. Categories that did not move are in `report.md`'s
+ * full movement table — a summary that reprints all eight rows unchanged is not
+ * a summary.
+ */
+function deltaLines(delta: ReportDelta, color: Colors): string[] {
+  const lines = [
+    color.bold(`PR delta vs ${delta.baseRef}`) +
+      color.dim(` (merge-base ${delta.mergeBase.slice(0, 8)})`),
+    `  ${color.red(`+${delta.counts.new} new`)}` +
+      color.dim(` (${delta.counts.touchedLine} on changed lines)`) +
+      ` · ${color.green(`-${delta.counts.resolved} resolved`)}` +
+      color.dim(` · ${delta.counts.unchanged} unchanged`),
+  ]
+  const moved = delta.categories.filter(
+    (movement) => stateLabel(movement.base) !== stateLabel(movement.head),
+  )
+  for (const movement of moved) {
+    lines.push(
+      `  ${CATEGORY_LABELS[movement.category].padEnd(13)} ${stateLabel(movement.base)} → ${stateLabel(movement.head)}`,
+    )
+  }
+  return lines
+}
 
 function header(report: Report, color: Colors): string {
   const commit = report.repo.commit === null ? 'no commits' : report.repo.commit.slice(0, 8)

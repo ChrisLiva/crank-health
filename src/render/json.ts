@@ -1,3 +1,4 @@
+import type { DeltaResult } from '../core/delta.ts'
 import { languageOf } from '../core/discover.ts'
 import type { RunRecord } from '../core/orchestrator.ts'
 import type {
@@ -33,7 +34,7 @@ export interface Report {
   readonly crankHealth: string
   readonly repo: ReportRepo
   readonly profile: 'quick' | 'deep'
-  readonly mode: 'whole-repo'
+  readonly mode: 'whole-repo' | 'pr'
   /** The categories this run was asked to assess (`--only`, or all of them). */
   readonly selected: readonly Category[]
   /** All eight states, always — including the ones nothing assessed (spec §8). */
@@ -55,27 +56,57 @@ export interface Report {
   readonly tools: readonly ReportTool[]
   readonly findings: readonly Finding[]
   readonly warnings: readonly string[]
+  /** Present exactly when `mode` is `pr`. Deterministic — not a timing. */
+  readonly delta?: ReportDelta
   /** Everything non-deterministic, quarantined. */
   readonly timings: ReportTimings
 }
 
 /**
- * The PR-mode delta of spec §4 — provisional, and deliberately small.
+ * The PR-mode delta of spec §4: what this change did, on top of a head report
+ * that is otherwise an ordinary whole-repo report.
  *
- * M8 computes this in `core/delta.ts`, adds `readonly delta?: ReportDelta` to
- * {@link Report}, and fills it from the base-vs-head fingerprint diff. It lives
- * here already because all three renderers accept it today and render nothing
- * when it is absent: turning delta rendering on is then a change inside each
- * renderer, not a signature change across the pipeline.
+ * Head is the primary throughout — `categories`, `findings` and every grade in
+ * the report are head's — because "what is the state of this codebase" has one
+ * answer and it is the current one. The delta says what moved.
  */
 export interface ReportDelta {
-  /** The base ref `--pr` was given. */
-  readonly base: string
+  /** The base ref `--pr` was given, verbatim. */
+  readonly baseRef: string
+  /** The merge-base commit the base scan actually ran on. */
+  readonly mergeBase: string
+  readonly counts: ReportDeltaCounts
+  /**
+   * All eight categories: base state, head state, and the counts behind the
+   * movement. Base states are reported even when they are failures — see
+   * {@link CategoryMovement}.
+   */
+  readonly categories: readonly ReportCategoryMovement[]
   /** Findings present at head and not at the merge-base. */
-  readonly newFindings: readonly Finding[]
-  /** Findings present at the merge-base and gone at head. */
+  readonly newFindings: readonly ReportNewFinding[]
+  /** Findings present at the merge-base and gone at head, at their head paths. */
   readonly resolvedFindings: readonly Finding[]
 }
+
+export interface ReportDeltaCounts {
+  readonly new: number
+  /** Of the new ones, how many sit on a line this change touched (spec §4). */
+  readonly touchedLine: number
+  readonly resolved: number
+  /** Findings both scans saw. Not listed anywhere — this is the whole record. */
+  readonly unchanged: number
+}
+
+export interface ReportCategoryMovement {
+  readonly category: Category
+  readonly base: CategoryState
+  readonly head: CategoryState
+  readonly newFindings: number
+  readonly resolvedFindings: number
+}
+
+/** A finding in {@link ReportDelta.newFindings}: the schema plus the flag. */
+export type ReportNewFinding = Finding & { readonly touchedLine: boolean }
 
 export interface ReportRepo {
   readonly path: string
@@ -87,6 +118,13 @@ export interface ReportTool {
   readonly tool: string
   readonly category: Category
   readonly scope: RunnerScope
+  /**
+   * PR mode only: which of the two scans this record is from. Without it the
+   * two runs of the same tool are indistinguishable, and "the tool errored"
+   * would not say on which side — the difference between a real improvement and
+   * a scanner that failed at the base (spec §8).
+   */
+  readonly side?: 'base' | 'head'
   /** Whose binary ran: the repo's installed one, or our pinned ephemeral one. */
   readonly execution: 'repo-installed' | 'ephemeral-pinned'
   /** Whose configuration decided the findings (spec §1). */
@@ -119,12 +157,19 @@ export interface ReportTimings {
 export interface ResolvedRun {
   readonly record: RunRecord
   readonly raw: readonly string[]
+  /** Which scan produced it; PR mode only. See {@link ReportTool.side}. */
+  readonly side?: 'base' | 'head'
 }
 
 export interface ReportInput {
   readonly repoPath: string
   readonly commit: string | null
   readonly profile: 'quick' | 'deep'
+  /**
+   * The PR delta, when this was a `--pr` run. Its presence is what makes the
+   * report's `mode` `pr`: there is no such thing as a PR run without one.
+   */
+  readonly delta?: PrDelta
   readonly selected: readonly Category[]
   readonly categories: Readonly<Record<Category, CategoryState>>
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
@@ -135,13 +180,22 @@ export interface ReportInput {
   readonly durationMs: number
 }
 
+/** What `run-pr.ts` computed, before it is put in `report.json`'s key order. */
+export interface PrDelta extends DeltaResult {
+  /** The base ref `--pr` was given, verbatim. */
+  readonly baseRef: string
+  /** The merge-base commit the base scan ran on. */
+  readonly mergeBase: string
+}
+
 /** Assembles the report object. Pure: no clock, no filesystem, no ordering luck. */
 export function buildReport(input: ReportInput): Report {
   const runs = input.runs.toSorted(
     (a, b) =>
       categoryRank(a.record.category) - categoryRank(b.record.category) ||
       compare(a.record.tool, b.record.tool) ||
-      compare(a.record.scope, b.record.scope),
+      compare(a.record.scope, b.record.scope) ||
+      compare(a.side ?? '', b.side ?? ''),
   )
 
   return {
@@ -149,7 +203,7 @@ export function buildReport(input: ReportInput): Report {
     crankHealth: VERSION,
     repo: { path: input.repoPath, commit: input.commit },
     profile: input.profile,
-    mode: 'whole-repo',
+    mode: input.delta === undefined ? 'whole-repo' : 'pr',
     selected: CATEGORIES.filter((category) => input.selected.includes(category)),
     categories: orderedCategories(input.categories),
     metrics: orderedMetrics(input.metrics),
@@ -157,6 +211,7 @@ export function buildReport(input: ReportInput): Report {
     tools: runs.map((run) => toReportTool(run)),
     findings: input.findings.map((finding) => orderedFinding(finding)),
     warnings: input.warnings.toSorted(compare),
+    ...(input.delta === undefined ? {} : { delta: orderedDelta(input.delta) }),
     timings: {
       generatedAt: input.generatedAt,
       durationMs: input.durationMs,
@@ -178,6 +233,7 @@ function toReportTool(run: ResolvedRun): ReportTool {
     tool: record.tool,
     category: record.category,
     scope: record.scope,
+    ...(run.side === undefined ? {} : { side: run.side }),
     execution: installed ? 'repo-installed' : 'ephemeral-pinned',
     provenance: detection === null ? 'default-config' : 'repo-config',
     version: record.result.toolVersion ?? detection?.version ?? null,
@@ -194,6 +250,36 @@ function toReportTool(run: ResolvedRun): ReportTool {
     state: record.result.state,
     reason: record.result.reason ?? null,
     raw: run.raw,
+  }
+}
+
+/**
+ * The delta in `report.json`'s key order, with every finding rebuilt through
+ * {@link orderedFinding} — which is also what keeps the internal identity
+ * material off the wire.
+ */
+function orderedDelta(delta: PrDelta): ReportDelta {
+  return {
+    baseRef: delta.baseRef,
+    mergeBase: delta.mergeBase,
+    counts: {
+      new: delta.newFindings.length,
+      touchedLine: delta.newFindings.filter((entry) => entry.touchedLine).length,
+      resolved: delta.resolvedFindings.length,
+      unchanged: delta.unchangedCount,
+    },
+    categories: delta.categories.map((movement) => ({
+      category: movement.category,
+      base: orderedState(movement.base),
+      head: orderedState(movement.head),
+      newFindings: movement.newFindings,
+      resolvedFindings: movement.resolvedFindings,
+    })),
+    newFindings: delta.newFindings.map((entry) => ({
+      ...orderedFinding(entry.finding),
+      touchedLine: entry.touchedLine,
+    })),
+    resolvedFindings: delta.resolvedFindings.map((finding) => orderedFinding(finding)),
   }
 }
 
@@ -257,14 +343,14 @@ function orderedCategories(
   states: Readonly<Record<Category, CategoryState>>,
 ): Record<Category, CategoryState> {
   const ordered = {} as Record<Category, CategoryState>
-  for (const category of CATEGORIES) {
-    const state = states[category]
-    ordered[category] =
-      state.status === 'graded'
-        ? { status: 'graded', grade: state.grade }
-        : { status: state.status, reason: state.reason }
-  }
+  for (const category of CATEGORIES) ordered[category] = orderedState(states[category])
   return ordered
+}
+
+function orderedState(state: CategoryState): CategoryState {
+  return state.status === 'graded'
+    ? { status: 'graded', grade: state.grade }
+    : { status: state.status, reason: state.reason }
 }
 
 function orderedFinding(finding: Finding): Finding {

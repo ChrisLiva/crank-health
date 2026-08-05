@@ -17,7 +17,7 @@ import { execa } from 'execa'
 const FIXTURES = fileURLToPath(new URL('../fixtures/', import.meta.url))
 
 /** Frozen so the fixture commit sha never moves. */
-const COMMIT_IDENTITY: Readonly<Record<string, string>> = {
+export const COMMIT_IDENTITY: Readonly<Record<string, string>> = {
   GIT_AUTHOR_NAME: 'crank-health fixtures',
   GIT_AUTHOR_EMAIL: 'fixtures@crank-health.invalid',
   GIT_AUTHOR_DATE: '1704067200 +0000',

@@ -78,6 +78,23 @@ export interface Finding {
   /** Only `true` findings count toward the grade; the rest are advisory. */
   readonly gradeScope: boolean
   readonly fixHint?: string
+  /**
+   * The material {@link Finding.id} was hashed from, carried so a PR delta can
+   * re-hash it under a renamed path (`core/delta.ts`). Internal: `report.json`
+   * rebuilds every finding field by field and never writes it.
+   *
+   * Present on everything the core identified (`computeAnchors`), absent on
+   * findings a test constructed by hand.
+   */
+  readonly identity?: FindingIdentity
+}
+
+/** What identity is computed from, minus the fields already on the finding. */
+export interface FindingIdentity {
+  /** Trimmed flagged source line, or the symbol name for symbol-level findings. */
+  readonly anchor: string
+  /** Index among findings sharing every other identity field, within the file. */
+  readonly occurrence: number
 }
 
 /** A finding before the core assigns its identity. See `core/fingerprint.ts`. */

@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 1,
+  "crankHealth": "0.1.0",
+  "repo": {
+    "path": "<repo>",
+    "commit": "<sha>"
+  },
+  "profile": "quick",
+  "mode": "pr",
+  "selected": [
+    "lint"
+  ],
+  "categories": {
+    "security": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    },
+    "types": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    },
+    "dead-code": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    },
+    "complexity": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    },
+    "duplication": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    },
+    "lint": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "format": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    },
+    "test-quality": {
+      "status": "not-assessed",
+      "reason": "not selected by --only"
+    }
+  },
+  "metrics": {},
+  "languages": {
+    "js-ts": {
+      "lint": 2
+    }
+  },
+  "tools": [
+    {
+      "tool": "oxlint",
+      "category": "lint",
+      "scope": "js-ts",
+      "side": "base",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "1.77.0",
+      "pinned": "1.77.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/base/oxlint.sarif.json"
+      ]
+    },
+    {
+      "tool": "oxlint",
+      "category": "lint",
+      "scope": "js-ts",
+      "side": "head",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "1.77.0",
+      "pinned": "1.77.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/oxlint.sarif.json"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "9dfd6bf3f09dce18",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-unreachable)",
+      "severity": "error",
+      "file": "src/clean.js",
+      "range": {
+        "startLine": 3,
+        "startCol": 3,
+        "endLine": 3,
+        "endCol": 11
+      },
+      "message": "Unreachable code.",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "a2e971da664230ce",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-dupe-keys)",
+      "severity": "error",
+      "file": "src/renamed.js",
+      "range": {
+        "startLine": 2,
+        "startCol": 12,
+        "endLine": 2,
+        "endCol": 13
+      },
+      "message": "Duplicate key 'x'",
+      "provenance": "default-config",
+      "gradeScope": true
+    }
+  ],
+  "warnings": [],
+  "delta": {
+    "baseRef": "main",
+    "mergeBase": "<sha>",
+    "counts": {
+      "new": 1,
+      "touchedLine": 1,
+      "resolved": 1,
+      "unchanged": 1
+    },
+    "categories": [
+      {
+        "category": "security",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      },
+      {
+        "category": "types",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      },
+      {
+        "category": "dead-code",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      },
+      {
+        "category": "complexity",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      },
+      {
+        "category": "duplication",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      },
+      {
+        "category": "lint",
+        "base": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "head": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "newFindings": 1,
+        "resolvedFindings": 1
+      },
+      {
+        "category": "format",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      },
+      {
+        "category": "test-quality",
+        "base": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "head": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "newFindings": 0,
+        "resolvedFindings": 0
+      }
+    ],
+    "newFindings": [
+      {
+        "id": "9dfd6bf3f09dce18",
+        "category": "lint",
+        "tool": "oxlint",
+        "rule": "eslint(no-unreachable)",
+        "severity": "error",
+        "file": "src/clean.js",
+        "range": {
+          "startLine": 3,
+          "startCol": 3,
+          "endLine": 3,
+          "endCol": 11
+        },
+        "message": "Unreachable code.",
+        "provenance": "default-config",
+        "gradeScope": true,
+        "touchedLine": true
+      }
+    ],
+    "resolvedFindings": [
+      {
+        "id": "536b7ae6b03d0db3",
+        "category": "lint",
+        "tool": "oxlint",
+        "rule": "eslint(no-const-assign)",
+        "severity": "error",
+        "file": "src/fixed.js",
+        "range": {
+          "startLine": 2,
+          "startCol": 9,
+          "endLine": 2,
+          "endCol": 14
+        },
+        "message": "Unexpected re-assignment of `const` variable limit.",
+        "provenance": "default-config",
+        "gradeScope": true
+      }
+    ]
+  }
+}

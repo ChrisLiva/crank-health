@@ -26,9 +26,12 @@ export interface OutputDir {
    * Runners never learn where the run directory is — they hand back absolute
    * scratch paths and the pipeline adopts them before scratch is destroyed.
    *
+   * @param prefix subdirectory of `raw/` to land in. PR mode puts the base
+   * scan's evidence under `base/`, because the two scans run the same tools and
+   * `raw/oxlint.sarif.json` would otherwise mean whichever wrote it last.
    * @returns run-directory-relative posix paths, for `report.json`
    */
-  adoptRaw(staged: readonly string[]): Promise<string[]>
+  adoptRaw(staged: readonly string[], prefix?: string): Promise<string[]>
 }
 
 /**
@@ -57,15 +60,20 @@ export async function createOutputDir(repoRoot: string, out?: string): Promise<O
     path: (name) => join(root, safeName(name)),
     write: async (name, contents) => writeAtomic(join(root, safeName(name)), contents),
     writeRaw: async (name, contents) => writeAtomic(join(raw, safeName(name)), contents),
-    adoptRaw: async (staged) => {
+    adoptRaw: async (staged, prefix) => {
+      if (staged.length === 0) return []
+      const directory = prefix === undefined ? raw : join(raw, safeName(prefix))
+      const relative = prefix === undefined ? 'raw' : `raw/${safeName(prefix)}`
+      await mkdir(directory, { recursive: true })
+
       const adopted: string[] = []
       for (const source of staged) {
         const name = safeName(basename(source))
         // Sequential: a handful of small files, and unbounded fan-out here
         // would buy nothing but EMFILE risk.
         // eslint-disable-next-line no-await-in-loop
-        await copyFile(source, join(raw, name))
-        adopted.push(`raw/${name}`)
+        await copyFile(source, join(directory, name))
+        adopted.push(`${relative}/${name}`)
       }
       return adopted
     },
