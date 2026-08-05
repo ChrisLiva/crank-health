@@ -1,0 +1,9 @@
+{
+  "name": "sec-basic",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "lodash": "4.17.15"
+  },
+  "main": "src/index.js"
+}

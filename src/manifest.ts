@@ -19,6 +19,7 @@ export const TOOL_MANIFEST = {
   fallow: '3.14.0',
   knip: '6.31.0',
   'fta-cli': '3.0.0',
+  jscpd: '5.0.14',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -35,6 +36,33 @@ export const PYTHON_TOOL_MANIFEST = {
   pyright: '1.1.411',
   vulture: '2.16',
   complexipy: '6.2.0',
+  bandit: '1.9.4',
+  zizmor: '1.29.0',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
+ * Tools crank-health cannot fetch at all, and runs from `PATH` when the machine
+ * already has them.
+ *
+ * gitleaks, opengrep and osv-scanner are single-file binaries distributed
+ * through GitHub releases, Homebrew and Docker — none of them publishes a
+ * first-party npm or PyPI package, so neither `npx` nor `uvx` can resolve one
+ * (the `gitleaks` and `opengrep` names on npm are, respectively, an unrelated
+ * package and an empty placeholder; `osv-scanner` on PyPI is a reserved name
+ * with no code). Third-party binary-downloading wrappers exist, and adopting an
+ * unaudited one for a *security* scanner would be exactly the supply-chain
+ * mistake these tools are meant to catch.
+ *
+ * So the contract is different from the pinned one: crank-health uses the
+ * version already installed, reports it, and degrades to `not-available` with an
+ * install hint when there is none (spec §8). The version recorded here is the
+ * one this release's parsers were captured and tested against — a floor for
+ * "known to work", not a pin crank-health can enforce.
+ */
+export const SYSTEM_TOOL_MANIFEST = {
+  gitleaks: '8.30.1',
+  opengrep: '1.26.0',
+  'osv-scanner': '2.4.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -47,6 +75,14 @@ export type PinnedTool = keyof typeof TOOL_MANIFEST
 
 /** A PyPI distribution crank-health runs through `uvx` at a pinned version. */
 export type PinnedPythonTool = keyof typeof PYTHON_TOOL_MANIFEST
+
+/** A tool crank-health runs from `PATH`; see {@link SYSTEM_TOOL_MANIFEST}. */
+export type SystemTool = keyof typeof SYSTEM_TOOL_MANIFEST
+
+/** The version of `tool` this release was captured and tested against. */
+export function verifiedVersion(tool: SystemTool): string {
+  return SYSTEM_TOOL_MANIFEST[tool]
+}
 
 /** The exact version this release pins for `tool`. */
 export function pinnedVersion(tool: PinnedTool): string {

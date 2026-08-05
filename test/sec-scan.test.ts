@@ -1,0 +1,441 @@
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { Category, Finding, LanguageAdapter } from '../src/core/types.ts'
+import { runHealthScan } from '../src/run.ts'
+import type { FixtureRepo } from './support/fixture.ts'
+import { createFixtureRepo } from './support/fixture.ts'
+import { normalizeReport } from './support/report.ts'
+import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS, installedSystemTools } from './support/system-tools.ts'
+
+/**
+ * The common adapter, end to end on `test/fixtures/sec-basic`.
+ *
+ * Three of its six tools — gitleaks, opengrep and osv-scanner — are release
+ * binaries with no npm or PyPI distribution, so on most machines they are
+ * simply absent. That is not a hole in the test: spec §8's degradation is one
+ * of the behaviours worth proving, and this file asserts *both* paths. The
+ * findings those tools would produce are covered from captured bytes in
+ * `common-parse.test.ts`, which runs everywhere.
+ */
+
+const GOLDEN = fileURLToPath(new URL('./golden/sec-basic.report.json', import.meta.url))
+
+/** Roomy: the first run of a suite may be fetching tools into the caches. */
+const SCAN_TIMEOUT_MS = 180_000
+
+const installed = await installedSystemTools()
+
+/**
+ * The security and duplication findings `test/fixtures/sec-basic` plants, from
+ * the tools that run on every machine — see that fixture's README. The three
+ * system tools add to this list when they are installed; they never change it.
+ */
+const PLANTED = [
+  {
+    category: 'security',
+    tool: 'zizmor',
+    rule: 'dangerous-triggers',
+    file: '.github/workflows/ci.yml',
+    startLine: 2,
+    severity: 'error',
+    gradeScope: true,
+  },
+  {
+    category: 'security',
+    tool: 'zizmor',
+    rule: 'excessive-permissions',
+    file: '.github/workflows/ci.yml',
+    startLine: 5,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
+    category: 'security',
+    tool: 'zizmor',
+    rule: 'artipacked',
+    file: '.github/workflows/ci.yml',
+    startLine: 8,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
+    category: 'security',
+    tool: 'zizmor',
+    rule: 'unpinned-uses',
+    file: '.github/workflows/ci.yml',
+    startLine: 8,
+    severity: 'error',
+    gradeScope: true,
+  },
+  {
+    category: 'security',
+    tool: 'bandit',
+    rule: 'B404',
+    file: 'src/config.py',
+    startLine: 3,
+    severity: 'info',
+    // bandit's LOW tier: reported, never graded (see `bandit.ts`).
+    gradeScope: false,
+  },
+  {
+    category: 'security',
+    tool: 'bandit',
+    rule: 'B602',
+    file: 'src/config.py',
+    startLine: 13,
+    severity: 'error',
+    gradeScope: true,
+  },
+  {
+    category: 'duplication',
+    tool: 'jscpd',
+    rule: 'jscpd/duplicate-block',
+    file: 'src/handler.js',
+    startLine: 5,
+    severity: 'warning',
+    // The grade is the token percentage; the clones are the evidence.
+    gradeScope: false,
+  },
+  {
+    category: 'duplication',
+    tool: 'jscpd',
+    rule: 'jscpd/duplicate-block',
+    file: 'src/report.js',
+    startLine: 1,
+    severity: 'warning',
+    gradeScope: false,
+  },
+] as const
+
+describe('quick scan of the sec-basic fixture', () => {
+  let fixture: FixtureRepo
+  let outside: string
+  let json: string
+  let findings: readonly Finding[]
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('sec-basic')
+    outside = await mkdtemp(join(tmpdir(), 'crank-sec-out-'))
+    const result = await runHealthScan({ path: fixture.root })
+    json = result.json
+    findings = result.report.findings
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+    await rm(outside, { recursive: true, force: true })
+  })
+
+  it('finds every planted security and duplication finding', () => {
+    const relevant = findings.filter(
+      (finding) => finding.category === 'security' || finding.category === 'duplication',
+    )
+    expect(relevant.filter(fromAlwaysAvailableTool).map(shape)).toEqual(
+      PLANTED.map((planted) => ({ ...planted })),
+    )
+  })
+
+  /**
+   * Nothing outside the planted set moves a grade. The fixture also carries a
+   * handful of deliberately advisory findings (`fallow/complexity` on the
+   * duplicated function); they are `gradeScope: false` and may be there.
+   */
+  it('plants nothing else that counts toward a grade', () => {
+    const graded = findings
+      .filter((finding) => finding.gradeScope)
+      .filter(fromAlwaysAvailableTool)
+      .map(shape)
+    expect(graded).toEqual([
+      ...PLANTED.filter((planted) => planted.gradeScope),
+      // The same `eval` a linter also objects to; see the fixture README.
+      {
+        category: 'lint',
+        tool: 'oxlint',
+        rule: 'eslint(no-eval)',
+        file: 'src/handler.js',
+        startLine: 2,
+        severity: 'error',
+        gradeScope: true,
+      },
+    ])
+  })
+
+  /**
+   * Spec §3's absolute shape: any error/high → at best D. Which grade this is
+   * depends on whether gitleaks ran — a secret is an F on its own, which is the
+   * conditional assertion below.
+   */
+  it('grades security from the union of every security tool that ran', () => {
+    const state = parse(json).categories.security
+    expect(state?.status).toBe('graded')
+    expect(state?.grade).toBe(installed.has('gitleaks') ? 'F' : 'D')
+  })
+
+  it.runIf(installed.has('gitleaks'))(
+    'reports the planted secret as critical, which is an F on its own',
+    () => {
+      const secrets = findings.filter((finding) => finding.tool === 'gitleaks')
+      expect(secrets.map(shape)).toEqual([
+        {
+          category: 'security',
+          tool: 'gitleaks',
+          rule: 'aws-access-token',
+          file: 'src/config.py',
+          startLine: 8,
+          severity: 'critical',
+          gradeScope: true,
+        },
+      ])
+      expect(parse(json).categories.security?.grade).toBe('F')
+      // The value must not be anywhere in the report (see `gitleaks.ts`).
+      expect(json).not.toContain('AKIA')
+    },
+  )
+
+  it.runIf(installed.has('opengrep'))('reports the planted SAST findings', () => {
+    expect(
+      findings.filter((finding) => finding.tool === 'opengrep').map((finding) => finding.rule),
+    ).toEqual(['python-subprocess-shell-true', 'js-eval-call'])
+  })
+
+  it.runIf(installed.has('osv-scanner'))('reports the vulnerable pinned dependency', () => {
+    const vulnerabilities = findings.filter((finding) => finding.tool === 'osv-scanner')
+    expect(vulnerabilities.length).toBeGreaterThan(0)
+    expect(vulnerabilities.every((finding) => finding.file === 'package-lock.json')).toBe(true)
+    expect(vulnerabilities.every((finding) => finding.gradeScope)).toBe(true)
+  })
+
+  /** Spec §8: a missing prerequisite is not-available *with an install hint*. */
+  it.each(SYSTEM_TOOLS.filter((tool) => !installed.has(tool)))(
+    'degrades cleanly when %s is not installed, and says how to install it',
+    (tool) => {
+      const record = parse(json).tools.find((entry) => entry.tool === tool)
+      expect(record).toMatchObject({ state: 'not-available', version: null })
+      expect(record?.reason).toContain('is not on PATH')
+      expect(record?.reason).toContain('brew install')
+    },
+  )
+
+  /**
+   * jscpd's token percentage is the duplication grade (spec §3): 47% of tokens
+   * duplicated is well past the D band's 20%.
+   */
+  it('grades duplication on jscpd’s token percentage, not on the clone count', () => {
+    const report = parse(json)
+    expect(report.metrics.duplication?.['duplicationPercent']).toBeCloseTo(47.03, 1)
+    expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
+  })
+
+  it('runs the common adapter’s six tools, all on default configs', () => {
+    const common = parse(json).tools.filter((tool) => tool.scope === 'common')
+    expect(common.map((tool) => tool.tool)).toEqual([
+      'bandit',
+      'gitleaks',
+      'opengrep',
+      'osv-scanner',
+      'zizmor',
+      'jscpd',
+    ])
+    expect(common.every((tool) => tool.provenance === 'default-config')).toBe(true)
+    expect(common.every((tool) => tool.detection === null)).toBe(true)
+  })
+
+  /**
+   * The golden records the degradation path, because that is the one every
+   * machine can reproduce: a report from a machine with gitleaks, opengrep and
+   * osv-scanner installed contains their findings and versions and cannot be
+   * byte-compared with one from a machine without them. Determinism itself is
+   * asserted unconditionally by the run-twice test below, which is the spec's
+   * actual promise (§6).
+   */
+  it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
+    expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
+  })
+
+  it(
+    'produces byte-identical output when run twice on the same commit',
+    async () => {
+      const second = await runHealthScan({ path: fixture.root })
+      expect(normalizeReport(second.json)).toBe(normalizeReport(json))
+      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+        findings.map((finding) => finding.id),
+      )
+    },
+    SCAN_TIMEOUT_MS,
+  )
+
+  /**
+   * jscpd's default reporter writes `report/` next to wherever it started, and
+   * gitleaks and osv-scanner both write a report file. All three are pointed at
+   * the scratch dir; this is the assertion that keeps them there.
+   */
+  it('leaves the target repo clean, tool reports included', async () => {
+    expect(await fixture.status()).toBe('')
+    const entries = await readdir(fixture.root)
+    expect(entries).not.toContain('report')
+    expect(entries).not.toContain('jscpd-report.json')
+    expect(entries).not.toContain('gitleaks.json')
+    expect(entries).not.toContain('osv-scanner.json')
+  })
+
+  it(
+    'writes every tool’s evidence next to the report, and nothing into the repo',
+    async () => {
+      await rm(join(fixture.root, '.codebase-health'), { recursive: true, force: true })
+      const result = await runHealthScan({ path: fixture.root, out: outside })
+
+      expect(result.outputDir).toBe(outside)
+      expect(await fixture.status()).toBe('')
+      const raw = await readdir(join(outside, 'raw'))
+      expect(raw).toContain('jscpd-report.json')
+      expect(raw).toContain('bandit.json')
+      expect(raw).toContain('zizmor.json')
+    },
+    SCAN_TIMEOUT_MS,
+  )
+})
+
+/** A ruff-shaped runner: category `lint`, emitting a `security` finding. */
+const ruffLike = (findings: readonly Finding[]): LanguageAdapter => ({
+  language: 'python',
+  detect: () => Promise.resolve(true),
+  runners: [
+    {
+      tool: 'ruff-lint',
+      category: 'lint',
+      pinnedVersion: '0.16.1',
+      detect: () => Promise.resolve(null),
+      run: () => Promise.resolve({ state: 'ok', findings, rawFiles: [] }),
+    },
+  ],
+})
+
+const securityRunner: LanguageAdapter = {
+  language: 'common',
+  detect: () => Promise.resolve(true),
+  runners: [
+    {
+      tool: 'bandit',
+      category: 'security',
+      pinnedVersion: '1.9.4',
+      complementary: true,
+      detect: () => Promise.resolve(null),
+      run: () => Promise.resolve({ state: 'ok', findings: [], rawFiles: [] }),
+    },
+  ],
+}
+
+const ruffSecurityFinding: Finding = {
+  id: 'ruff-s602',
+  category: 'security',
+  tool: 'ruff-lint',
+  rule: 'S602',
+  severity: 'error',
+  file: 'src/config.py',
+  range: { startLine: 13, startCol: 12, endLine: 13, endCol: 70 },
+  message: 'subprocess call with shell=True',
+  provenance: 'repo-config',
+  gradeScope: true,
+}
+
+/**
+ * The handoff M5 left behind: ruff routes its `S` rules to the security
+ * category, but until a security runner reported, `categories.security` stayed
+ * `not-assessed` and those findings reached no grade at all. These two tests
+ * pin the behaviour in both directions.
+ */
+describe('security findings from a tool in another category', () => {
+  let fixture: FixtureRepo
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('sec-basic')
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('folds them into the security grade once any security runner reports', async () => {
+    const result = await runHealthScan({
+      path: fixture.root,
+      adapters: [ruffLike([ruffSecurityFinding]), securityRunner],
+    })
+    // The finding came out of a lint runner and graded as security.
+    expect(result.report.categories.security).toEqual({ status: 'graded', grade: 'D' })
+    expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'A' })
+  })
+
+  it('leaves the category not-assessed when no security runner reports at all', async () => {
+    const result = await runHealthScan({
+      path: fixture.root,
+      adapters: [ruffLike([ruffSecurityFinding])],
+    })
+    expect(result.report.categories.security).toEqual({
+      status: 'not-assessed',
+      reason: 'no tool available for this category',
+    })
+    // Still reported — a finding nobody grades is not a finding nobody sees.
+    expect(result.report.findings.map((finding) => finding.rule)).toEqual(['S602'])
+  })
+})
+
+describe('zero footprint', () => {
+  it(
+    'leaves sec-basic untouched after a full scan',
+    async () => {
+      const fixture = await createFixtureRepo('sec-basic')
+      const outside = await mkdtemp(join(tmpdir(), 'crank-sec-zero-'))
+      const before = (await readdir(fixture.root)).toSorted()
+      try {
+        await runHealthScan({ path: fixture.root, out: outside })
+        expect(await fixture.status()).toBe('')
+        expect((await readdir(fixture.root)).toSorted()).toEqual(before)
+      } finally {
+        await fixture.remove()
+        await rm(outside, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
+})
+
+/** Tools that are on every machine, because npx and uvx can fetch them. */
+function fromAlwaysAvailableTool(finding: Finding): boolean {
+  return !SYSTEM_TOOLS.some((tool) => (tool as string) === finding.tool)
+}
+
+/** The parts of a finding a planted-finding table is about. */
+function shape(finding: Finding) {
+  return {
+    category: finding.category,
+    tool: finding.tool,
+    rule: finding.rule,
+    file: finding.file,
+    startLine: finding.range.startLine,
+    severity: finding.severity,
+    gradeScope: finding.gradeScope,
+  }
+}
+
+interface ReportShape {
+  readonly categories: Partial<
+    Record<Category, { status: string; grade?: string; reason?: string }>
+  >
+  readonly metrics: Partial<Record<Category, Record<string, number>>>
+  readonly tools: {
+    readonly tool: string
+    readonly scope: string
+    readonly provenance: string
+    readonly version: string | null
+    readonly state: string
+    readonly reason: string | null
+    readonly detection: unknown
+  }[]
+}
+
+function parse(json: string): ReportShape {
+  return JSON.parse(json) as ReportShape
+}

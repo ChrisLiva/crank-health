@@ -10,6 +10,7 @@ import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { normalizeReport } from './support/report.ts'
+import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
 /**
  * The four spec-level executable promises again, on the fixtures that exercise
@@ -128,10 +129,18 @@ describe('quick scan of the py-basic fixture', () => {
   it('tags an untooled repo as default-config, run from the pinned versions', () => {
     const report = parse(json)
     expect(report.tools.map((tool) => tool.tool)).toEqual([
+      // The common adapter runs against every repo; here bandit and jscpd have
+      // something to look at and the rest report that they have not.
+      'bandit',
+      'gitleaks',
+      'opengrep',
+      'osv-scanner',
+      'zizmor',
       'pyright',
       'ty',
       'vulture',
       'complexipy',
+      'jscpd',
       'ruff-lint',
       'ruff-format',
     ])
@@ -168,11 +177,14 @@ describe('quick scan of the py-basic fixture', () => {
     const report = parse(json)
     expect(report.repo.commit).toBe(fixture.commit)
     expect(report.categories).toEqual({
-      security: { status: 'not-assessed', reason: 'no tool available for this category' },
+      // bandit scanned the Python and found nothing: an honest A (spec §3's
+      // absolute shape — zero graded findings is A).
+      security: { status: 'graded', grade: 'A' },
       types: { status: 'graded', grade: 'F' },
       'dead-code': { status: 'graded', grade: 'F' },
       complexity: { status: 'graded', grade: 'D' },
-      duplication: { status: 'not-assessed', reason: 'no tool available for this category' },
+      // jscpd found no clones: 0% duplicated tokens → A (A ≤3).
+      duplication: { status: 'graded', grade: 'A' },
       lint: { status: 'graded', grade: 'F' },
       format: { status: 'graded', grade: 'C' },
       'test-quality': { status: 'not-assessed', reason: 'not assessed — run `--deep`' },
@@ -182,6 +194,7 @@ describe('quick scan of the py-basic fixture', () => {
   it('reports the measurements the ratio grades were computed from', () => {
     expect(parse(json).metrics).toEqual({
       complexity: { functionsTotal: 7, functionsOverCeiling: 1 },
+      duplication: { duplicationPercent: 0 },
       format: { formattableFiles: 6 },
     })
   })
@@ -192,7 +205,7 @@ describe('quick scan of the py-basic fixture', () => {
     })
   })
 
-  it('matches the golden normalized report', async () => {
+  it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
     expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
   })
 
@@ -227,9 +240,12 @@ describe('quick scan of the py-basic fixture', () => {
       expect(result.outputDir).toBe(outside)
       expect(await fixture.status()).toBe('')
       // Every tool's evidence is kept next to the report (spec §9).
-      expect((await readdir(join(outside, 'raw'))).toSorted()).toEqual([
+      const raw = (await readdir(join(outside, 'raw'))).toSorted()
+      expect(GOLDEN_TOOLCHAIN ? raw : raw.filter(fromFetchableTool)).toEqual([
+        'bandit.json',
         'complexipy.json',
         'complexipy.sarif.json',
+        'jscpd-report.json',
         'ruff-format.json',
         'ruff-lint.json',
         'ty.gitlab.json',
@@ -419,6 +435,15 @@ describe('zero footprint', () => {
     SCAN_TIMEOUT_MS,
   )
 })
+
+/**
+ * Raw-output files from the tools every machine can fetch. The three
+ * release-binary scanners contribute evidence only where they are installed —
+ * see `support/system-tools.ts`.
+ */
+function fromFetchableTool(name: string): boolean {
+  return !SYSTEM_TOOLS.some((tool) => name.startsWith(tool))
+}
 
 /** The parts of a finding a planted-finding table is about. */
 function shape(finding: Finding) {

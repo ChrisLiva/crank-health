@@ -1,0 +1,287 @@
+[
+  {
+    "ident": "artipacked",
+    "desc": "credential persistence through GitHub Actions artifacts",
+    "url": "https://docs.zizmor.sh/audits/#artipacked",
+    "determinations": {
+      "confidence": "Low",
+      "severity": "Medium",
+      "persona": "Regular"
+    },
+    "locations": [
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "verbatim_path": "/repo/.github/workflows/ci.yml"
+            }
+          },
+          "annotation": "does not set persist-credentials: false",
+          "route": {
+            "route": [
+              {
+                "Key": "jobs"
+              },
+              {
+                "Key": "build"
+              },
+              {
+                "Key": "steps"
+              },
+              {
+                "Index": 0
+              }
+            ]
+          },
+          "feature_kind": "Normal",
+          "kind": "Primary"
+        },
+        "concrete": {
+          "location": {
+            "start_point": {
+              "row": 7,
+              "column": 8
+            },
+            "end_point": {
+              "row": 9,
+              "column": 56
+            },
+            "offset_span": {
+              "start": 97,
+              "end": 193
+            }
+          },
+          "feature": "uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}",
+          "comments": []
+        }
+      }
+    ],
+    "ignored": false,
+    "fixes": [
+      {
+        "title": "set persist-credentials: false",
+        "key": {
+          "Local": {
+            "verbatim_path": "/repo/.github/workflows/ci.yml"
+          }
+        },
+        "disposition": "unsafe"
+      }
+    ]
+  },
+  {
+    "ident": "excessive-permissions",
+    "desc": "overly broad permissions",
+    "url": "https://docs.zizmor.sh/audits/#excessive-permissions",
+    "determinations": {
+      "confidence": "Medium",
+      "severity": "Medium",
+      "persona": "Regular"
+    },
+    "locations": [
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "verbatim_path": "/repo/.github/workflows/ci.yml"
+            }
+          },
+          "annotation": "this job",
+          "route": {
+            "route": [
+              {
+                "Key": "jobs"
+              },
+              {
+                "Key": "build"
+              }
+            ]
+          },
+          "feature_kind": "Normal",
+          "kind": "Related"
+        },
+        "concrete": {
+          "location": {
+            "start_point": {
+              "row": 4,
+              "column": 2
+            },
+            "end_point": {
+              "row": 11,
+              "column": 0
+            },
+            "offset_span": {
+              "start": 44,
+              "end": 216
+            }
+          },
+          "feature": "  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm test\n",
+          "comments": []
+        }
+      },
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "verbatim_path": "/repo/.github/workflows/ci.yml"
+            }
+          },
+          "annotation": "default permissions used due to no permissions: block",
+          "route": {
+            "route": [
+              {
+                "Key": "jobs"
+              },
+              {
+                "Key": "build"
+              }
+            ]
+          },
+          "feature_kind": "Normal",
+          "kind": "Primary"
+        },
+        "concrete": {
+          "location": {
+            "start_point": {
+              "row": 4,
+              "column": 2
+            },
+            "end_point": {
+              "row": 11,
+              "column": 0
+            },
+            "offset_span": {
+              "start": 44,
+              "end": 216
+            }
+          },
+          "feature": "  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n      - run: npm test\n",
+          "comments": []
+        }
+      }
+    ],
+    "ignored": false,
+    "fixes": []
+  },
+  {
+    "ident": "dangerous-triggers",
+    "desc": "use of fundamentally insecure workflow trigger",
+    "url": "https://docs.zizmor.sh/audits/#dangerous-triggers",
+    "determinations": {
+      "confidence": "Medium",
+      "severity": "High",
+      "persona": "Regular"
+    },
+    "locations": [
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "verbatim_path": "/repo/.github/workflows/ci.yml"
+            }
+          },
+          "annotation": "pull_request_target is almost always used insecurely",
+          "route": {
+            "route": [
+              {
+                "Key": "on"
+              }
+            ]
+          },
+          "feature_kind": "Normal",
+          "kind": "Primary"
+        },
+        "concrete": {
+          "location": {
+            "start_point": {
+              "row": 1,
+              "column": 0
+            },
+            "end_point": {
+              "row": 2,
+              "column": 22
+            },
+            "offset_span": {
+              "start": 9,
+              "end": 35
+            }
+          },
+          "feature": "on:\n  pull_request_target:",
+          "comments": []
+        }
+      }
+    ],
+    "ignored": false,
+    "fixes": []
+  },
+  {
+    "ident": "unpinned-uses",
+    "desc": "unpinned action reference",
+    "url": "https://docs.zizmor.sh/audits/#unpinned-uses",
+    "determinations": {
+      "confidence": "High",
+      "severity": "High",
+      "persona": "Regular"
+    },
+    "locations": [
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "verbatim_path": "/repo/.github/workflows/ci.yml"
+            }
+          },
+          "annotation": "action is not pinned to a hash (required by blanket policy)",
+          "route": {
+            "route": [
+              {
+                "Key": "jobs"
+              },
+              {
+                "Key": "build"
+              },
+              {
+                "Key": "steps"
+              },
+              {
+                "Index": 0
+              },
+              {
+                "Key": "uses"
+              }
+            ]
+          },
+          "feature_kind": {
+            "Subfeature": {
+              "after": 0,
+              "fragment": {
+                "Raw": "actions/checkout@v4"
+              }
+            }
+          },
+          "kind": "Primary"
+        },
+        "concrete": {
+          "location": {
+            "start_point": {
+              "row": 7,
+              "column": 14
+            },
+            "end_point": {
+              "row": 7,
+              "column": 33
+            },
+            "offset_span": {
+              "start": 103,
+              "end": 122
+            }
+          },
+          "feature": "actions/checkout@v4",
+          "comments": []
+        }
+      }
+    ],
+    "ignored": false,
+    "fixes": []
+  }
+]

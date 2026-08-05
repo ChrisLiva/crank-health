@@ -197,6 +197,20 @@ export interface ToolRunner {
    * skipped entirely rather than run with a bundled config.
    */
   readonly repoOwnedOnly?: boolean
+  /**
+   * Set when this runner measures something no other runner in its category
+   * measures, so another tool owning the category must not stand it down.
+   *
+   * The default-suppression rule (`withoutRedundantDefaults`) exists because
+   * lint and format tools are *alternatives* — a repo formatted with Biome did
+   * not ask for prettier's opinion. Security tools are not alternatives: spec
+   * "Categories and tools" lists security as "opengrep + gitleaks + zizmor +
+   * bandit + ruff `S`", a union of a SAST engine, a secrets scanner, a workflow
+   * auditor and a dependency scanner. Without this flag, a repo that merely
+   * declares bandit in its `pyproject.toml` would silently lose its secrets
+   * scan — the exact failure that must never happen quietly.
+   */
+  readonly complementary?: boolean
   /** `null` = not repo-owned; the runner still runs, with default config. */
   detect(repo: RepoContext): Promise<Detection | null>
   run(ctx: RunContext): Promise<ToolResult>

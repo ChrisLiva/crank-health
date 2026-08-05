@@ -9,6 +9,7 @@ import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { normalizeReport } from './support/report.ts'
+import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
 /**
  * The four spec-level executable promises, on the fixtures that exercise the
@@ -135,11 +136,19 @@ describe('quick scan of the js-basic fixture', () => {
   it('tags an untooled repo as default-config, run from the pinned versions', () => {
     const report = parse(json)
     expect(report.tools.map((tool) => tool.tool)).toEqual([
+      // The common adapter runs against every repo; on a JS-only one with no
+      // workflows most of it has nothing to look at, and says so.
+      'bandit',
+      'gitleaks',
+      'opengrep',
+      'osv-scanner',
+      'zizmor',
       'tsc',
       'fallow-dead-code',
       'knip',
       'fallow-health',
       'fta',
+      'jscpd',
       'oxlint',
       'prettier',
     ])
@@ -156,8 +165,7 @@ describe('quick scan of the js-basic fixture', () => {
   it('grades every category a JS/TS-only repo can reach, and pins the commit', () => {
     const report = parse(json)
     expect(report.repo.commit).toBe(fixture.commit)
-    expect(report.categories).toEqual({
-      security: { status: 'not-assessed', reason: 'no tool available for this category' },
+    expect(report.categories).toMatchObject({
       // No tsconfig.json and no TypeScript sources: nothing owns types here.
       types: {
         status: 'not-assessed',
@@ -165,12 +173,28 @@ describe('quick scan of the js-basic fixture', () => {
       },
       'dead-code': { status: 'graded', grade: 'F' },
       complexity: { status: 'graded', grade: 'D' },
-      duplication: { status: 'not-assessed', reason: 'no tool available for this category' },
+      // jscpd found no clones: 0% duplicated tokens → A (A ≤3).
+      duplication: { status: 'graded', grade: 'A' },
       lint: { status: 'graded', grade: 'F' },
       format: { status: 'graded', grade: 'C' },
       'test-quality': { status: 'not-assessed', reason: 'not assessed — run `--deep`' },
     })
   })
+
+  /**
+   * Security has no grade here, and that is the point: this fixture has no
+   * Python for bandit and no workflows for zizmor, and the three release-binary
+   * scanners are not installed on this machine. A grade of A would have meant
+   * "no problems found" when the honest answer is "nothing looked" (spec §8).
+   */
+  it.runIf(GOLDEN_TOOLCHAIN)(
+    'refuses to grade security when nothing actually scanned for it',
+    () => {
+      const security = parse(json).categories['security']
+      expect(security).toMatchObject({ status: 'not-assessed' })
+      expect(security?.reason).toContain('assessed nothing')
+    },
+  )
 
   /** The ratio grades are only readable next to the numbers they came from. */
   it('reports the measurements the ratio grades were computed from', () => {
@@ -178,12 +202,14 @@ describe('quick scan of the js-basic fixture', () => {
     expect(report.metrics).toEqual({
       // 1 of 9 functions over cognitive 15 = 11.1% → D (C ≤10, D ≤20).
       complexity: { functionsTotal: 9, functionsOverCeiling: 1 },
+      // Nothing is copy-pasted in this fixture.
+      duplication: { duplicationPercent: 0 },
       // 1 of 9 files failing = 11.1% → C (B ≤10, C ≤30).
       format: { formattableFiles: 9 },
     })
   })
 
-  it('matches the golden normalized report', async () => {
+  it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
     expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
   })
 
@@ -214,12 +240,14 @@ describe('quick scan of the js-basic fixture', () => {
       expect(await fixture.status()).toBe('')
       expect(await readdir(fixture.root)).toEqual(['.git', 'README.md', 'package.json', 'src'])
       // Every tool's evidence is kept next to the report (spec §9).
-      expect((await readdir(join(outside, 'raw'))).toSorted()).toEqual([
+      const raw = (await readdir(join(outside, 'raw'))).toSorted()
+      expect(GOLDEN_TOOLCHAIN ? raw : raw.filter(fromFetchableTool)).toEqual([
         'fallow-dead-code.json',
         'fallow-dead-code.stderr.txt',
         'fallow-health.json',
         'fallow-health.stderr.txt',
         'fta.json',
+        'jscpd-report.json',
         'knip.json',
         'oxlint.sarif.json',
         'prettier.txt',
@@ -606,6 +634,15 @@ async function repoWithBrokenOxlint(sabotage: string): Promise<FixtureRepo> {
 /** The one formatting finding a scan produced. */
 function pick(result: HealthScanResult): Finding | undefined {
   return result.report.findings.find((finding) => finding.rule === 'prettier/format')
+}
+
+/**
+ * Raw-output files from the tools every machine can fetch. The three
+ * release-binary scanners contribute evidence only where they are installed —
+ * see `support/system-tools.ts`.
+ */
+function fromFetchableTool(name: string): boolean {
+  return !SYSTEM_TOOLS.some((tool) => name.startsWith(tool))
 }
 
 /** The parts of a finding a planted-finding table is about. */

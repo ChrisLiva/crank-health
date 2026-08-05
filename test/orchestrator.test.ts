@@ -293,6 +293,52 @@ describe('runScan tool selection', () => {
     const result = await runScan(REPO, [adapter('python', [ruff]), adapter('js-ts', [prettier])])
     expect(result.runs.map((run) => run.tool)).toEqual(['ruff-format', 'prettier'])
   })
+
+  /**
+   * Security tools are a union, not a menu (spec "Categories and tools":
+   * "opengrep + gitleaks + zizmor + bandit"). A repo that merely declares
+   * bandit must not thereby lose its secrets scan — the failure that would
+   * matter most, and would happen silently.
+   */
+  it('never stands a complementary runner down, whoever owns the category', async () => {
+    const bandit: ToolRunner = {
+      ...fakeRunner(
+        'bandit',
+        'security',
+        async () => ok(),
+        async () => DETECTION,
+      ),
+      complementary: true,
+    }
+    const gitleaks = {
+      ...fakeRunner('gitleaks', 'security', async () => ok()),
+      complementary: true,
+    }
+    const opengrep = {
+      ...fakeRunner('opengrep', 'security', async () => ok()),
+      complementary: true,
+    }
+
+    const result = await runScan(REPO, [adapter('common', [bandit, gitleaks, opengrep])])
+
+    expect(result.runs.map((run) => run.tool)).toEqual(['bandit', 'gitleaks', 'opengrep'])
+  })
+
+  /** And a complementary runner does not confer ownership on an ordinary one. */
+  it('leaves an ordinary default alone when only a complementary runner is owned', async () => {
+    const owned: ToolRunner = {
+      ...fakeRunner(
+        'gitleaks',
+        'security',
+        async () => ok(),
+        async () => DETECTION,
+      ),
+      complementary: true,
+    }
+    const ordinary = fakeRunner('some-sast', 'security', async () => ok())
+    const result = await runScan(REPO, [adapter('common', [owned, ordinary])])
+    expect(result.runs.map((run) => run.tool)).toEqual(['gitleaks', 'some-sast'])
+  })
 })
 
 describe('runScan metrics', () => {

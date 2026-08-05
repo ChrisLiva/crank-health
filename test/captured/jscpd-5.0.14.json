@@ -1,0 +1,69 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 15,
+        "endLoc": {
+          "column": 1,
+          "line": 15,
+          "position": 398
+        },
+        "name": "/repo/src/handler.js",
+        "start": 5,
+        "startLoc": {
+          "column": 0,
+          "line": 5,
+          "position": 67
+        }
+      },
+      "format": "javascript",
+      "fragment": "export function summarize(rows) {\n  const out = [];\n  for (const row of rows) {\n    if (row.active && row.score > 10) {\n      out.push({ id: row.id, score: row.score * 2, label: row.label.trim() });\n    } else if (row.score > 5) {\n      out.push({ id: row.id, score: row.score, label: row.label.trim() });\n    }\n  }\n  return out;\n}",
+      "lines": 11,
+      "secondFile": {
+        "end": 11,
+        "endLoc": {
+          "column": 1,
+          "line": 11,
+          "position": 331
+        },
+        "name": "/repo/src/report.js",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "tokens": 111
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-08-05T03:33:36.910Z",
+    "formats": {
+      "javascript": {
+        "clones": 1,
+        "duplicatedLines": 10,
+        "duplicatedTokens": 111,
+        "lines": 26,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 38.46153846153847,
+        "percentageTokens": 47.03389830508475,
+        "sources": 2,
+        "tokens": 236
+      }
+    },
+    "total": {
+      "clones": 1,
+      "duplicatedLines": 10,
+      "duplicatedTokens": 111,
+      "lines": 26,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 38.46153846153847,
+      "percentageTokens": 47.03389830508475,
+      "sources": 2,
+      "tokens": 236
+    }
+  }
+}

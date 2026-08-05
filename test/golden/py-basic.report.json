@@ -19,8 +19,8 @@
   ],
   "categories": {
     "security": {
-      "status": "not-assessed",
-      "reason": "no tool available for this category"
+      "status": "graded",
+      "grade": "A"
     },
     "types": {
       "status": "graded",
@@ -35,8 +35,8 @@
       "grade": "D"
     },
     "duplication": {
-      "status": "not-assessed",
-      "reason": "no tool available for this category"
+      "status": "graded",
+      "grade": "A"
     },
     "lint": {
       "status": "graded",
@@ -56,6 +56,9 @@
       "functionsTotal": 7,
       "functionsOverCeiling": 1
     },
+    "duplication": {
+      "duplicationPercent": 0
+    },
     "format": {
       "formattableFiles": 6
     }
@@ -70,6 +73,73 @@
     }
   },
   "tools": [
+    {
+      "tool": "bandit",
+      "category": "security",
+      "scope": "common",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "1.9.4",
+      "pinned": "1.9.4",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/bandit.json"
+      ]
+    },
+    {
+      "tool": "gitleaks",
+      "category": "security",
+      "scope": "common",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "8.30.1",
+      "detection": null,
+      "state": "not-available",
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "opengrep",
+      "category": "security",
+      "scope": "common",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.26.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "osv-scanner",
+      "category": "security",
+      "scope": "common",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "2.4.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "zizmor",
+      "category": "security",
+      "scope": "common",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.29.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no GitHub Actions workflows or composite actions, so zizmor assessed nothing",
+      "raw": []
+    },
     {
       "tool": "pyright",
       "category": "types",
@@ -127,6 +197,21 @@
       "raw": [
         "raw/complexipy.json",
         "raw/complexipy.sarif.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/jscpd-report.json"
       ]
     },
     {

@@ -1,4 +1,5 @@
 import type { LanguageAdapter } from '../core/types.ts'
+import { commonAdapter } from './common/index.ts'
 import { jsTsAdapter } from './jsts/index.ts'
 import { pythonAdapter } from './python/index.ts'
 
@@ -7,4 +8,4 @@ import { pythonAdapter } from './python/index.ts'
  * warnings and raw file names are deterministic. Adapters whose language is not
  * present in the target simply detect `false` and cost nothing.
  */
-export const ADAPTERS: readonly LanguageAdapter[] = [jsTsAdapter, pythonAdapter]
+export const ADAPTERS: readonly LanguageAdapter[] = [jsTsAdapter, pythonAdapter, commonAdapter]

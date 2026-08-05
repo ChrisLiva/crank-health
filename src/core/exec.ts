@@ -30,6 +30,21 @@ export function repoCommand(binPath: string, args: readonly string[]): ToolComma
 }
 
 /**
+ * Runs a tool already installed on the machine, resolved through `PATH`.
+ *
+ * This is not a third fetcher: nothing is fetched, which is the whole point.
+ * gitleaks, opengrep and osv-scanner ship as release binaries with no npm or
+ * PyPI distribution to pin (see `SYSTEM_TOOL_MANIFEST`), so a runner either
+ * finds one on the machine or degrades — and `ephemeral: null` is exactly the
+ * "we did not install this" that {@link execTool}'s classification already
+ * understands. The install hint that makes the degradation actionable is the
+ * runner's, because only it knows which tool to name.
+ */
+export function systemCommand(binary: string, args: readonly string[]): ToolCommand {
+  return { command: binary, args, ephemeral: null }
+}
+
+/**
  * Runs the manifest-pinned version through `npx --yes`, which installs into
  * npm's own cache — never into the target repo.
  *

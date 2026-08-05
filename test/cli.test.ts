@@ -8,6 +8,7 @@ import { HELP_TEXT } from '../src/args.ts'
 import { VERSION } from '../src/version.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import { GOLDEN_TOOLCHAIN } from './support/system-tools.ts'
 
 const CLI_ENTRY = fileURLToPath(new URL('../src/cli.ts', import.meta.url))
 
@@ -72,7 +73,9 @@ describe('crank-health binary', () => {
     expect(result.stdout).not.toContain('\u001B[')
   })
 
-  it('prints report.json and nothing else with --json', async () => {
+  // The three release-binary scanners add findings and change what is
+  // assessed; see `support/system-tools.ts`.
+  it.runIf(GOLDEN_TOOLCHAIN)('prints report.json and nothing else with --json', async () => {
     const result = await runCli(['--json', '--out', out, fixture.root])
     expect(result.exitCode).toBe(0)
     const report = JSON.parse(result.stdout) as { findings: unknown[]; schemaVersion: number }
@@ -91,21 +94,24 @@ describe('crank-health binary', () => {
     expect(result.exitCode).toBe(0)
   })
 
-  it('trips the gate on categories nothing assessed, unless --allow-missing', async () => {
-    const strict = await runCli(['--fail-under', 'F', '--out', out, fixture.root])
-    expect(strict.exitCode).toBe(1)
-    expect(strict.stderr).toContain('security not-assessed')
+  it.runIf(GOLDEN_TOOLCHAIN)(
+    'trips the gate on categories nothing assessed, unless --allow-missing',
+    async () => {
+      const strict = await runCli(['--fail-under', 'F', '--out', out, fixture.root])
+      expect(strict.exitCode).toBe(1)
+      expect(strict.stderr).toContain('security not-assessed')
 
-    const lenient = await runCli([
-      '--fail-under',
-      'F',
-      '--allow-missing',
-      '--out',
-      out,
-      fixture.root,
-    ])
-    expect(lenient.exitCode).toBe(0)
-  })
+      const lenient = await runCli([
+        '--fail-under',
+        'F',
+        '--allow-missing',
+        '--out',
+        out,
+        fixture.root,
+      ])
+      expect(lenient.exitCode).toBe(0)
+    },
+  )
 
   it('refuses the modes this build does not implement instead of scanning anyway', async () => {
     const results = await Promise.all(

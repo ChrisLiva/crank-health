@@ -241,12 +241,23 @@ async function plan(
  * Two repo-owned tools in one category still both run and merge (spec §1's
  * "multiple tools detected for one category → run all"); it is only the
  * *default* that steps aside.
+ *
+ * None of this applies to runners that are not alternatives to each other; see
+ * `ToolRunner.complementary`, which takes them out of the rule on both sides —
+ * they neither confer ownership nor are stood down by it.
  */
 function withoutRedundantDefaults(candidates: readonly Job[]): Job[] {
   const owned = new Set(
-    candidates.filter((job) => job.detection !== null).map((job) => job.runner.category),
+    candidates
+      .filter((job) => job.detection !== null && job.runner.complementary !== true)
+      .map((job) => job.runner.category),
   )
-  return candidates.filter((job) => job.detection !== null || !owned.has(job.runner.category))
+  return candidates.filter(
+    (job) =>
+      job.detection !== null ||
+      job.runner.complementary === true ||
+      !owned.has(job.runner.category),
+  )
 }
 
 /** Runs one tool with every failure mode converted into a `ToolResult`. */
