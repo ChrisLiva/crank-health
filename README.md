@@ -31,6 +31,7 @@ npx crank-health              # quick scan of the current repo
 npx crank-health ../other     # …of another checkout
 npx crank-health --pr main    # only what this branch changed, vs merge-base with main
 npx crank-health --deep       # add the mutation-testing tier
+npx crank-health -i           # pick all of the above through guided prompts
 ```
 
 Requires Node ≥ 20 and `git`. Python analysis additionally requires [`uv`](https://docs.astral.sh/uv/)
@@ -49,7 +50,16 @@ is unaffected.
 | `--allow-missing`           | Not-assessed categories do not trip that gate                 |
 | `--json`                    | Print `report.json` to stdout instead of the terminal summary |
 | `--timeout <secs>`          | Per-tool budget for the quick tier (default 120 s)            |
+| `-i`, `--interactive`       | Choose options through guided prompts tailored to the repo    |
 | `-h`, `--help`, `--version` |                                                               |
+
+`--interactive` first probes the target the same way detection does — read-only, no tool ever
+executes — and tailors the questions to what it finds: a PR delta is only offered against branches
+that actually share history with `HEAD`, the deep tier says up front whether a repo-owned mutation
+tool exists to grade test quality, and a quick-mode gate defaults to `--allow-missing` so the
+always-unassessed test-quality category doesn't trip it. Flags passed alongside `-i` become the
+prompts' defaults, and the session ends by printing the equivalent one-shot command before running
+(or not — declining just prints the command and exits 0).
 
 ### Exit codes
 

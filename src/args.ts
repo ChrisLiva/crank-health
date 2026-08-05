@@ -25,6 +25,8 @@ export interface CliOptions {
   allowMissing: boolean
   /** Print report.json to stdout instead of the terminal summary. */
   json: boolean
+  /** `-i` / `--interactive`: pick options through prompts tailored to the repo. */
+  interactive: boolean
   help: boolean
   version: boolean
 }
@@ -52,6 +54,7 @@ Options:
   --allow-missing     not-assessed categories do not trip the gate
   --json              print report.json to stdout instead of terminal summary
   --timeout <secs>    per-tool budget for the quick tier (default 120)
+  -i, --interactive   choose options through guided prompts tailored to the repo
   -h, --help          show this help
   --version           print version
 
@@ -105,6 +108,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     timeoutSeconds: parseTimeout(values.timeout),
     allowMissing: values['allow-missing'] ?? false,
     json: values.json ?? false,
+    interactive: values.interactive ?? false,
     help: values.help ?? false,
     version: values.version ?? false,
   }
@@ -149,6 +153,7 @@ const OPTION_CONFIG = {
   'allow-missing': { type: 'boolean' },
   json: { type: 'boolean' },
   timeout: { type: 'string' },
+  interactive: { type: 'boolean', short: 'i' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean' },
 } as const

@@ -3,6 +3,7 @@ import { CliUsageError, HELP_TEXT, parseCliArgs } from './args.ts'
 import { isBelow } from './core/grade.ts'
 import type { Category, Grade } from './core/types.ts'
 import { CATEGORIES } from './core/types.ts'
+import { createTerminalIO, isPromptCancelled, runInteractiveSession } from './interactive.ts'
 import type { Report } from './render/json.ts'
 import { renderTerminal } from './render/terminal.ts'
 import { runPrScan } from './run-pr.ts'
@@ -19,7 +20,7 @@ const MS_PER_SECOND = 1000
  * turns options into a scan and a scan into an exit code.
  */
 async function run(argv: readonly string[]): Promise<number> {
-  const options = parseCliArgs(argv)
+  let options = parseCliArgs(argv)
 
   if (options.help) {
     process.stdout.write(HELP_TEXT)
@@ -28,6 +29,23 @@ async function run(argv: readonly string[]): Promise<number> {
   if (options.version) {
     process.stdout.write(`${VERSION}\n`)
     return 0
+  }
+  if (options.interactive) {
+    if (!process.stdin.isTTY) {
+      throw new CliUsageError('--interactive needs a terminal on stdin')
+    }
+    const io = createTerminalIO()
+    try {
+      const session = await runInteractiveSession(options, io)
+      if (!session.run) return 0
+      options = session.options
+    } catch (error) {
+      if (!isPromptCancelled(error)) throw error
+      process.stderr.write('interactive session cancelled — nothing was run\n')
+      return 0
+    } finally {
+      io.close()
+    }
   }
   const scan = {
     path: options.path,

@@ -16,6 +16,7 @@ describe('parseCliArgs', () => {
       timeoutSeconds: undefined,
       allowMissing: false,
       json: false,
+      interactive: false,
       help: false,
       version: false,
     })
@@ -56,6 +57,7 @@ describe('parseCliArgs', () => {
       timeoutSeconds: 30,
       allowMissing: true,
       json: true,
+      interactive: false,
       help: false,
       version: false,
     })
@@ -100,6 +102,11 @@ describe('parseCliArgs', () => {
     expect(parseCliArgs(['--help']).help).toBe(true)
     expect(parseCliArgs(['--version']).version).toBe(true)
   })
+
+  it('supports -i as well as --interactive', () => {
+    expect(parseCliArgs(['-i']).interactive).toBe(true)
+    expect(parseCliArgs(['--interactive']).interactive).toBe(true)
+  })
 })
 
 describe('HELP_TEXT', () => {
@@ -113,6 +120,7 @@ describe('HELP_TEXT', () => {
       '--allow-missing',
       '--json',
       '--timeout <secs>',
+      '-i, --interactive',
       '-h, --help',
       '--version',
     ]) {
