@@ -18,7 +18,7 @@ import {
   identify,
   repoRelative,
 } from '../support.ts'
-import { detectNodeTool } from './node-package.ts'
+import { detectNodeTool, isLibraryPackage } from './node-package.ts'
 
 /**
  * knip — the dead-code cross-check (spec "Categories and tools": "fallow
@@ -132,11 +132,12 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
   }
 
   const analyzed = new Set(ctx.files)
+  const isLibrary = await isLibraryPackage(ctx.repoRoot)
   return {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toPendingFindings(issues, detection !== null, ctx.files.length).filter((finding) =>
+      toPendingFindings(issues, detection !== null, ctx.files.length, isLibrary).filter((finding) =>
         analyzed.has(finding.file),
       ),
     ),
@@ -242,7 +243,10 @@ export function parseKnipJson(stdout: string): KnipIssues {
  *
  * - **unused exports** (and types, enum and namespace members) are high
  *   confidence — the module graph resolved and nothing imports them — and are
- *   graded as `warning`.
+ *   graded as `warning`. On a library they are reported but not graded: the
+ *   consumers that use a published API are outside the repo, so "nothing here
+ *   imports it" is not evidence the export is dead. A library that owns a knip
+ *   config has already told knip which exports count, so it is graded again.
  * - **unused files** are graded as `warning` *unless* knip found every analyzed
  *   file unused, which means it never resolved an entry point at all. A library
  *   with no `main` would otherwise grade F for having no `main`.
@@ -254,6 +258,7 @@ export function toPendingFindings(
   issues: KnipIssues,
   repoConfig: boolean,
   analyzedFileCount: number,
+  isLibrary: boolean,
 ): PendingFinding[] {
   const provenance = repoConfig ? ('repo-config' as const) : ('default-config' as const)
   const foundEntryPoint = analyzedFileCount > 0 && issues.unusedFiles.length < analyzedFileCount
@@ -287,7 +292,7 @@ export function toPendingFindings(
     },
     message: `Export \`${symbol.name}\` is never used`,
     provenance,
-    gradeScope: true,
+    gradeScope: repoConfig || !isLibrary,
     anchor: symbol.name,
   }))
 

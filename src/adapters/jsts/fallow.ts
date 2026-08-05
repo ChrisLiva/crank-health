@@ -20,7 +20,7 @@ import {
   identify,
   repoRelative,
 } from '../support.ts'
-import { detectNodeTool } from './node-package.ts'
+import { detectNodeTool, isLibraryPackage } from './node-package.ts'
 
 /**
  * fallow — `dead-code` and `health` (spec "Categories and tools"). One file,
@@ -104,11 +104,12 @@ async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
   }
 
   const analyzed = new Set(ctx.files)
+  const isLibrary = await isLibraryPackage(ctx.repoRoot)
   return {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toDeadCodeFindings(report, ctx.detection !== null).filter((finding) =>
+      toDeadCodeFindings(report, ctx.detection !== null, isLibrary).filter((finding) =>
         analyzed.has(finding.file),
       ),
     ),
@@ -263,18 +264,26 @@ export function parseDeadCode(stdout: string): FallowDeadCode {
  * only" rule applied through `gradeScope`:
  *
  * - **unused exports and types** are high confidence — fallow resolved the
- *   import graph and nothing reaches them — so they are graded.
+ *   import graph and nothing reaches them — so they are graded. On a library
+ *   they are reported but not graded: the code that uses a published API lives
+ *   outside the repo, so an unreferenced export is not evidence it is dead. A
+ *   library that owns a fallow config has already said what its API is, so it
+ *   is graded again.
  * - **unused files** are graded only when fallow found at least one entry
  *   point. With zero entry points every file is trivially unreachable, and a
  *   library or a fixture with no `main` would grade F for having no `main`.
  * - **unused dependencies** are dependency hygiene rather than dead code, and
  *   the false-positive rate without per-framework plugins is high, so they are
- *   reported as `info` and never graded.
+ *   parsed but never turned into findings at all.
  *
  * File- and symbol-level results carry an explicit anchor, so identity survives
  * every edit that does not move the symbol.
  */
-export function toDeadCodeFindings(report: FallowDeadCode, repoConfig: boolean): PendingFinding[] {
+export function toDeadCodeFindings(
+  report: FallowDeadCode,
+  repoConfig: boolean,
+  isLibrary: boolean,
+): PendingFinding[] {
   const provenance = repoConfig ? ('repo-config' as const) : ('default-config' as const)
   const fileLevel = report.entryPoints > 0
 
@@ -307,7 +316,7 @@ export function toDeadCodeFindings(report: FallowDeadCode, repoConfig: boolean):
     },
     message: `Export \`${symbol.name}\` is never used`,
     provenance,
-    gradeScope: true,
+    gradeScope: repoConfig || !isLibrary,
     anchor: symbol.name,
   }))
 

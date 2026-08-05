@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseDeadCode, toDeadCodeFindings } from '../src/adapters/jsts/fallow.ts'
 import { parseKnipJson, toPendingFindings } from '../src/adapters/jsts/knip.ts'
+import type { PendingFinding } from '../src/core/types.ts'
 
 /**
  * The dead-code pair: fallow and knip answer the same question independently
@@ -14,6 +15,11 @@ import { parseKnipJson, toPendingFindings } from '../src/adapters/jsts/knip.ts'
  */
 const FALLOW = fileURLToPath(new URL('./captured/fallow-dead-code-3.14.0.json', import.meta.url))
 const KNIP = fileURLToPath(new URL('./captured/knip-6.31.0.json', import.meta.url))
+
+/** The first finding a mapper produced for `rule`. */
+function ruled(findings: readonly PendingFinding[], rule: string): PendingFinding | undefined {
+  return findings.find((candidate) => candidate.rule === rule)
+}
 
 describe('parseDeadCode', () => {
   it('reads entry points, unused files and unused exports from real output', async () => {
@@ -43,7 +49,7 @@ describe('toDeadCodeFindings', () => {
   }
 
   it('grades unused exports, and anchors them on the symbol name', () => {
-    const finding = toDeadCodeFindings(report, false).find(
+    const finding = toDeadCodeFindings(report, false, false).find(
       (candidate) => candidate.rule === 'fallow/unused-export',
     )
     expect(finding).toMatchObject({
@@ -56,7 +62,7 @@ describe('toDeadCodeFindings', () => {
   })
 
   it('grades unused files when fallow had an entry point to start from', () => {
-    const finding = toDeadCodeFindings(report, false).find(
+    const finding = toDeadCodeFindings(report, false, false).find(
       (candidate) => candidate.rule === 'fallow/unused-file',
     )
     expect(finding).toMatchObject({ severity: 'warning', gradeScope: true, anchor: '' })
@@ -67,7 +73,7 @@ describe('toDeadCodeFindings', () => {
    * `main` would otherwise grade F for having no `main`.
    */
   it('keeps unused files advisory when fallow found no entry point at all', () => {
-    const findings = toDeadCodeFindings({ ...report, entryPoints: 0 }, false)
+    const findings = toDeadCodeFindings({ ...report, entryPoints: 0 }, false, false)
     const file = findings.find((candidate) => candidate.rule === 'fallow/unused-file')
     expect(file?.gradeScope).toBe(false)
     expect(file?.message).toContain('advisory')
@@ -78,10 +84,51 @@ describe('toDeadCodeFindings', () => {
   })
 
   it('tags provenance from whose config decided the result', () => {
-    expect(toDeadCodeFindings(report, true).every((f) => f.provenance === 'repo-config')).toBe(true)
-    expect(toDeadCodeFindings(report, false).every((f) => f.provenance === 'default-config')).toBe(
-      true,
-    )
+    expect(
+      toDeadCodeFindings(report, true, false).every((f) => f.provenance === 'repo-config'),
+    ).toBe(true)
+    expect(
+      toDeadCodeFindings(report, false, false).every((f) => f.provenance === 'default-config'),
+    ).toBe(true)
+  })
+
+  /**
+   * The same claim knip's exports make: on a library the consumers live outside
+   * the repo, so an unreferenced export is not evidence of dead code.
+   */
+  describe('on a library package', () => {
+    const EXPORT = 'fallow/unused-export'
+
+    it('reports the export finding ungraded, keeping severity and anchor', () => {
+      expect(ruled(toDeadCodeFindings(report, false, true), EXPORT)).toMatchObject({
+        severity: 'warning',
+        gradeScope: false,
+        anchor: 'unusedHelper',
+      })
+    })
+
+    it('grades the export finding again when the repo owns a fallow config', () => {
+      expect(ruled(toDeadCodeFindings(report, true, true), EXPORT)?.gradeScope).toBe(true)
+    })
+
+    it('grades the export finding on an application, as before', () => {
+      expect(ruled(toDeadCodeFindings(report, false, false), EXPORT)?.gradeScope).toBe(true)
+    })
+
+    /** Being a library says nothing about whether a *file* is reachable. */
+    it('still gates unused files on whether fallow found an entry point', () => {
+      expect(ruled(toDeadCodeFindings(report, false, true), 'fallow/unused-file')).toMatchObject({
+        severity: 'warning',
+        gradeScope: true,
+        anchor: '',
+      })
+      const noEntryPoint = ruled(
+        toDeadCodeFindings({ ...report, entryPoints: 0 }, false, true),
+        'fallow/unused-file',
+      )
+      expect(noEntryPoint?.gradeScope).toBe(false)
+      expect(noEntryPoint?.message).toContain('advisory')
+    })
   })
 })
 
@@ -135,7 +182,10 @@ describe('knip toPendingFindings', () => {
 
   it('grades exports, grades files when an entry point resolved, never grades deps', () => {
     const graded = new Map(
-      toPendingFindings(issues, false, 4).map((finding) => [finding.rule, finding.gradeScope]),
+      toPendingFindings(issues, false, 4, false).map((finding) => [
+        finding.rule,
+        finding.gradeScope,
+      ]),
     )
     expect(graded.get('knip/unused-exports')).toBe(true)
     expect(graded.get('knip/unused-file')).toBe(true)
@@ -144,7 +194,7 @@ describe('knip toPendingFindings', () => {
 
   it('maps the three kinds onto the severity vocabulary', () => {
     const severities = new Map(
-      toPendingFindings(issues, false, 4).map((finding) => [finding.rule, finding.severity]),
+      toPendingFindings(issues, false, 4, false).map((finding) => [finding.rule, finding.severity]),
     )
     expect(severities.get('knip/unused-exports')).toBe('warning')
     expect(severities.get('knip/unused-file')).toBe('warning')
@@ -154,7 +204,7 @@ describe('knip toPendingFindings', () => {
   /** Every analyzed file "unused" means knip never resolved an entry point. */
   it('keeps unused files advisory when knip found every file unused', () => {
     const everything = { ...issues, unusedFiles: ['a.ts', 'b.ts'] }
-    const findings = toPendingFindings(everything, false, 2).filter(
+    const findings = toPendingFindings(everything, false, 2, false).filter(
       (finding) => finding.rule === 'knip/unused-file',
     )
     expect(findings.every((finding) => finding.gradeScope)).toBe(false)
@@ -162,8 +212,75 @@ describe('knip toPendingFindings', () => {
   })
 
   it('anchors symbol findings on the symbol and file findings on nothing', () => {
-    const findings = toPendingFindings(issues, false, 4)
+    const findings = toPendingFindings(issues, false, 4, false)
     expect(findings.find((f) => f.rule === 'knip/unused-exports')?.anchor).toBe('helper')
     expect(findings.find((f) => f.rule === 'knip/unused-file')?.anchor).toBe('')
+  })
+
+  /**
+   * A library's public API is used by its consumers, not by itself, so knip
+   * calling an export unused is a claim about this repo only. On a library the
+   * export-kind findings are still reported — they just stop driving the grade,
+   * unless the repo's own knip config says which exports count.
+   */
+  describe('on a library package', () => {
+    const EXPORT_KINDS = ['exports', 'types', 'enumMembers', 'namespaceMembers'] as const
+    const libraryIssues = {
+      unusedFiles: [],
+      unusedExports: EXPORT_KINDS.map((kind, index) => ({
+        file: 'src/util.ts',
+        name: `symbol_${kind}`,
+        line: index + 1,
+        column: 1,
+        kind,
+      })),
+      unusedDependencies: [],
+    }
+
+    it('reports export findings ungraded, keeping severity, rule and anchor', () => {
+      const findings = toPendingFindings(libraryIssues, false, 4, true)
+      expect(findings.map((finding) => finding.rule)).toEqual(
+        EXPORT_KINDS.map((kind) => `knip/unused-${kind}`),
+      )
+      for (const kind of EXPORT_KINDS) {
+        expect(findings.find((finding) => finding.rule === `knip/unused-${kind}`)).toMatchObject({
+          severity: 'warning',
+          gradeScope: false,
+          anchor: `symbol_${kind}`,
+        })
+      }
+    })
+
+    it('grades export findings again when the repo owns a knip config', () => {
+      const findings = toPendingFindings(libraryIssues, true, 4, true)
+      expect(findings.every((finding) => finding.gradeScope)).toBe(true)
+    })
+
+    it('grades export findings on an application, as before', () => {
+      const findings = toPendingFindings(libraryIssues, false, 4, false)
+      expect(findings.every((finding) => finding.gradeScope)).toBe(true)
+    })
+
+    /** Only the export kinds move; files and dependencies read as they always do. */
+    it('leaves unused files and dependencies exactly as an application sees them', () => {
+      const findings = toPendingFindings(issues, false, 4, true)
+      expect(findings.find((f) => f.rule === 'knip/unused-file')).toMatchObject({
+        severity: 'warning',
+        gradeScope: true,
+        anchor: '',
+      })
+      expect(findings.find((f) => f.rule === 'knip/unused-dependencies')).toMatchObject({
+        severity: 'info',
+        gradeScope: false,
+      })
+      const allUnused = toPendingFindings(
+        { ...issues, unusedFiles: ['a.ts', 'b.ts'] },
+        false,
+        2,
+        true,
+      ).filter((f) => f.rule === 'knip/unused-file')
+      expect(allUnused.every((finding) => finding.gradeScope)).toBe(false)
+      expect(allUnused[0]?.message).toContain('advisory')
+    })
   })
 })
