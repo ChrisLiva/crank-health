@@ -42,7 +42,10 @@ import {
  * **Grading tiers.** bandit's own severity is the split: `HIGH` and `MEDIUM`
  * count toward the grade, `LOW` is advisory. Its low tier is mostly
  * "you imported subprocess" — true, and not a finding a repo should be graded
- * on.
+ * on. bandit reports a confidence alongside the severity, and its high tier at
+ * anything below `HIGH` confidence is a guess worth reading, not a proven
+ * problem: those become `warning`, still graded, never silenced. Only
+ * `HIGH`/`HIGH` is an `error`.
  */
 
 export const BANDIT_TOOL = 'bandit'
@@ -283,7 +286,12 @@ export function toPendingFindings(
 ): PendingFinding[] {
   return issues
     .map((issue) => {
-      const severity = SEVERITIES[issue.severity] ?? ('info' as const)
+      const severity =
+        issue.severity === 'HIGH'
+          ? issue.confidence === 'HIGH'
+            ? ('error' as const)
+            : ('warning' as const)
+          : (SEVERITIES[issue.severity] ?? ('info' as const))
       return {
         category: 'security' as const,
         tool: BANDIT_TOOL,

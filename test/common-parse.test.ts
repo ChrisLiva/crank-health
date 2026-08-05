@@ -350,18 +350,66 @@ describe('parseBanditJson', () => {
   })
 
   /**
+   * bandit's high tier is an `error` only when bandit is also confident. Below
+   * that the finding is a `warning` — still graded, never silenced. `High` and
+   * `high` are the case controls, `''` the unknown-value control: anything that
+   * is not exactly `HIGH` lands on the lenient side.
+   */
+  it.each(['MEDIUM', 'LOW', 'UNDEFINED', 'High', 'high', ''])(
+    'demotes a high-severity finding at %s confidence to warning',
+    (confidence) => {
+      const [finding] = toBanditFindings(
+        [banditIssue({ testId: 'B602', severity: 'HIGH', confidence })],
+        false,
+      )
+      expect([finding?.severity, finding?.gradeScope]).toEqual(['warning', true])
+    },
+  )
+
+  /** Only the high tier is gated on confidence; the rest keep bandit's map. */
+  it.each([
+    ['MEDIUM', 'warning', true],
+    ['LOW', 'info', false],
+    ['UNDEFINED', 'info', false],
+    ['NONSENSE', 'info', false],
+  ])('maps %s severity at high confidence unchanged', (severity, expected, graded) => {
+    const [finding] = toBanditFindings(
+      [banditIssue({ testId: 'B602', severity, confidence: 'HIGH' })],
+      false,
+    )
+    expect([finding?.severity, finding?.gradeScope]).toEqual([expected, graded])
+  })
+
+  /**
    * bandit's hardcoded-secret tests quote the literal they found, and a
    * finding's message is copied verbatim into `report.json`, `report.md` and
    * `agent.md`. A secrets finding that carries the secret has published it.
    */
-  it.each(['B105', 'B106', 'B107'])('redacts the literal %s quotes', (testId) => {
-    const [finding] = toBanditFindings(
-      [banditIssue({ testId, message: `Possible hardcoded password: '${SECRET}'` })],
-      false,
-    )
-    expect(finding?.message).not.toContain(SECRET)
-    expect(finding?.message).toContain("'<redacted>'")
-  })
+  it.each([
+    ['B105', 'HIGH', 'HIGH'],
+    ['B105', 'HIGH', 'MEDIUM'],
+    ['B105', 'MEDIUM', 'MEDIUM'],
+    ['B105', 'LOW', 'HIGH'],
+    ['B106', 'HIGH', 'MEDIUM'],
+    ['B107', 'HIGH', 'LOW'],
+  ])(
+    'redacts the literal %s quotes at %s severity / %s confidence',
+    (testId, severity, confidence) => {
+      const [finding] = toBanditFindings(
+        [
+          banditIssue({
+            testId,
+            severity,
+            confidence,
+            message: `Possible hardcoded password: '${SECRET}'`,
+          }),
+        ],
+        false,
+      )
+      expect(finding?.message).not.toContain(SECRET)
+      expect(finding?.message).toContain("'<redacted>'")
+    },
+  )
 
   it('leaves every other test’s message alone, quotes included', () => {
     const [finding] = toBanditFindings(
