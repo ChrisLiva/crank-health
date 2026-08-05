@@ -212,11 +212,19 @@ export async function createRunDirectory(
   repoRoot: string,
   out: string | undefined,
 ): Promise<OutputDir> {
-  if (out !== undefined && resolve(out) === repoRoot) {
-    throw new CliUsageError(
-      `--out ${out} is the repo itself — crank-health writes its own run directory there, ` +
-        `so give it one of its own (the default is ${DEFAULT_OUTPUT_DIRNAME}/)`,
-    )
+  if (out !== undefined) {
+    // `repoRoot` is physical and `--out` is whatever the user typed; compare the
+    // two as the filesystem knows them. A path that does not exist yet cannot be
+    // the repo, which does, so each lexical fallback is safe.
+    const target = resolve(out)
+    const physicalOut = await realpath(target).catch(() => target)
+    const physicalRepo = await realpath(repoRoot).catch(() => repoRoot)
+    if (physicalOut === physicalRepo) {
+      throw new CliUsageError(
+        `--out ${out} is the repo itself — crank-health writes its own run directory there, ` +
+          `so give it one of its own (the default is ${DEFAULT_OUTPUT_DIRNAME}/)`,
+      )
+    }
   }
   return createOutputDir(repoRoot, out)
 }

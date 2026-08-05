@@ -1,4 +1,14 @@
-import { readFile, readdir, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  readFile,
+  readdir,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { execa } from 'execa'
@@ -133,6 +143,16 @@ describe('createOutputDir', () => {
     await expect(createRunDirectory(repo, relative(process.cwd(), repo))).rejects.toThrow(
       /is the repo itself/,
     )
+    // Same directory, two spellings: the guard compares what the filesystem says.
+    const linkDir = await mkdtemp(join(tmpdir(), 'crank-output-link-'))
+    const link = join(linkDir, 'repo')
+    await symlink(repo, link)
+    try {
+      await expect(createRunDirectory(await realpath(repo), link)).rejects.toThrow(CliUsageError)
+      await expect(createRunDirectory(repo, await realpath(repo))).rejects.toThrow(CliUsageError)
+    } finally {
+      await rm(linkDir, { recursive: true, force: true })
+    }
     expect(await readdir(repo)).toEqual([])
   })
 
