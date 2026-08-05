@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ADAPTERS } from './adapters/index.ts'
@@ -107,7 +107,7 @@ export interface TreeScan {
 }
 
 export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'> {
-  /** Absolute path to the tree to scan — the repo, or a base worktree. */
+  /** Absolute, physical path to the tree to scan — the repo, or a base worktree. */
   readonly repoRoot: string
   /** Absolute path to this scan's scratch dir; two scans never share one. */
   readonly scratch: string
@@ -221,11 +221,17 @@ export async function createRunDirectory(
   return createOutputDir(repoRoot, out)
 }
 
-/** The target path, checked to be a directory before anything else happens. */
+/**
+ * The target path as the filesystem knows it: resolved against the cwd,
+ * checked to be a directory, then made physical. Tools that canonicalize
+ * their output paths (ruff) report inside the physical root, and
+ * `repoRelative()` is purely lexical — so a symlinked root would silently
+ * relativize their findings outside the repo and drop them.
+ */
 export async function resolveRepoRoot(path: string): Promise<string> {
   const repoRoot = resolve(path)
   await assertDirectory(repoRoot)
-  return repoRoot
+  return await realpath(repoRoot)
 }
 
 /**

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -434,6 +434,65 @@ describe('zero footprint', () => {
     },
     SCAN_TIMEOUT_MS,
   )
+})
+
+/**
+ * A scan target reached through a symlink (stock macOS `TMPDIR`, symlinked
+ * checkouts) must behave exactly like one reached through its physical path:
+ * tools that canonicalize their output paths (ruff) report inside the physical
+ * root, and the findings must still land inside the repo.
+ */
+describe('quick scan of the py-basic fixture reached through a symlink', () => {
+  let fixture: FixtureRepo
+  let linkDir: string
+  let outA: string
+  let outB: string
+  let before: readonly string[]
+  let symlinkScan: HealthScanResult
+  let rootScan: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('py-basic')
+    linkDir = await mkdtemp(join(tmpdir(), 'crank-symlink-'))
+    const link = join(linkDir, 'repo')
+    await symlink(fixture.root, link) // explicit: bites on Linux and under any TMPDIR
+    outA = await mkdtemp(join(tmpdir(), 'crank-symlink-out-'))
+    outB = await mkdtemp(join(tmpdir(), 'crank-symlink-out-'))
+    before = (await readdir(fixture.root)).toSorted()
+    symlinkScan = await runHealthScan({ path: link, out: outA })
+    rootScan = await runHealthScan({ path: fixture.root, out: outB })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+    await rm(linkDir, { recursive: true, force: true })
+    await rm(outA, { recursive: true, force: true })
+    await rm(outB, { recursive: true, force: true })
+  })
+
+  it('finds every planted finding through the symlink', () => {
+    expect(symlinkScan.report.findings.map(shape)).toEqual(
+      PLANTED.map((planted) => ({ ...planted })),
+    )
+  })
+
+  it('produces the same report whether reached through the symlink or the real root', () => {
+    expect(normalizeReport(symlinkScan.json)).toBe(normalizeReport(rootScan.json))
+    expect(symlinkScan.report.findings.map((f) => f.id)).toEqual(
+      rootScan.report.findings.map((f) => f.id),
+    )
+  })
+
+  it('records the physical repo path', async () => {
+    // Asserted directly: `normalizeReport` blanks `repo.path`, so the
+    // report-identity case above cannot see it.
+    expect(symlinkScan.report.repo.path).toBe(await realpath(fixture.root))
+  })
+
+  it('leaves the target clean when reached through the symlink', async () => {
+    expect(await fixture.status()).toBe('')
+    expect((await readdir(fixture.root)).toSorted()).toEqual(before)
+  })
 })
 
 /**
