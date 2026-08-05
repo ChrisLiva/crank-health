@@ -92,7 +92,7 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
     await addWorktree(repoRoot, worktree, base)
     const baseScan = await scanTree({
       ...options,
-      repoRoot: worktree,
+      repoRoot: await resolveRepoRoot(worktree),
       scratch: await subdir(scratch, 'base-scratch'),
       // The deep tier is head-only, whatever the profile: mutation testing
       // executes the repo's test suite, and the base worktree has no installed
