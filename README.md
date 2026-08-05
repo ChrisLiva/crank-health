@@ -12,7 +12,7 @@ npx crank-health
 ```
 
 ```
-crank-health 0.1.0 · /path/to/repo @ 9676d651 · quick
+crank-health 0.2.0 · /path/to/repo @ 9676d651 · quick
 
   security      A             no findings
   types         F             1 graded finding
@@ -93,6 +93,9 @@ alone.
 - **Not owned** → crank-health's own pinned default tool runs against a bundled config kept in a
   temp directory, and only correctness-class rules count toward the grade. Style and pedantic
   findings are still reported, marked `[advisory]`.
+- **Owned, not installed, and never imposed on you** (ESLint, Biome, the `--deep` mutation tools) →
+  the owner claims the category but might never manage to speak, so our default runs behind it as a
+  **standby** instead of standing aside — counted only if no owner graded the category.
 
 Every finding carries `provenance: "repo-config" | "default-config"` and a `gradeScope` flag, and
 when a default tool steps aside for a repo-owned one, `report.json` records that it did.
@@ -123,6 +126,13 @@ Security is never normalized — one leaked secret is an F in a million-line rep
 | B     | Some findings, at or under those counts         |
 | A     | None                                            |
 
+Two severities are remapped before that table is applied. zizmor's `unpinned-uses` and
+`unpinned-images` are a chore — pin the digest — rather than a weakness someone can reach today, so
+they count as `warning` whatever severity zizmor gave them; almost no repo hash-pins every `uses:`,
+and at `error` they capped every workflow-bearing repo at D. bandit's HIGH tier is an `error` only
+at HIGH confidence; below that it is a guess worth reading rather than a proven problem, so it
+lands at `warning` — still graded, never silenced.
+
 A category with nothing to measure is **not assessed**, never a flattering A: an absent grade and a
 good grade are different answers, and `report.json` says which one it is and why.
 
@@ -131,6 +141,14 @@ The constants are calibrated first guesses; the formula _shapes_ and the rules a
 repo; version 0.2.0 re-probed the same three at the same tags, to see what its rule changes did to
 the security and dead-code grades. No constant moved in either round — the measurements from both,
 and the reasoning, are in the comments on `GRADE_TABLE`. Changing a threshold is a version bump.
+
+One rule depends on what the repo _is_ rather than on what is in it. A root `package.json` that
+declares `exports`, `module` or `types` — or a `main` without `private: true` — marks the repo a
+**library**, whose published surface is its product rather than dead code. An unused
+export in a library is therefore advisory — reported, `gradeScope` false — rather than graded, and
+no repo is marked down for publishing what it exists to publish. A repo-owned dead-code config
+overrides that: a repo that configured knip or fallow itself has already declared where its entry
+points are, so its own tool's findings count. Changing this rule is a version bump too.
 
 ## Output
 
@@ -190,6 +208,16 @@ brew install gitleaks       # secret scanning
 brew install opengrep       # SAST
 brew install osv-scanner    # dependency vulnerabilities
 ```
+
+An owner crank-health declines to impose is the other way a tool goes missing. ESLint and Biome run
+only from your own install — an ephemeral copy would be graded on the wrong plugin set — so a repo
+that declares one without installing it has an owner that may never run. That no longer silences
+the default: our tool runs as a **standby** and is resolved once everything has finished. If the
+owner graded the category, the standby is stood down — its findings and metrics drop out, and its
+row in the tool table reads `stood down: lint graded by eslint`. If the owner errored or timed out,
+the standby's grade is the one the repo gets, on our config rather than yours, and `warnings[]`
+says so (`oxlint: graded lint on its default config because eslint reported error`). Either way the
+provenance is on the record, in the Notes column and in `warnings[]`.
 
 Missing `uv` degrades the Python categories the same way. A tool that crashes or emits unparseable
 output becomes `error` with its stderr in `raw/`; a tool that overruns its budget (120 s by default,
