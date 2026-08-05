@@ -68,6 +68,30 @@ export async function detectNodeTool(
   }
 }
 
+/** Manifest fields that only a package with a published surface declares. */
+const PUBLISHED_ENTRY_FIELDS: readonly string[] = ['exports', 'module', 'types']
+
+/**
+ * Whether the repo publishes a package rather than being an application.
+ *
+ * Tools that call dead code "dead" are wrong about a library: its exports are
+ * the product, consumed from outside the repo. The test is field *presence*,
+ * never truthiness (`"exports": {}` still declares a surface), and never the
+ * `"type"` field — `"type": "module"` says how files are parsed, not that
+ * anything is published.
+ *
+ * `private: true` vetoes a bare `main` (an app's entry point) but cannot veto
+ * `exports`/`module`/`types`: packages published from a private manifest by a
+ * release pipeline are common, zustand being the canonical case.
+ */
+export async function isLibraryPackage(repoRoot: string): Promise<boolean> {
+  const manifest = asRecord(await readJson(join(repoRoot, 'package.json')))
+  if (manifest === undefined) return false
+
+  if (PUBLISHED_ENTRY_FIELDS.some((field) => manifest[field] !== undefined)) return true
+  return manifest['main'] !== undefined && manifest['private'] !== true
+}
+
 /** The installed version, read from disk — detection never spawns a process. */
 async function installedVersion(
   repoRoot: string,
