@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --deny-warnings",
+    "lint": "oxlint --deny-warnings --disable-nested-config",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run"

@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "crankHealth": "0.1.0",
+  "repo": {
+    "path": "<repo>",
+    "commit": "40e92f1edf3895e519704488f0c56ffe5de1f623"
+  },
+  "profile": "quick",
+  "mode": "whole-repo",
+  "selected": [
+    "security",
+    "types",
+    "dead-code",
+    "complexity",
+    "duplication",
+    "lint",
+    "format",
+    "test-quality"
+  ],
+  "categories": {
+    "security": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "types": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "dead-code": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "complexity": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "duplication": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "lint": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "format": {
+      "status": "not-assessed",
+      "reason": "no tool available for this category"
+    },
+    "test-quality": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    }
+  },
+  "tools": [
+    {
+      "tool": "oxlint",
+      "category": "lint",
+      "scope": "js-ts",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "1.77.0",
+      "pinned": "1.77.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/oxlint.sarif.json"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "fcf1d5838c50fb15",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "oxc(no-accumulating-spread)",
+      "severity": "warning",
+      "file": "src/accumulate.js",
+      "range": {
+        "startLine": 2,
+        "startCol": 7,
+        "endLine": 2,
+        "endCol": 10
+      },
+      "message": "Do not spread accumulators in loops",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "26b34a04b4e0d55a",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-const-assign)",
+      "severity": "error",
+      "file": "src/const-assign.js",
+      "range": {
+        "startLine": 2,
+        "startCol": 9,
+        "endLine": 2,
+        "endCol": 14
+      },
+      "message": "Unexpected re-assignment of `const` variable limit.",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "27641935f1d4f66e",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-dupe-keys)",
+      "severity": "error",
+      "file": "src/dupe-keys.js",
+      "range": {
+        "startLine": 2,
+        "startCol": 3,
+        "endLine": 2,
+        "endCol": 7
+      },
+      "message": "Duplicate key 'home'",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "42a37a4c5ff36043",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-unreachable)",
+      "severity": "error",
+      "file": "src/unreachable.js",
+      "range": {
+        "startLine": 6,
+        "startCol": 3,
+        "endLine": 6,
+        "endCol": 23
+      },
+      "message": "Unreachable code.",
+      "provenance": "default-config",
+      "gradeScope": true
+    }
+  ],
+  "warnings": []
+}

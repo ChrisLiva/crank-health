@@ -10,5 +10,5 @@
     "node": true,
     "es2024": true
   },
-  "ignorePatterns": ["dist", "coverage", "node_modules"]
+  "ignorePatterns": ["dist", "coverage", "node_modules", "test/fixtures", "test/captured"]
 }

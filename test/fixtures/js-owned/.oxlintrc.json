@@ -1,0 +1,4 @@
+{
+  "categories": { "correctness": "off" },
+  "rules": { "unicorn/prefer-ternary": "warn" }
+}

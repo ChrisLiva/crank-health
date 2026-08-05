@@ -1,0 +1,179 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "oxlint",
+          "version": "1.77.0",
+          "semanticVersion": "1.77.0",
+          "informationUri": "https://oxc.rs/docs/guide/usage/linter.html",
+          "rules": [
+            {
+              "id": "oxc(no-accumulating-spread)",
+              "name": "no-accumulating-spread",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/oxc/no-accumulating-spread.html",
+              "properties": {
+                "category": "perf",
+                "plugin": "oxc",
+                "fix": "none"
+              }
+            },
+            {
+              "id": "eslint(no-unreachable)",
+              "name": "no-unreachable",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-unreachable.html",
+              "properties": {
+                "category": "correctness",
+                "plugin": "eslint",
+                "fix": "none"
+              }
+            },
+            {
+              "id": "eslint(no-const-assign)",
+              "name": "no-const-assign",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-const-assign.html",
+              "properties": {
+                "category": "correctness",
+                "plugin": "eslint",
+                "fix": "none"
+              }
+            },
+            {
+              "id": "eslint(no-dupe-keys)",
+              "name": "no-dupe-keys",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-dupe-keys.html",
+              "properties": {
+                "category": "correctness",
+                "plugin": "eslint",
+                "fix": "none"
+              }
+            }
+          ]
+        }
+      },
+      "artifacts": [
+        {
+          "location": {
+            "uri": "src/accumulate.js"
+          }
+        },
+        {
+          "location": {
+            "uri": "src/unreachable.js"
+          }
+        },
+        {
+          "location": {
+            "uri": "src/const-assign.js"
+          }
+        },
+        {
+          "location": {
+            "uri": "src/dupe-keys.js"
+          }
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "oxc(no-accumulating-spread)",
+          "ruleIndex": 0,
+          "level": "warning",
+          "message": {
+            "text": "Do not spread accumulators in loops"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/accumulate.js",
+                  "index": 0
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 7,
+                  "endLine": 2,
+                  "endColumn": 10
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "eslint(no-unreachable)",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "Unreachable code."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/unreachable.js",
+                  "index": 1
+                },
+                "region": {
+                  "startLine": 6,
+                  "startColumn": 3,
+                  "endLine": 6,
+                  "endColumn": 23
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "eslint(no-const-assign)",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Unexpected re-assignment of `const` variable limit."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/const-assign.js",
+                  "index": 2
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 9,
+                  "endLine": 2,
+                  "endColumn": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "eslint(no-dupe-keys)",
+          "ruleIndex": 3,
+          "level": "error",
+          "message": {
+            "text": "Duplicate key 'home'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/dupe-keys.js",
+                  "index": 3
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 3,
+                  "endLine": 2,
+                  "endColumn": 7
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "columnKind": "unicodeCodePoints"
+    }
+  ]
+}

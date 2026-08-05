@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { execa } from 'execa'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { writeScratchRaw } from '../src/core/exec.ts'
 import { DEFAULT_OUTPUT_DIRNAME, createOutputDir } from '../src/core/output.ts'
 
 describe('createOutputDir', () => {
@@ -96,5 +97,17 @@ describe('createOutputDir', () => {
   it('allows a nested raw path', async () => {
     const out = await createOutputDir(repo)
     expect(out.path('raw/oxlint.json')).toBe(join(out.root, 'raw', 'oxlint.json'))
+  })
+
+  it('adopts raw output staged in the scratch dir before scratch is destroyed', async () => {
+    const scratch = await mkdtemp(join(tmpdir(), 'crank-scratch-'))
+    const staged = await writeScratchRaw(scratch, 'oxlint.sarif.json', '{"runs":[]}\n')
+
+    const out = await createOutputDir(repo)
+    const adopted = await out.adoptRaw([staged])
+
+    expect(adopted).toEqual(['raw/oxlint.sarif.json'])
+    await rm(scratch, { recursive: true, force: true })
+    expect(await readFile(join(out.raw, 'oxlint.sarif.json'), 'utf8')).toBe('{"runs":[]}\n')
   })
 })

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
-import { isAbsolute, join, resolve } from 'node:path'
+import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { basename, isAbsolute, join, resolve } from 'node:path'
 
 /** Output dir when `--out` is not given (spec §9). */
 export const DEFAULT_OUTPUT_DIRNAME = '.codebase-health'
@@ -21,6 +21,14 @@ export interface OutputDir {
   write(name: string, contents: string): Promise<string>
   /** Writes a file in `raw/`; returns its absolute path. */
   writeRaw(name: string, contents: string): Promise<string>
+  /**
+   * Moves raw tool output that a runner staged in the scratch dir into `raw/`.
+   * Runners never learn where the run directory is — they hand back absolute
+   * scratch paths and the pipeline adopts them before scratch is destroyed.
+   *
+   * @returns run-directory-relative posix paths, for `report.json`
+   */
+  adoptRaw(staged: readonly string[]): Promise<string[]>
 }
 
 /**
@@ -49,6 +57,18 @@ export async function createOutputDir(repoRoot: string, out?: string): Promise<O
     path: (name) => join(root, safeName(name)),
     write: async (name, contents) => writeAtomic(join(root, safeName(name)), contents),
     writeRaw: async (name, contents) => writeAtomic(join(raw, safeName(name)), contents),
+    adoptRaw: async (staged) => {
+      const adopted: string[] = []
+      for (const source of staged) {
+        const name = safeName(basename(source))
+        // Sequential: a handful of small files, and unbounded fan-out here
+        // would buy nothing but EMFILE risk.
+        // eslint-disable-next-line no-await-in-loop
+        await copyFile(source, join(raw, name))
+        adopted.push(`raw/${name}`)
+      }
+      return adopted
+    },
   }
 }
 
