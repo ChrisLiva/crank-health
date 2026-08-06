@@ -2,6 +2,7 @@ import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
 import { complexipyRunner } from './complexipy.ts'
 import { cosmicRayRunner } from './cosmic-ray.ts'
 import { coverageRunner } from './coverage.ts'
+import { mypyRunner } from './mypy.ts'
 import { pyrightRunner } from './pyright.ts'
 import { ruffFormatRunner, ruffLintRunner } from './ruff.ts'
 import { tyRunner } from './ty.ts'
@@ -13,10 +14,12 @@ import { vultureRunner } from './vulture.ts'
  * Discovery already classified every `.py`/`.pyi` file into its project, so
  * detection is a lookup.
  *
- * Runners are listed in category order (spec §10's remediation priority). The
- * two type checkers are both listed because which of them runs depends on the
- * repo: ty by default, pyright once there is a virtualenv, and whichever of
- * them the repo owns (see `ty.ts` and `pyright.ts`).
+ * Runners are listed in category order (spec §10's remediation priority), and
+ * within a category the defaults come before the ones that only run when the
+ * repo owns them. All three type checkers are listed because which of them runs
+ * depends on the repo: ty by default, pyright once there is a virtualenv,
+ * whichever of them the repo owns, and mypy only where the repo asked for it
+ * (see `ty.ts`, `pyright.ts` and `mypy.ts`).
  */
 export const pythonAdapter: LanguageAdapter = {
   language: 'python',
@@ -24,6 +27,7 @@ export const pythonAdapter: LanguageAdapter = {
   runners: [
     tyRunner,
     pyrightRunner,
+    mypyRunner,
     vultureRunner,
     complexipyRunner,
     ruffLintRunner,

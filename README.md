@@ -82,18 +82,18 @@ does: that category was answered for the repo, and the repo's answer is gated in
 
 ## Categories and tools
 
-Eight categories. 22 analyzers run in the quick profile, 3 more in `--deep`.
+Eight categories. 23 analyzers run in the quick profile, 3 more in `--deep`.
 
-| Category                | JS/TS                             | Python                                         | Both                                       |
-| ----------------------- | --------------------------------- | ---------------------------------------------- | ------------------------------------------ |
-| Lint                    | oxlint (default) · ESLint · Biome | `ruff check`                                   |                                            |
-| Format                  | Prettier (default) · Biome        | `ruff format --check`                          |                                            |
-| Types                   | tsc                               | ty → Pyright when a virtualenv exists          |                                            |
-| Dead code               | fallow · knip                     | vulture (≥90% confidence graded, 60% advisory) |                                            |
-| Complexity              | fallow health · fta               | complexipy                                     |                                            |
-| Duplication             |                                   |                                                | jscpd                                      |
-| Security                |                                   | bandit · ruff `S` rules                        | gitleaks · opengrep · zizmor · osv-scanner |
-| Test quality (`--deep`) | StrykerJS                         | cosmic-ray · coverage.py (context only)        |                                            |
+| Category                | JS/TS                             | Python                                                    | Both                                       |
+| ----------------------- | --------------------------------- | --------------------------------------------------------- | ------------------------------------------ |
+| Lint                    | oxlint (default) · ESLint · Biome | `ruff check`                                              |                                            |
+| Format                  | Prettier (default) · Biome        | `ruff format --check`                                     |                                            |
+| Types                   | tsc                               | ty → Pyright when a virtualenv exists · mypy (repo-owned) |                                            |
+| Dead code               | fallow · knip                     | vulture (≥90% confidence graded, 60% advisory)            |                                            |
+| Complexity              | fallow health · fta               | complexipy                                                |                                            |
+| Duplication             |                                   |                                                           | jscpd                                      |
+| Security                |                                   | bandit · ruff `S` rules                                   | gitleaks · opengrep · zizmor · osv-scanner |
+| Test quality (`--deep`) | StrykerJS                         | cosmic-ray · coverage.py (context only)                   |                                            |
 
 When several tools cover one category they all run and their findings merge; the tool is part of
 each finding's identity, so two tools flagging the same line are two findings.
@@ -110,10 +110,10 @@ alone.
 - **Not owned** → crank-health's own pinned default tool runs against a bundled config kept in a
   temp directory, and only correctness-class rules count toward the grade. Style and pedantic
   findings are still reported, marked `[advisory]`.
-- **Owned, not installed, and never imposed on you** (ESLint, Biome) → the owner claims the
+- **Owned, not installed, and never imposed on you** (ESLint, Biome, mypy) → the owner claims the
   category but might never manage to speak, so our default runs behind it as a **standby** instead
   of standing aside — counted only if no owner graded the category. A standby exists only where
-  crank-health has a default of its own, which today means lint and format.
+  crank-health has a default of its own, which today means lint, format and types.
 
 Every finding carries `provenance: "repo-config" | "default-config"` and a `gradeScope` flag, and
 when a default tool steps aside for a repo-owned one, `report.json` records that it did.

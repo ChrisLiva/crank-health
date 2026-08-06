@@ -315,6 +315,81 @@ describe('quick scan of a Python repo with a virtualenv', () => {
   })
 })
 
+/**
+ * The honest-degradation chain, end to end: a repo that owns mypy but has no
+ * environment for it. mypy claims the types category, cannot run, and says why;
+ * the default it displaced grades the category instead and the report says so.
+ */
+describe('quick scan of the py-mypy fixture (no virtualenv)', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+  let byTool: Map<string, ReportShape['tools'][number]>
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('py-mypy')
+    result = await runHealthScan({ path: fixture.root })
+    byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('runs mypy against a repo that owns it', () => {
+    expect(parse(result.json).tools.map((tool) => tool.tool)).toContain('mypy')
+  })
+
+  it('reports mypy as not-available, naming the missing virtualenv', () => {
+    expect(byTool.get('mypy')).toMatchObject({
+      state: 'not-available',
+      reason:
+        'mypy is declared but this project has no virtualenv; ' +
+        "create one and install the project's dependencies",
+    })
+  })
+
+  it('owns mypy through both its config section and its dependency group', () => {
+    expect(byTool.get('mypy')?.detection).toMatchObject({
+      reason: 'config+dependency',
+      ownedVia: 'pyproject.toml',
+    })
+  })
+
+  it('promotes ty, the standby whose owner never graded', () => {
+    expect(byTool.get('ty')).toMatchObject({
+      state: 'ok',
+      provenance: 'default-config',
+      reason: null,
+    })
+  })
+
+  it('leaves the other standby its own reason, because no owner graded', () => {
+    expect(byTool.get('pyright')).toMatchObject({
+      state: 'not-available',
+      reason: 'standing down: this project has no virtualenv, so ty type-checks it',
+    })
+  })
+
+  it('warns that the grade came from a default config, not the repo’s own tool', () => {
+    expect(result.report.warnings).toContain(
+      'ty: graded types on its default config because mypy reported not-available',
+    )
+  })
+
+  it('grades types from the promoted standby’s findings', () => {
+    expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
+    // Loose on the rule: which name ty gives the planted return-type error is
+    // ty's contract, not this fixture's.
+    expect(result.report.findings).toContainEqual(
+      expect.objectContaining({ tool: 'ty', category: 'types', file: 'app.py' }),
+    )
+  })
+
+  it('leaves the target repo clean', async () => {
+    expect(await fixture.status()).toBe('')
+  })
+})
+
 describe('quick scan of a mixed JS + Python repo', () => {
   let fixture: FixtureRepo
   let result: HealthScanResult
