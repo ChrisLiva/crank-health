@@ -8,3 +8,8 @@ A quick scan must complete with `evaluated.txt` absent and `git status`
 clean — `dotnet format whitespace --folder` treats the tree as plain files and
 never loads the project. Only `--deep` may trip this trap, and the deep build
 runner runs against a copy, never the target.
+
+The fixture's own `.gitignore` keeps `bin/`/`obj/` out of the fixture commit:
+an editor's design-time build may drop MSBuild output here, and the commit sha
+must depend only on the planted files. `evaluated.txt` is deliberately *not*
+ignored — a scan that trips the trap must also fail the `git status` check.

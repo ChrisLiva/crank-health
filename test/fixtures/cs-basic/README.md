@@ -14,6 +14,10 @@ plants are dormant until the deep-only build and analyzer runners land):
 | complexity  | `complex.cs`              | `Classify` has cyclomatic complexity 17 by hand-count (1 + if ×6, `&&`, `else if`, `\|\|`, `for`, `case` ×4, `while`, ternary), ceiling 15 — dormant until the deep build runner lands |
 | lint        | `warnings.cs`             | unused private field `unusedCount` → CA1823 under the injected `.globalconfig` — dormant until the deep build runner lands |
 
+The fixture's own `.gitignore` keeps `bin/`/`obj/` out of the fixture commit:
+an editor's design-time build may drop MSBuild output here, and the commit sha
+must depend only on the planted files.
+
 `clean.cs` is deliberately clean — and deliberately well-formatted and
 non-duplicating, so it stays out of every denominator's numerator; a finding
 there is a false positive. `test/cs-scan.test.ts` carries the machine-readable
