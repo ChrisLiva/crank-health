@@ -37,6 +37,17 @@ export interface DeltaInput {
   readonly baseCategories: Readonly<Record<Category, CategoryState>>
   /** Category states from the head scan; these are the report's own grades. */
   readonly headCategories: Readonly<Record<Category, CategoryState>>
+  /** The base scan's projects, graded. A project either side lacks is churn. */
+  readonly baseProjects: readonly DeltaProject[]
+  /** The head scan's projects, graded; these are the report's own projects. */
+  readonly headProjects: readonly DeltaProject[]
+}
+
+/** One project's graded categories, from one side of the comparison. */
+export interface DeltaProject {
+  /** Repo-relative posix path, `.` at the root — the project's identity. */
+  readonly path: string
+  readonly categories: Readonly<Record<Category, CategoryState>>
 }
 
 /** A new finding, plus whether this change is what put it there. */
@@ -65,6 +76,31 @@ export interface CategoryMovement {
   readonly resolvedFindings: number
 }
 
+/** Whether a project is on both sides of the comparison, or only on one. */
+export type ProjectChurn = 'none' | 'added' | 'removed'
+
+/**
+ * What this change did to one project: the same eight movements as the rollup,
+ * over that project's own findings and its own grades.
+ *
+ * A project only head has is `added` and one only the base had is `removed`.
+ * The label matters as much as the counts: every finding in an added project is
+ * new and every finding in a removed one is resolved, and a renderer that
+ * presented the second as fixes would report deleting a package as the best
+ * work in the change. The root project shuttling between a graded project and a
+ * workspace shell is churn of `.` like any other.
+ */
+export interface ProjectMovement {
+  /** Repo-relative posix path; see {@link DeltaProject.path}. */
+  readonly path: string
+  readonly churn: ProjectChurn
+  /** All eight categories, in canonical order, on this project's grades. */
+  readonly categories: readonly CategoryMovement[]
+  /** New findings attributed to this project; a subset of the rollup's. */
+  readonly newFindings: number
+  readonly resolvedFindings: number
+}
+
 export interface DeltaResult {
   /** New findings, in report order; touched-line ones flagged, not reordered. */
   readonly newFindings: readonly DeltaFinding[]
@@ -74,7 +110,15 @@ export interface DeltaResult {
   readonly unchangedCount: number
   /** All eight categories, in canonical order. */
   readonly categories: readonly CategoryMovement[]
+  /** The same, per project, ordered by path: every project either side had. */
+  readonly projects: readonly ProjectMovement[]
 }
+
+/** Every category's base state in a project only head has: there was no before. */
+export const PROJECT_ADDED_REASON = 'project added by this change'
+
+/** Every category's head state in a project only the base had; see above. */
+export const PROJECT_REMOVED_REASON = 'project removed by this change'
 
 /** Computes the delta. See the module note for what makes it more than a diff. */
 export function computeDelta(input: DeltaInput): DeltaResult {
@@ -92,14 +136,74 @@ export function computeDelta(input: DeltaInput): DeltaResult {
     })),
     resolvedFindings: resolved,
     unchangedCount: [...headIds].filter((id) => baseIds.has(id)).length,
-    categories: CATEGORIES.map((category) => ({
-      category,
-      base: input.baseCategories[category],
-      head: input.headCategories[category],
-      newFindings: added.filter((finding) => finding.category === category).length,
-      resolvedFindings: resolved.filter((finding) => finding.category === category).length,
-    })),
+    categories: movements(input.baseCategories, input.headCategories, added, resolved),
+    projects: projectMovements(input, added, resolved),
   }
+}
+
+/** One side's states next to the other's, with the counts that moved them. */
+function movements(
+  baseCategories: Readonly<Record<Category, CategoryState>>,
+  headCategories: Readonly<Record<Category, CategoryState>>,
+  added: readonly Finding[],
+  resolved: readonly Finding[],
+): CategoryMovement[] {
+  return CATEGORIES.map((category) => ({
+    category,
+    base: baseCategories[category],
+    head: headCategories[category],
+    newFindings: added.filter((finding) => finding.category === category).length,
+    resolvedFindings: resolved.filter((finding) => finding.category === category).length,
+  }))
+}
+
+/**
+ * The rollup's movement, restated per project over that project's own findings.
+ *
+ * A finding is attributed by the project it was found in on its own side, so a
+ * file `git mv`-ed across a project boundary is the same finding with a new
+ * attribution: unchanged in the rollup, and — because it is neither new nor
+ * resolved — no churn in either project's counts either. What moves in that case
+ * is the two projects' grades, which is exactly what happened.
+ */
+function projectMovements(
+  input: DeltaInput,
+  added: readonly Finding[],
+  resolved: readonly Finding[],
+): ProjectMovement[] {
+  const base = new Map(input.baseProjects.map((project) => [project.path, project.categories]))
+  const head = new Map(input.headProjects.map((project) => [project.path, project.categories]))
+
+  return [...new Set([...base.keys(), ...head.keys()])].toSorted(compare).map((path) => {
+    const before = base.get(path)
+    const after = head.get(path)
+    const mine = (findings: readonly Finding[]) =>
+      findings.filter((finding) => finding.project === path)
+    return {
+      path,
+      churn: before === undefined ? 'added' : after === undefined ? 'removed' : 'none',
+      categories: movements(
+        before ?? absent(PROJECT_ADDED_REASON),
+        after ?? absent(PROJECT_REMOVED_REASON),
+        mine(added),
+        mine(resolved),
+      ),
+      newFindings: mine(added).length,
+      resolvedFindings: mine(resolved).length,
+    }
+  })
+}
+
+/** Eight states for a side that has no such project, saying which side that is. */
+function absent(reason: string): Record<Category, CategoryState> {
+  const states = {} as Record<Category, CategoryState>
+  for (const category of CATEGORIES) states[category] = { status: 'not-assessed', reason }
+  return states
+}
+
+function compare(a: string, b: string): number {
+  if (a === b) return 0
+  return a < b ? -1 : 1
 }
 
 /**

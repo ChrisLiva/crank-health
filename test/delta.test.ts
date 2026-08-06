@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { computeDelta, remapRenames } from '../src/core/delta.ts'
-import type { DeltaInput } from '../src/core/delta.ts'
+import {
+  PROJECT_ADDED_REASON,
+  PROJECT_REMOVED_REASON,
+  computeDelta,
+  remapRenames,
+} from '../src/core/delta.ts'
+import type { DeltaInput, DeltaProject, DeltaResult, ProjectMovement } from '../src/core/delta.ts'
 import { computeAnchors, fingerprint } from '../src/core/fingerprint.ts'
 import { parseNameStatus, parseTouchedLines } from '../src/core/git.ts'
-import type { Category, CategoryState, Finding } from '../src/core/types.ts'
+import type { Category, CategoryState, Finding, Grade } from '../src/core/types.ts'
 import { allGraded, allNotAssessed, makeFinding } from './factories.ts'
 
 /**
@@ -32,8 +37,27 @@ function input(overrides: Partial<DeltaInput> = {}): DeltaInput {
     touchedLines: new Map(),
     baseCategories: allNotAssessed(),
     headCategories: allNotAssessed(),
+    baseProjects: [],
+    headProjects: [],
     ...overrides,
   }
+}
+
+/** One side's project, graded the same in every category unless told otherwise. */
+function project(
+  path: string,
+  categories: Record<Category, CategoryState> = allNotAssessed(),
+): DeltaProject {
+  return { path, categories }
+}
+
+function projectMovement(delta: DeltaResult, path: string): ProjectMovement | undefined {
+  return delta.projects.find((entry) => entry.path === path)
+}
+
+/** A project graded in the one category these tests drive. */
+function graded(grade: Grade): Record<Category, CategoryState> {
+  return { ...allNotAssessed(), lint: { status: 'graded', grade } }
 }
 
 describe('computeDelta', () => {
@@ -189,6 +213,163 @@ describe('computeDelta', () => {
   })
 })
 
+/**
+ * The same classification per project (spec §4): each project's own findings
+ * and its own grades, plus the two states the rollup cannot express — a project
+ * this change added, and one it removed.
+ */
+describe('computeDelta over projects', () => {
+  it('reports each project’s own findings and grades, and every project either side had', () => {
+    const added = identified({ file: 'packages/web/a.ts', project: 'packages/web', anchor: 'new' })
+    const gone = identified({ file: 'packages/api/b.ts', project: 'packages/api', anchor: 'gone' })
+
+    const delta = computeDelta(
+      input({
+        baseFindings: [gone],
+        headFindings: [added],
+        baseProjects: [project('packages/api', graded('F')), project('packages/web', graded('A'))],
+        headProjects: [project('packages/api', graded('A')), project('packages/web', graded('F'))],
+      }),
+    )
+
+    expect(delta.projects.map((entry) => entry.path)).toEqual(['packages/api', 'packages/web'])
+    expect(projectMovement(delta, 'packages/web')).toMatchObject({
+      churn: 'none',
+      newFindings: 1,
+      resolvedFindings: 0,
+    })
+    expect(projectMovement(delta, 'packages/api')).toMatchObject({
+      churn: 'none',
+      newFindings: 0,
+      resolvedFindings: 1,
+    })
+    // Eight states per project, on that project's grades — not the rollup's.
+    expect(projectMovement(delta, 'packages/web')?.categories).toHaveLength(8)
+    expect(movement(projectMovement(delta, 'packages/web')?.categories ?? [], 'lint')).toEqual({
+      category: 'lint',
+      base: { status: 'graded', grade: 'A' },
+      head: { status: 'graded', grade: 'F' },
+      newFindings: 1,
+      resolvedFindings: 0,
+    })
+  })
+
+  /**
+   * Spec §4's required case: `git mv` across a project boundary is the same
+   * finding with a new attribution. The rollup already knows that (identity is
+   * path-based and the rename is remapped first), and neither project may
+   * invent churn out of it — the source did not fix anything and the target did
+   * not break anything.
+   */
+  it('moves a finding across projects without churning either one', () => {
+    const before = identified({
+      file: 'packages/api/moved.ts',
+      project: 'packages/api',
+      anchor: 'debugger',
+    })
+    const after = identified({
+      file: 'packages/web/moved.ts',
+      project: 'packages/web',
+      anchor: 'debugger',
+    })
+
+    const delta = computeDelta(
+      input({
+        baseFindings: [before],
+        headFindings: [after],
+        renames: new Map([['packages/api/moved.ts', 'packages/web/moved.ts']]),
+        baseProjects: [project('packages/api', graded('F')), project('packages/web', graded('A'))],
+        headProjects: [project('packages/api', graded('A')), project('packages/web', graded('F'))],
+      }),
+    )
+
+    expect(delta.newFindings).toEqual([])
+    expect(delta.resolvedFindings).toEqual([])
+    expect(delta.unchangedCount).toBe(1)
+    expect(
+      delta.projects.map((entry) => [entry.path, entry.newFindings, entry.resolvedFindings]),
+    ).toEqual([
+      ['packages/api', 0, 0],
+      ['packages/web', 0, 0],
+    ])
+    // What did move is where the finding counts, which is the two grades.
+    expect(movedGrades(delta)).toEqual([
+      ['packages/api', 'F', 'A'],
+      ['packages/web', 'A', 'F'],
+    ])
+  })
+
+  it('labels a project only head has as added, with its findings new', () => {
+    const planted = identified({
+      file: 'packages/new/a.ts',
+      project: 'packages/new',
+      anchor: 'new',
+    })
+
+    const delta = computeDelta(
+      input({
+        headFindings: [planted],
+        baseProjects: [project('packages/web', graded('A'))],
+        headProjects: [project('packages/web', graded('A')), project('packages/new', graded('F'))],
+      }),
+    )
+
+    expect(projectMovement(delta, 'packages/new')).toMatchObject({
+      churn: 'added',
+      newFindings: 1,
+      resolvedFindings: 0,
+    })
+    // The gate reads the head state; the base state says why there is no before.
+    expect(
+      movement(projectMovement(delta, 'packages/new')?.categories ?? [], 'lint'),
+    ).toMatchObject({
+      base: { status: 'not-assessed', reason: PROJECT_ADDED_REASON },
+      head: { status: 'graded', grade: 'F' },
+    })
+  })
+
+  it('labels a project only the base had as removed, so its findings are not fixes', () => {
+    const gone = identified({ file: 'packages/old/a.ts', project: 'packages/old', anchor: 'gone' })
+
+    const delta = computeDelta(
+      input({
+        baseFindings: [gone],
+        baseProjects: [project('packages/old', graded('F')), project('packages/web', graded('A'))],
+        headProjects: [project('packages/web', graded('A'))],
+      }),
+    )
+
+    expect(projectMovement(delta, 'packages/old')).toMatchObject({
+      churn: 'removed',
+      newFindings: 0,
+      resolvedFindings: 1,
+    })
+    expect(
+      movement(projectMovement(delta, 'packages/old')?.categories ?? [], 'lint'),
+    ).toMatchObject({
+      base: { status: 'graded', grade: 'F' },
+      head: { status: 'not-assessed', reason: PROJECT_REMOVED_REASON },
+    })
+    // Still resolved in the rollup: the finding really is gone from head.
+    expect(delta.resolvedFindings).toHaveLength(1)
+  })
+
+  /** The root project turning into a workspace shell is churn of `.`, like any other. */
+  it('treats the root becoming a workspace shell as the root project being removed', () => {
+    const delta = computeDelta(
+      input({
+        baseProjects: [project('.', graded('A'))],
+        headProjects: [project('packages/web', graded('A'))],
+      }),
+    )
+
+    expect(delta.projects.map((entry) => [entry.path, entry.churn])).toEqual([
+      ['.', 'removed'],
+      ['packages/web', 'added'],
+    ])
+  })
+})
+
 describe('remapRenames', () => {
   it('leaves findings in unrenamed files exactly as they were', () => {
     const finding = identified({ file: 'src/a.js' })
@@ -274,6 +455,18 @@ function movement(
   category: Category,
 ): (typeof movements)[number] | undefined {
   return movements.find((entry) => entry.category === category)
+}
+
+/** `[project, base lint, head lint]` for every project whose lint grade moved. */
+function movedGrades(delta: DeltaResult): (string | undefined)[][] {
+  return delta.projects
+    .map((entry) => [entry.path, movement(entry.categories, 'lint')] as const)
+    .filter(([, lint]) => stateOf(lint?.base) !== stateOf(lint?.head))
+    .map(([path, lint]) => [path, stateOf(lint?.base), stateOf(lint?.head)])
+}
+
+function stateOf(state: CategoryState | undefined): string | undefined {
+  return state === undefined || state.status !== 'graded' ? state?.status : state.grade
 }
 
 function line(startLine: number) {

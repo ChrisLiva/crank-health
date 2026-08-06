@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { computeDelta } from '../src/core/delta.ts'
+import { ROOT_PROJECT, inventoryOf } from '../src/core/discover.ts'
 import { computeAnchors } from '../src/core/fingerprint.ts'
-import type { Finding } from '../src/core/types.ts'
+import type { Category, CategoryState, Finding, Grade } from '../src/core/types.ts'
 import { buildAgentTasks, renderAgentMarkdown } from '../src/render/agent-md.ts'
 import type { PrDelta, Report } from '../src/render/json.ts'
 import { renderReportMarkdown } from '../src/render/report-md.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
-import { allGraded, makeFinding, makeReport } from './factories.ts'
+import { allGraded, allNotAssessed, makeFinding, makeProjectScan, makeReport } from './factories.ts'
 
 /**
  * What the three renderers do with a delta, driven by synthetic reports so each
@@ -47,6 +48,11 @@ const RESOLVED = identified({
   message: 'unused variable',
 })
 
+/** A project graded in the one category these tests drive. */
+function graded(grade: Grade): Record<Category, CategoryState> {
+  return { ...allNotAssessed(), lint: { status: 'graded', grade } }
+}
+
 /** A stayed-put finding, so the report has one that is nobody's business here. */
 const UNCHANGED = identified({ anchor: 'old debt', file: 'src/old.js', rule: 'no-debugger' })
 
@@ -58,6 +64,8 @@ function prReport(): Report {
     touchedLines: new Map([['src/touched.js', new Set([2])]]),
     baseCategories: allGraded('B'),
     headCategories: allGraded('F'),
+    baseProjects: [{ path: ROOT_PROJECT, categories: allGraded('B') }],
+    headProjects: [{ path: ROOT_PROJECT, categories: allGraded('F') }],
   })
   return makeReport({
     delta: { ...delta, baseRef: 'main', mergeBase: 'abcdef0123456789' } satisfies PrDelta,
@@ -65,6 +73,116 @@ function prReport(): Report {
     findings: [ON_DIFF, ELSEWHERE, UNCHANGED],
   })
 }
+
+/**
+ * The same delta over a workspace: one package this change added, one it
+ * removed, one it moved, and one it left alone. Every finding is attributed, so
+ * each project's counts are its own.
+ */
+function monoPrReport(): Report {
+  const added = { ...ON_DIFF, project: 'packages/api' }
+  const moved = { ...ELSEWHERE, project: 'packages/web' }
+  const gone = { ...RESOLVED, project: 'packages/legacy' }
+
+  const delta = computeDelta({
+    baseFindings: [gone, UNCHANGED],
+    headFindings: [added, moved, UNCHANGED],
+    renames: new Map(),
+    touchedLines: new Map([['src/touched.js', new Set([2])]]),
+    baseCategories: allGraded('B'),
+    headCategories: allGraded('F'),
+    baseProjects: [
+      { path: 'packages/legacy', categories: graded('F') },
+      { path: 'packages/quiet', categories: graded('A') },
+      { path: 'packages/web', categories: graded('B') },
+    ],
+    headProjects: [
+      { path: 'packages/api', categories: graded('F') },
+      { path: 'packages/quiet', categories: graded('A') },
+      { path: 'packages/web', categories: graded('F') },
+    ],
+  })
+  return makeReport({
+    delta: { ...delta, baseRef: 'main', mergeBase: 'abcdef0123456789' } satisfies PrDelta,
+    categories: allGraded('F'),
+    findings: [added, moved, UNCHANGED],
+    projects: ['packages/api', 'packages/quiet', 'packages/web'].map((path) =>
+      makeProjectScan({
+        project: {
+          path,
+          manifests: [`${path}/package.json`],
+          languages: ['js-ts'],
+          files: inventoryOf([`${path}/index.js`]),
+        },
+      }),
+    ),
+  })
+}
+
+describe('the per-project delta', () => {
+  const artifacts = { markdown: '/out/report.md', agent: '/out/agent.md', json: '/out/report.json' }
+
+  it('carries every project’s movement in report.json, labelled', () => {
+    const projects = monoPrReport().delta?.projects ?? []
+    expect(
+      projects.map((project) => [
+        project.path,
+        project.churn,
+        project.newFindings,
+        project.resolvedFindings,
+      ]),
+    ).toEqual([
+      ['packages/api', 'added', 1, 0],
+      ['packages/legacy', 'removed', 0, 1],
+      ['packages/quiet', 'none', 0, 0],
+      ['packages/web', 'none', 1, 0],
+    ])
+  })
+
+  it('names the projects that moved in the terminal summary and counts the rest', () => {
+    const output = renderTerminal(monoPrReport(), artifacts, { color: false })
+    expect(output).toContain('packages/api     project added · +1 new · lint not assessed → F')
+    expect(output).toContain(
+      'packages/legacy  project removed · -1 resolved · lint F → not assessed',
+    )
+    expect(output).toContain('packages/web     +1 new · lint B → F')
+    expect(output).toContain('1 other project unchanged')
+    // The one that did not move is counted, not listed — it is in the Projects
+    // block above with its grades, which is where its state belongs.
+    const [, delta = ''] = output.split('PR delta vs main')
+    expect(delta).not.toContain('packages/quiet')
+  })
+
+  it('tables the projects that moved in report.md and lists the rest', () => {
+    const markdown = renderReportMarkdown(monoPrReport())
+    expect(markdown).toContain('### Project movement')
+    expect(markdown).toContain(
+      '| packages/api | added by this change | 1 | 0 | lint not assessed → F |',
+    )
+    expect(markdown).toContain(
+      '| packages/legacy | removed by this change | 0 | 1 | lint F → not assessed |',
+    )
+    expect(markdown).toContain('| packages/web | scanned on both sides | 1 | 0 | lint B → F |')
+    expect(markdown).toContain('1 other project unchanged: `packages/quiet`.')
+  })
+
+  it('tells agent.md that a removed project’s findings are not fixes', () => {
+    const markdown = renderAgentMarkdown(monoPrReport())
+    expect(markdown).toContain('## Resolved by this change (1)')
+    expect(markdown).toContain(
+      '1 project (`packages/legacy`) was removed by this change: findings in it count as resolved ' +
+        'because the code is gone, not because it was fixed.',
+    )
+  })
+
+  /** A single-project repo is the delta above it; nothing here may show up in one. */
+  it('renders no project block at all for a single-project repo', () => {
+    const report = prReport()
+    expect(renderTerminal(report, artifacts, { color: false })).not.toContain('project added')
+    expect(renderReportMarkdown(report)).not.toContain('### Project movement')
+    expect(renderAgentMarkdown(report)).not.toContain('removed by this change')
+  })
+})
 
 describe('agent.md in PR mode', () => {
   const report = prReport()
@@ -129,6 +247,8 @@ describe('agent.md in PR mode', () => {
           touchedLines: new Map(),
           baseCategories: allGraded('F'),
           headCategories: allGraded('F'),
+          baseProjects: [{ path: ROOT_PROJECT, categories: allGraded('F') }],
+          headProjects: [{ path: ROOT_PROJECT, categories: allGraded('F') }],
         }),
         baseRef: 'main',
         mergeBase: 'abcdef0123456789',

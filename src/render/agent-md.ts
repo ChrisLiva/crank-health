@@ -350,9 +350,21 @@ function resolvedSection(delta: ReportDelta | undefined): string[] {
   }
   return [
     `## Resolved by this change (${delta.resolvedFindings.length})`,
-    'Context only — nothing to do here.',
+    `Context only — nothing to do here.${removedProjectNote(delta)}`,
     lines.join('\n'),
   ]
+}
+
+/**
+ * Why some of those findings are "resolved": their project is gone. Deleting a
+ * package resolves every finding in it, and an agent reading this list without
+ * that sentence would take the deletion for the work.
+ */
+function removedProjectNote(delta: ReportDelta): string {
+  const removed = delta.projects.filter((project) => project.churn === 'removed')
+  if (removed.length === 0) return ''
+  const paths = removed.map((project) => `\`${projectLabel(project.path)}\``).join(', ')
+  return ` ${plural(removed.length, 'project')} (${paths}) ${removed.length === 1 ? 'was' : 'were'} removed by this change: findings in ${removed.length === 1 ? 'it' : 'them'} count as resolved because the code is gone, not because it was fixed.`
 }
 
 /**

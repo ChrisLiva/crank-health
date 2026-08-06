@@ -1,8 +1,17 @@
 import pc from 'picocolors'
 import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
-import { CATEGORY_LABELS, percent, projectLabel, rootShellNote, stateLabel } from './display.ts'
-import type { Report, ReportDelta, ReportProject } from './json.ts'
+import {
+  CATEGORY_LABELS,
+  hasProjectMovement,
+  movedCategories,
+  percent,
+  plural,
+  projectLabel,
+  rootShellNote,
+  stateLabel,
+} from './display.ts'
+import type { Report, ReportDelta, ReportProject, ReportProjectMovement } from './json.ts'
 
 /**
  * The terminal summary (spec §9): every category's grade, then the findings
@@ -113,7 +122,40 @@ function deltaLines(delta: ReportDelta, color: Colors): string[] {
       `  ${CATEGORY_LABELS[movement.category].padEnd(13)} ${stateLabel(movement.base)} → ${stateLabel(movement.head)}`,
     )
   }
+  return [...lines, ...projectDeltaLines(delta, color)]
+}
+
+/**
+ * Which projects this change moved, under the delta it adds up to.
+ *
+ * Only the ones that moved get a line — a package this change did not touch has
+ * nothing to say here — and the rest are counted in one. A single-project repo
+ * *is* the delta above, so it renders nothing at all.
+ */
+function projectDeltaLines(delta: ReportDelta, color: Colors): string[] {
+  if (delta.projects.length < 2) return []
+  const moved = delta.projects.filter((project) => hasProjectMovement(project))
+  if (moved.length === 0) {
+    return [color.dim(`  every project unchanged (${delta.projects.length})`)]
+  }
+
+  const width = Math.max(...moved.map((project) => projectLabel(project.path).length))
+  const lines = moved.map(
+    (project) =>
+      `  ${projectLabel(project.path).padEnd(width)}  ${projectMovement(project, color)}`,
+  )
+  const still = delta.projects.length - moved.length
+  if (still > 0) lines.push(color.dim(`  ${plural(still, 'other project')} unchanged`))
   return lines
+}
+
+/** `project added · +1 new · lint not assessed → F` — what moved, in order. */
+function projectMovement(project: ReportProjectMovement, color: Colors): string {
+  const parts: string[] = []
+  if (project.churn !== 'none') parts.push(color.bold(`project ${project.churn}`))
+  if (project.newFindings > 0) parts.push(color.red(`+${project.newFindings} new`))
+  if (project.resolvedFindings > 0) parts.push(color.green(`-${project.resolvedFindings} resolved`))
+  return [...parts, ...movedCategories(project)].join(color.dim(' · '))
 }
 
 /**

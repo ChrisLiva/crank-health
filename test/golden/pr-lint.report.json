@@ -285,6 +285,120 @@
         "resolvedFindings": 0
       }
     ],
+    "projects": [
+      {
+        "path": ".",
+        "churn": "none",
+        "newFindings": 1,
+        "resolvedFindings": 1,
+        "categories": [
+          {
+            "category": "security",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          },
+          {
+            "category": "types",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          },
+          {
+            "category": "dead-code",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          },
+          {
+            "category": "complexity",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          },
+          {
+            "category": "duplication",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          },
+          {
+            "category": "lint",
+            "base": {
+              "status": "graded",
+              "grade": "F"
+            },
+            "head": {
+              "status": "graded",
+              "grade": "F"
+            },
+            "newFindings": 1,
+            "resolvedFindings": 1
+          },
+          {
+            "category": "format",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          },
+          {
+            "category": "test-quality",
+            "base": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "head": {
+              "status": "not-assessed",
+              "reason": "not selected by --only"
+            },
+            "newFindings": 0,
+            "resolvedFindings": 0
+          }
+        ]
+      }
+    ],
     "newFindings": [
       {
         "id": "9dfd6bf3f09dce18",

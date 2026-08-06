@@ -1,4 +1,4 @@
-import type { DeltaResult } from '../core/delta.ts'
+import type { CategoryMovement, DeltaResult, ProjectChurn } from '../core/delta.ts'
 import type { RootShell } from '../core/discover.ts'
 import { languageOf } from '../core/discover.ts'
 import type { RunRecord } from '../core/orchestrator.ts'
@@ -100,6 +100,11 @@ export interface ReportDelta {
    * {@link CategoryMovement}.
    */
   readonly categories: readonly ReportCategoryMovement[]
+  /**
+   * The same movement per project, ordered by path — every project either side
+   * of the comparison had, including the ones this change added or removed.
+   */
+  readonly projects: readonly ReportProjectMovement[]
   /** Findings present at head and not at the merge-base. */
   readonly newFindings: readonly ReportNewFinding[]
   /** Findings present at the merge-base and gone at head, at their head paths. */
@@ -121,6 +126,19 @@ export interface ReportCategoryMovement {
   readonly head: CategoryState
   readonly newFindings: number
   readonly resolvedFindings: number
+}
+
+/**
+ * One project's half of the delta; see {@link ProjectMovement}. `churn` is
+ * `added` for a project only head has, `removed` for one only the base had, and
+ * `none` for a project both sides scanned however much moved inside it.
+ */
+export interface ReportProjectMovement {
+  readonly path: string
+  readonly churn: ProjectChurn
+  readonly newFindings: number
+  readonly resolvedFindings: number
+  readonly categories: readonly ReportCategoryMovement[]
 }
 
 /** A finding in {@link ReportDelta.newFindings}: the schema plus the flag. */
@@ -410,18 +428,29 @@ function orderedDelta(delta: PrDelta): ReportDelta {
       resolved: delta.resolvedFindings.length,
       unchanged: delta.unchangedCount,
     },
-    categories: delta.categories.map((movement) => ({
-      category: movement.category,
-      base: orderedState(movement.base),
-      head: orderedState(movement.head),
-      newFindings: movement.newFindings,
-      resolvedFindings: movement.resolvedFindings,
+    categories: delta.categories.map((movement) => orderedMovement(movement)),
+    projects: delta.projects.map((project) => ({
+      path: project.path,
+      churn: project.churn,
+      newFindings: project.newFindings,
+      resolvedFindings: project.resolvedFindings,
+      categories: project.categories.map((movement) => orderedMovement(movement)),
     })),
     newFindings: delta.newFindings.map((entry) => ({
       ...orderedFinding(entry.finding),
       touchedLine: entry.touchedLine,
     })),
     resolvedFindings: delta.resolvedFindings.map((finding) => orderedFinding(finding)),
+  }
+}
+
+function orderedMovement(movement: CategoryMovement): ReportCategoryMovement {
+  return {
+    category: movement.category,
+    base: orderedState(movement.base),
+    head: orderedState(movement.head),
+    newFindings: movement.newFindings,
+    resolvedFindings: movement.resolvedFindings,
   }
 }
 

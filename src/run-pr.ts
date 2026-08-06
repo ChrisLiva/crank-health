@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { DeltaProject } from './core/delta.ts'
 import { computeDelta } from './core/delta.ts'
 import {
   addWorktree,
@@ -11,6 +12,7 @@ import {
   resolveCommit,
 } from './core/git.ts'
 import type { Category, CategoryState } from './core/types.ts'
+import type { ProjectScan } from './render/json.ts'
 import { buildReport } from './render/json.ts'
 import type { HealthScanOptions, HealthScanResult } from './run.ts'
 import {
@@ -124,6 +126,8 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
       touchedLines: diff.touchedLines,
       baseCategories: headOnlyDeepNote(baseScan.categories, options.deep === true),
       headCategories: headScan.categories,
+      baseProjects: deltaProjects(baseScan.projects, options.deep === true),
+      headProjects: deltaProjects(headScan.projects, false),
     })
 
     return await writeArtifacts(
@@ -182,6 +186,23 @@ function headOnlyDeepNote(
       reason: 'deep mutation testing runs on the head commit only',
     },
   }
+}
+
+/**
+ * One scan's projects as the delta compares them: path and grades, and nothing
+ * else it has no use for. A project the other side does not have is the churn
+ * {@link ProjectMovement} labels — which is why both lists go in whole rather
+ * than being matched up here.
+ *
+ * @param baseOfDeepRun whether these are the base side's projects in a `--deep`
+ * run; see {@link headOnlyDeepNote}, which applies per project for the same
+ * reason it applies to the rollup.
+ */
+function deltaProjects(projects: readonly ProjectScan[], baseOfDeepRun: boolean): DeltaProject[] {
+  return projects.map((scan) => ({
+    path: scan.project.path,
+    categories: headOnlyDeepNote(scan.categories, baseOfDeepRun),
+  }))
 }
 
 async function subdir(scratch: string, name: string): Promise<string> {

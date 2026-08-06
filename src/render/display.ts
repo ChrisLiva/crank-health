@@ -1,6 +1,6 @@
 import { ROOT_PROJECT } from '../core/discover.ts'
 import type { Category, CategoryState, Finding } from '../core/types.ts'
-import type { ReportRootShell } from './json.ts'
+import type { ReportProjectMovement, ReportRootShell } from './json.ts'
 
 /**
  * The vocabulary every renderer shares: how a category, a grade state and a
@@ -36,6 +36,31 @@ export const TOUCHED_TAG = '[in-diff]'
  */
 export function projectLabel(path: string): string {
   return path === ROOT_PROJECT ? 'repo root' : path
+}
+
+/**
+ * True when a project has anything to say about a change: it was added or
+ * removed, it gained or lost a finding, or one of its grades moved. The
+ * renderers all show the projects that moved and collapse the rest, so what
+ * counts as movement is decided once, here.
+ */
+export function hasProjectMovement(project: ReportProjectMovement): boolean {
+  return (
+    project.churn !== 'none' ||
+    project.newFindings > 0 ||
+    project.resolvedFindings > 0 ||
+    movedCategories(project).length > 0
+  )
+}
+
+/** `lint B → F` for each of a project's categories whose state is not the one it was. */
+export function movedCategories(project: ReportProjectMovement): string[] {
+  return project.categories
+    .filter((movement) => stateLabel(movement.base) !== stateLabel(movement.head))
+    .map(
+      (movement) =>
+        `${CATEGORY_LABELS[movement.category]} ${stateLabel(movement.base)} → ${stateLabel(movement.head)}`,
+    )
 }
 
 /**

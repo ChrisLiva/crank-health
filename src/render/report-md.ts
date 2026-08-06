@@ -17,7 +17,9 @@ import {
   ADVISORY_TAG,
   CATEGORY_LABELS,
   TOUCHED_TAG,
+  hasProjectMovement,
   location,
+  movedCategories,
   percent,
   plural,
   projectLabel,
@@ -166,8 +168,54 @@ function deltaSection(delta: ReportDelta | undefined, limit: number): string[] {
     )
   }
 
+  blocks.push(...projectMovementBlock(delta))
   blocks.push(...findingList('New findings', delta.newFindings, limit))
   blocks.push(...findingList('Resolved findings', delta.resolvedFindings, limit))
+  return blocks
+}
+
+/**
+ * Which projects the change moved, and how — the delta's answer to the
+ * `## Projects` section below it.
+ *
+ * Only the projects that moved get a row: in a repo of thirty packages the ones
+ * a change did not touch are the noise the table exists to remove, so they are
+ * counted in a sentence under it. A project this change added or removed always
+ * counts as moved, and says which — its findings are all new or all resolved,
+ * and "resolved" under a deleted package does not mean fixed.
+ *
+ * A single-project repo is the movement table above, restated; it renders
+ * nothing here.
+ */
+function projectMovementBlock(delta: ReportDelta): string[] {
+  if (delta.projects.length < 2) return []
+  const moved = delta.projects.filter((project) => hasProjectMovement(project))
+  const still = delta.projects.filter((project) => !hasProjectMovement(project))
+  if (moved.length === 0) {
+    return ['### Project movement', `No project moved: all ${still.length} are as they were.`]
+  }
+
+  const blocks = [
+    '### Project movement',
+    table(
+      ['Project', 'State', 'New', 'Resolved', 'Grades that moved'],
+      moved.map((project) =>
+        row([
+          projectLabel(project.path),
+          project.churn === 'none' ? 'scanned on both sides' : `${project.churn} by this change`,
+          String(project.newFindings),
+          String(project.resolvedFindings),
+          movedCategories(project).join(', ') || '—',
+        ]),
+      ),
+    ),
+  ]
+  if (still.length > 0) {
+    blocks.push(
+      `${plural(still.length, 'other project')} unchanged: ` +
+        `${still.map((project) => `\`${projectLabel(project.path)}\``).join(', ')}.`,
+    )
+  }
   return blocks
 }
 
