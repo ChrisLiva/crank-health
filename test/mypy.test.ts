@@ -235,7 +235,11 @@ describe('mypyRunner.detect', () => {
     return mypyRunner.detect(
       repoDetectContext(root, {
         all: files,
-        byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')) },
+        byLanguage: {
+          'js-ts': [],
+          python: files.filter((file) => file.endsWith('.py')),
+          csharp: [],
+        },
       }),
     )
   }
@@ -330,7 +334,10 @@ describe('mypyRunner.detect', () => {
     await write('services/api/app.py', 'x = 1\n')
 
     const files = ['pyproject.toml', 'services/api/app.py', 'services/api/pyproject.toml']
-    const inventory = { all: files, byLanguage: { 'js-ts': [], python: ['services/api/app.py'] } }
+    const inventory = {
+      all: files,
+      byLanguage: { 'js-ts': [], python: ['services/api/app.py'], csharp: [] },
+    }
     const project = partitionProjects(inventory).find(
       (candidate) => candidate.path === 'services/api',
     )

@@ -7,6 +7,7 @@ import {
   countPhysicalLines,
   discoverFiles,
   discoverProjects,
+  inventoryOf as coreInventoryOf,
   isExcluded,
   languageOf,
   nearestProjectMap,
@@ -121,6 +122,31 @@ describe('discoverFiles', () => {
   })
 })
 
+describe('discoverFiles and C# build output', () => {
+  it('drops C# files under bin/ and obj/, keeping other languages there', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-cs-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, 'src/App.cs', 'class App {}\n')
+      await plant(repo, 'bin/Debug/App.cs', 'class App {}\n')
+      await plant(repo, 'obj/Release/Gen.cs', 'class Gen {}\n')
+      await plant(repo, 'bin/cli.js', '#!/usr/bin/env node\n')
+      await plant(repo, 'bin/tool.py', 'x = 1\n')
+
+      const inventory = await discoverFiles(repo)
+
+      expect(inventory.all).not.toContain('bin/Debug/App.cs')
+      expect(inventory.all).not.toContain('obj/Release/Gen.cs')
+      expect(inventory.all).toContain('src/App.cs')
+      // The exclusion is C#-only: a JS package's bin/ is source, not MSBuild output.
+      expect(inventory.all).toContain('bin/cli.js')
+      expect(inventory.all).toContain('bin/tool.py')
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('languageOf', () => {
   it.each([
     ['a.js', 'js-ts'],
@@ -133,6 +159,8 @@ describe('languageOf', () => {
     ['a.cts', 'js-ts'],
     ['a.PY', 'python'],
     ['a.pyi', 'python'],
+    ['a.cs', 'csharp'],
+    ['A.CS', 'csharp'],
   ])('classifies %s as %s', (file, language) => {
     expect(languageOf(file)).toBe(language)
   })
@@ -145,16 +173,15 @@ describe('languageOf', () => {
   )
 })
 
+describe('inventoryOf', () => {
+  it('slices C# files into byLanguage, case-insensitively and in input order', () => {
+    expect(coreInventoryOf(['a.cs', 'B.CS', 'c.py']).byLanguage.csharp).toEqual(['a.cs', 'B.CS'])
+  })
+})
+
 /** The inventory shape discovery produces, from a hand-written file list. */
 function inventoryOf(files: readonly string[]): FileInventory {
-  const all = [...files].toSorted()
-  return {
-    all,
-    byLanguage: {
-      'js-ts': all.filter((file) => languageOf(file) === 'js-ts'),
-      python: all.filter((file) => languageOf(file) === 'python'),
-    },
-  }
+  return coreInventoryOf([...files].toSorted())
 }
 
 function paths(projects: readonly Project[]): string[] {
@@ -292,6 +319,33 @@ describe('partitionProjects', () => {
     expect(projectAt(projects, '.').languages).toEqual(['js-ts', 'python'])
   })
 
+  it('makes a project of a directory holding a .csproj, whatever its case', () => {
+    const projects = partitionProjects(inventoryOf(['src/App.CSPROJ', 'src/Program.cs']))
+
+    expect(paths(projects)).toEqual(['src'])
+    expect(projectAt(projects, 'src').manifests).toEqual(['src/App.CSPROJ'])
+    expect(projectAt(projects, 'src').languages).toEqual(['csharp'])
+  })
+
+  it('keeps the known manifest names case-sensitive', () => {
+    const projects = partitionProjects(inventoryOf(['Package.json', 'a.cs']))
+
+    expect(paths(projects)).toEqual(['.'])
+    // `Package.json` declares nothing; the language comes from the inventory alone.
+    expect(projectAt(projects, '.').manifests).toEqual([])
+    expect(projectAt(projects, '.').languages).toEqual(['csharp'])
+  })
+
+  it('makes one project owning both languages from a package.json beside a .csproj', () => {
+    const projects = partitionProjects(
+      inventoryOf(['pkg/package.json', 'pkg/App.csproj', 'pkg/a.ts', 'pkg/a.cs']),
+    )
+
+    expect(paths(projects)).toEqual(['pkg'])
+    expect(projectAt(projects, 'pkg').manifests).toEqual(['pkg/App.csproj', 'pkg/package.json'])
+    expect(projectAt(projects, 'pkg').languages).toEqual(['js-ts', 'csharp'])
+  })
+
   it('is one root project for a repo with no manifest at all', () => {
     const projects = partitionProjects(inventoryOf(['src/a.js', 'src/b.py']))
 
@@ -368,6 +422,62 @@ describe('discoverProjects', () => {
       expect(discovery.rootShell?.declaredBy).toEqual(['pyproject.toml'])
     } finally {
       await rm(uvRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('records a root solution file beside a workspaces declaration, byte-ordered', async () => {
+    const slnRoot = await mkdtemp(join(tmpdir(), 'crank-projects-sln-'))
+    try {
+      await plant(slnRoot, 'package.json', '{ "workspaces": ["pkg"] }')
+      const files = inventoryOf(['App.sln', 'package.json', 'pkg/package.json', 'pkg/index.js'])
+
+      const discovery = await discoverProjects(slnRoot, files)
+
+      expect(discovery.rootShell?.declaredBy).toEqual(['App.sln', 'package.json'])
+      expect(paths(discovery.projects)).toEqual(['pkg'])
+    } finally {
+      await rm(slnRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('records a lone root solution file without making it a project', async () => {
+    const slnRoot = await mkdtemp(join(tmpdir(), 'crank-projects-sln-lone-'))
+    try {
+      const files = inventoryOf(['App.sln', 'pkg/package.json', 'pkg/index.js'])
+
+      const discovery = await discoverProjects(slnRoot, files)
+
+      expect(discovery.rootShell?.declaredBy).toEqual(['App.sln'])
+      expect(paths(discovery.projects)).toEqual(['pkg'])
+    } finally {
+      await rm(slnRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('records a .slnx solution file whatever its case', async () => {
+    const slnRoot = await mkdtemp(join(tmpdir(), 'crank-projects-slnx-'))
+    try {
+      const files = inventoryOf(['Thing.SLNX', 'pkg/package.json', 'pkg/index.js'])
+
+      const discovery = await discoverProjects(slnRoot, files)
+
+      expect(discovery.rootShell?.declaredBy).toEqual(['Thing.SLNX'])
+    } finally {
+      await rm(slnRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('ignores a solution file below the root', async () => {
+    const slnRoot = await mkdtemp(join(tmpdir(), 'crank-projects-sln-nested-'))
+    try {
+      const files = inventoryOf(['nested/App.sln', 'pkg/package.json', 'pkg/index.js'])
+
+      const discovery = await discoverProjects(slnRoot, files)
+
+      expect(discovery.rootShell?.declaredBy).toEqual([])
+      expect(paths(discovery.projects)).toEqual(['pkg'])
+    } finally {
+      await rm(slnRoot, { recursive: true, force: true })
     }
   })
 

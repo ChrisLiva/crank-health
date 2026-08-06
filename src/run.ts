@@ -34,7 +34,7 @@ import type {
   RepoContext,
   ToolMetrics,
 } from './core/types.ts'
-import { CATEGORIES, toCategoryState } from './core/types.ts'
+import { CATEGORIES, LANGUAGES, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
 import type { ProjectScan, Report, ResolvedRun } from './render/json.ts'
 import { buildReport, serializeReport } from './render/json.ts'
@@ -511,7 +511,7 @@ async function gradeAll(
   selected: readonly Category[],
   deep: boolean,
 ): Promise<Record<Category, CategoryState>> {
-  const sourceFiles = [...scope.files.byLanguage['js-ts'], ...scope.files.byLanguage.python]
+  const sourceFiles = LANGUAGES.flatMap((language) => scope.files.byLanguage[language])
   const kloc = (await countPhysicalLines(repoRoot, sourceFiles)) / 1000
 
   const states = {} as Record<Category, CategoryState>

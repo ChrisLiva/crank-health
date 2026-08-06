@@ -118,14 +118,14 @@ export type PendingFinding = Omit<Finding, 'id'> & {
   readonly anchor?: string
 }
 
-/** Languages with an adapter in v1. */
-export type Language = 'js-ts' | 'python'
+/** Languages crank-health has a vocabulary for. */
+export type Language = 'js-ts' | 'python' | 'csharp'
 
 /**
  * Canonical language order, matching the adapter order in `adapters/index.ts`.
  * Every stable sort and every rendered list of languages uses it.
  */
-export const LANGUAGES: readonly Language[] = ['js-ts', 'python']
+export const LANGUAGES: readonly Language[] = ['js-ts', 'python', 'csharp']
 
 /** Cross-language runners (jscpd, gitleaks, …) live under this pseudo-language. */
 export type RunnerScope = Language | 'common'

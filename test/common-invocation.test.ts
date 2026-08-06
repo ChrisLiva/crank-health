@@ -1,10 +1,15 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
 import { banditRunner } from '../src/adapters/common/bandit.ts'
 import { gitleaksRunner, invocationArgs as gitleaksArgs } from '../src/adapters/common/gitleaks.ts'
-import { invocationArgs as jscpdArgs, jscpdRunner } from '../src/adapters/common/jscpd.ts'
+import {
+  JSCPD_TOOL,
+  invocationArgs as jscpdArgs,
+  jscpdRunner,
+} from '../src/adapters/common/jscpd.ts'
 import { commonAdapter } from '../src/adapters/common/index.ts'
 import {
   invocationArgs as opengrepArgs,
@@ -19,6 +24,8 @@ import {
 } from '../src/adapters/common/osv-scanner.ts'
 import { zizmorRunner } from '../src/adapters/common/zizmor.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
+import type { ReportTool } from '../src/render/json.ts'
+import { runHealthScan } from '../src/run.ts'
 
 /**
  * The command lines, asserted without running anything.
@@ -100,6 +107,25 @@ describe('zero footprint, in the arguments', () => {
     expect(ignoreOf([])).not.toContain('packages')
   })
 
+  it('asks jscpd for exactly the graded languages, C# included', () => {
+    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'))
+    expect(args[args.indexOf('--format') + 1]).toBe('javascript,jsx,typescript,tsx,python,csharp')
+  })
+
+  /**
+   * `bin/` and `obj/` are MSBuild output. jscpd walks the tree itself rather
+   * than taking our inventory, so it cannot apply discovery's C#-only rule —
+   * these globs are language-blind by design, the documented trade: a JS
+   * package's `bin/cli.js` stays in the inventory and out of the duplication
+   * measurement.
+   */
+  it('keeps jscpd out of C# build output directories', () => {
+    const args = jscpdArgs(REPO, SCRATCH)
+    const ignore = args[args.indexOf('--ignore') + 1] ?? ''
+    expect(ignore).toContain('**/bin/**')
+    expect(ignore).toContain('**/obj/**')
+  })
+
   it('writes gitleaks’ report into the scratch dir, redacted', () => {
     const args = gitleaksArgs(REPO, join(SCRATCH, 'gitleaks.json'))
     expect(args[0]).toBe('dir')
@@ -116,6 +142,60 @@ describe('zero footprint, in the arguments', () => {
     expect(args).not.toContain('fix')
     expect(args[args.indexOf('--output-file') + 1]).toBe('/scratch/osv-scanner.json')
   })
+})
+
+/** A throwaway git repo (hermetic identity), scanned with `--out` kept outside. */
+async function scanTemp(files: Readonly<Record<string, string>>): Promise<ReportTool[]> {
+  const repo = await mkdtemp(join(tmpdir(), 'crank-jscpd-cs-'))
+  const out = await mkdtemp(join(tmpdir(), 'crank-jscpd-cs-out-'))
+  try {
+    await execa('git', ['init', '--quiet'], {
+      cwd: repo,
+      env: { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
+      extendEnv: true,
+    })
+    for (const [file, contents] of Object.entries(files)) {
+      // eslint-disable-next-line no-await-in-loop
+      await writeFile(join(repo, file), contents, 'utf8')
+    }
+    const scan = await runHealthScan({ path: repo, out })
+    return scan.report.tools.filter((tool) => tool.tool === JSCPD_TOOL)
+  } finally {
+    await rm(repo, { recursive: true, force: true })
+    await rm(out, { recursive: true, force: true })
+  }
+}
+
+describe('jscpd on a C#-only tree', () => {
+  /** Roomy: a cold npx cache fetches the pinned jscpd first. */
+  const SCAN_TIMEOUT_MS = 180_000
+
+  it(
+    'measures a tree of only .cs files instead of standing down',
+    async () => {
+      const runs = await scanTemp({ 'Program.cs': 'class Program { static void Main() {} }\n' })
+
+      expect(runs.length).toBeGreaterThan(0)
+      expect(runs.map((run) => run.state)).not.toContain('not-available')
+    },
+    SCAN_TIMEOUT_MS,
+  )
+
+  it(
+    'names all four languages when there is nothing to measure',
+    async () => {
+      const runs = await scanTemp({ 'README.md': '# nothing to measure\n' })
+
+      expect(runs.length).toBeGreaterThan(0)
+      for (const run of runs) {
+        expect(run.state).toBe('not-available')
+        expect(run.reason).toBe(
+          'no JavaScript, TypeScript, Python or C# files, so jscpd measured nothing',
+        )
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 })
 
 describe('osv-scanner degradation', () => {

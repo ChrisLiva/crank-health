@@ -59,14 +59,21 @@ export const JSCPD_RULE = 'jscpd/duplicate-block'
  * lockfile's inevitable self-similarity would then drive the duplication grade
  * of a repo whose *code* is fine.
  */
-const FORMATS = 'javascript,jsx,typescript,tsx,python'
+const FORMATS = 'javascript,jsx,typescript,tsx,python,csharp'
 
 /**
  * Directories excluded regardless of what the repo's `.gitignore` says. jscpd
  * honors `.gitignore` natively, which is most of spec §7's requirement; these
  * are the dependency and VCS directories a repo may have forgotten to ignore.
+ *
+ * `bin/` and `obj/` are MSBuild output. Unlike discovery's C#-only file rule,
+ * these two are language-blind — jscpd walks the tree itself instead of taking
+ * our inventory, so it cannot ask what language a file is before descending.
+ * That is the accepted trade: a JS package's `bin/cli.js` stays in the
+ * inventory but out of the duplication measurement.
  */
-const IGNORE_GLOBS = '**/.git/**,**/node_modules/**,**/.venv/**,**/venv/**,**/__pycache__/**'
+const IGNORE_GLOBS =
+  '**/.git/**,**/node_modules/**,**/.venv/**,**/venv/**,**/__pycache__/**,**/bin/**,**/obj/**'
 
 /** Where jscpd's own report lands, under the scratch dir. */
 const REPORT_DIRECTORY = 'jscpd'
@@ -98,7 +105,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       rawFiles: [],
       // See `bandit.ts`'s `NOTHING_TO_SCAN`: a repo with no source in it has no
       // duplication percentage, and "0%" would be a grade nobody measured.
-      reason: 'no JavaScript, TypeScript or Python files, so jscpd measured nothing',
+      reason: 'no JavaScript, TypeScript, Python or C# files, so jscpd measured nothing',
     }
   }
 
@@ -226,7 +233,7 @@ export function invocationArgs(
 
 /** Whether jscpd will look at this path at all — see {@link FORMATS}. */
 function isAnalyzable(file: string): boolean {
-  return /\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts|py|pyi)$/i.test(file)
+  return /\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts|py|pyi|cs)$/i.test(file)
 }
 
 /** One clone pair, as jscpd reports it. */

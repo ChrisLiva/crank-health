@@ -203,7 +203,7 @@ describe('detectPythonTool', () => {
   function context(files: string[]): DetectContext {
     return repoDetectContext(root, {
       all: files,
-      byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')) },
+      byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')), csharp: [] },
     })
   }
 
@@ -302,7 +302,7 @@ describe('detectPythonTool across a workspace', () => {
   function context(files: string[], path: string): DetectContext {
     const inventory = {
       all: files,
-      byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')) },
+      byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')), csharp: [] },
     }
     const project = partitionProjects(inventory).find((candidate) => candidate.path === path)
     if (project === undefined) throw new Error(`no project at ${path}`)

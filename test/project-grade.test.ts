@@ -156,6 +156,62 @@ describe('gradeProjects when the repo-spanning run failed too', () => {
   })
 })
 
+/**
+ * A C#-only package must be graded on its own C# KLOC. A source-file list that
+ * forgets a language grades density against zero measurable code, and
+ * `gradeDensity` reads that as unbounded density — F for a package whose one
+ * warning in two thousand lines is a rounding error.
+ */
+describe('gradeProjects on a C#-only project', () => {
+  const CS_TREE: Readonly<Record<string, number>> = {
+    'packages/cs/App.csproj': 1,
+    'packages/cs/Program.cs': 2000,
+  }
+
+  let csRoot: string
+
+  beforeAll(async () => {
+    csRoot = await mkdtemp(join(tmpdir(), 'crank-project-grade-cs-'))
+    for (const [file, lines] of Object.entries(CS_TREE)) {
+      // eslint-disable-next-line no-await-in-loop
+      await mkdir(join(csRoot, dirname(file)), { recursive: true })
+      // eslint-disable-next-line no-await-in-loop
+      await writeFile(join(csRoot, file), 'x\n'.repeat(lines), 'utf8')
+    }
+  })
+
+  afterAll(async () => {
+    await rm(csRoot, { recursive: true, force: true })
+  })
+
+  it('grades lint density on the project’s C# KLOC, not on zero', async () => {
+    const files = inventoryOf(Object.keys(CS_TREE).toSorted())
+    const graded = await gradeProjects(
+      { repoRoot: csRoot, files, scratch: csRoot, projects: partitionProjects(files) },
+      {
+        findings: sortFindings([
+          makeFinding({ file: 'packages/cs/Program.cs', project: 'packages/cs' }),
+        ]),
+        runs: [record('roslynator', 'lint', 'packages/cs')],
+        categories: Object.fromEntries(
+          CATEGORIES.map((category) => [category, { status: 'assessed' }]),
+        ) as Record<Category, CategoryOutcome>,
+        metrics: Object.fromEntries(CATEGORIES.map((category) => [category, {}])) as Record<
+          Category,
+          ToolMetrics
+        >,
+        warnings: [],
+      },
+      CATEGORIES,
+      false,
+    )
+
+    expect(graded.map((project) => project.project.path)).toEqual(['packages/cs'])
+    // One warning in 2000 lines is 0.5 weighted findings per KLOC → A.
+    expect(graded[0]?.categories.lint).toEqual({ status: 'graded', grade: 'A' })
+  })
+})
+
 function repo(): RepoContext {
   return {
     repoRoot,

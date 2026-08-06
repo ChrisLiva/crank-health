@@ -39,6 +39,7 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, Language>> = {
   '.cts': 'js-ts',
   '.py': 'python',
   '.pyi': 'python',
+  '.cs': 'csharp',
 }
 
 /** How many files we stat/read at once. */
@@ -61,7 +62,7 @@ export async function discoverFiles(repoRoot: string): Promise<FileInventory> {
   const listed = await gitListFiles(repoRoot)
 
   const candidates = [...new Set(listed)]
-    .filter((file) => file.length > 0 && !isExcluded(file))
+    .filter((file) => file.length > 0 && !isExcluded(file) && !isCsharpBuildOutput(file))
     .toSorted(compareFiles)
 
   const existing = await mapLimit(candidates, FS_CONCURRENCY, (file) =>
@@ -81,6 +82,26 @@ const PNPM_WORKSPACE = 'pnpm-workspace.yaml'
 const MANIFEST_LANGUAGE: Readonly<Record<string, Language>> = {
   [PACKAGE_JSON]: 'js-ts',
   [PYPROJECT_TOML]: 'python',
+}
+
+/** Manifests recognized by suffix (any stem, case-insensitive), not exact name. */
+const MANIFEST_SUFFIX_LANGUAGE: Readonly<Record<string, Language>> = {
+  '.csproj': 'csharp',
+}
+
+/**
+ * The language a manifest declares, or `undefined` for a non-manifest: the
+ * exact names first (case-sensitive, as npm and uv treat them), else the
+ * suffix table on the lowercased extension (MSBuild matches `*.csproj`
+ * case-insensitively).
+ */
+function manifestLanguageOf(file: string): Language | undefined {
+  const name = baseName(file)
+  const exact = MANIFEST_LANGUAGE[name]
+  if (exact !== undefined) return exact
+  const dot = name.lastIndexOf('.')
+  if (dot <= 0) return undefined
+  return MANIFEST_SUFFIX_LANGUAGE[name.slice(dot).toLowerCase()]
 }
 
 /** `[tool.uv.workspace]`, or any table under it. */
@@ -157,7 +178,7 @@ export function partitionProjects(files: FileInventory): readonly Project[] {
  */
 export function repoProject(files: FileInventory): Project {
   const manifests = files.all.filter(
-    (file) => MANIFEST_LANGUAGE[baseName(file)] !== undefined && directoryOf(file) === ROOT_PROJECT,
+    (file) => manifestLanguageOf(file) !== undefined && directoryOf(file) === ROOT_PROJECT,
   )
   return projectOf(ROOT_PROJECT, manifests, files.all)
 }
@@ -218,7 +239,7 @@ export function repoPath(directory: string, name: string): string {
 function manifestsByDirectory(files: readonly string[]): Map<string, readonly string[]> {
   const byDirectory = new Map<string, string[]>([[ROOT_PROJECT, []]])
   for (const file of files) {
-    if (MANIFEST_LANGUAGE[baseName(file)] === undefined) continue
+    if (manifestLanguageOf(file) === undefined) continue
     const directory = directoryOf(file)
     const found = byDirectory.get(directory)
     if (found === undefined) byDirectory.set(directory, [file])
@@ -238,7 +259,7 @@ function nearestCandidate(candidates: ReadonlyMap<string, unknown>, file: string
 
 function projectOf(path: string, manifests: readonly string[], files: readonly string[]): Project {
   const inventory = inventoryOf(files)
-  const declared = new Set(manifests.map((manifest) => MANIFEST_LANGUAGE[baseName(manifest)]))
+  const declared = new Set(manifests.map((manifest) => manifestLanguageOf(manifest)))
   return {
     path,
     manifests: manifests.toSorted(compareFiles),
@@ -256,6 +277,7 @@ export function inventoryOf(files: readonly string[]): FileInventory {
     byLanguage: {
       'js-ts': files.filter((file) => languageOf(file) === 'js-ts'),
       python: files.filter((file) => languageOf(file) === 'python'),
+      csharp: files.filter((file) => languageOf(file) === 'csharp'),
     },
   }
 }
@@ -279,6 +301,14 @@ async function workspaceDeclarations(
 
   const pyproject = await readText(repoRoot, PYPROJECT_TOML)
   if (pyproject !== undefined && UV_WORKSPACE_SECTION.test(pyproject)) found.push(PYPROJECT_TOML)
+
+  // A root solution file is Visual Studio's workspace declaration. Like the
+  // others its members are deliberately not read — it corroborates only.
+  for (const file of files.all) {
+    if (file.includes('/')) continue
+    const lower = file.toLowerCase()
+    if (lower.endsWith('.sln') || lower.endsWith('.slnx')) found.push(file)
+  }
 
   return found.toSorted(compareFiles)
 }
@@ -313,6 +343,18 @@ export function languageOf(file: string): Language | undefined {
 /** True when any path segment is on the hard exclusion list. */
 export function isExcluded(file: string): boolean {
   return file.split('/').some((segment) => EXCLUDED_SEGMENTS.includes(segment))
+}
+
+/**
+ * A C# file under a `bin/` or `obj/` segment is MSBuild output, never source.
+ * C#-only on purpose: a JS package's `bin/cli.js` or a Python tool's
+ * `bin/tool.py` is source living in a conventional directory name.
+ */
+function isCsharpBuildOutput(file: string): boolean {
+  return (
+    languageOf(file) === 'csharp' &&
+    file.split('/').some((segment) => segment === 'bin' || segment === 'obj')
+  )
 }
 
 /**
