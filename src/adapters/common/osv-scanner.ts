@@ -3,7 +3,7 @@ import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -97,8 +97,8 @@ export const osvScannerRunner: ToolRunner = {
  * itself (it carries the repo's own advisory ignores), so ownership here is a
  * provenance tag rather than a different command line.
  */
-function detectOsvScanner(repo: RepoContext): Promise<Detection | null> {
-  const configFiles = OSV_CONFIG_FILES.filter((file) => repo.files.all.includes(file))
+function detectOsvScanner(ctx: DetectContext): Promise<Detection | null> {
+  const configFiles = OSV_CONFIG_FILES.filter((file) => ctx.files.all.includes(file))
   return Promise.resolve(
     configFiles.length === 0 ? null : { reason: 'config', configFiles, installed: true },
   )

@@ -1,5 +1,3 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { execa } from 'execa'
@@ -10,9 +8,9 @@ import { OSV_SCANNER } from './adapters/common/osv-scanner.ts'
 import type { SystemToolSpec } from './adapters/common/system-tool.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import type { CliOptions } from './args.ts'
-import { discoverFiles, discoverProjects } from './core/discover.ts'
+import { discoverFiles, repoDetectContext } from './core/discover.ts'
 import { headCommit, mergeBase, resolveCommit } from './core/git.ts'
-import type { Grade, RepoContext } from './core/types.ts'
+import type { Grade } from './core/types.ts'
 import { CATEGORIES, GRADES } from './core/types.ts'
 import { DEFAULT_OUTPUT_DIRNAME } from './core/output.ts'
 import { resolveRepoRoot } from './run.ts'
@@ -132,44 +130,38 @@ export function createTerminalIO(): PromptIO & { close(): void } {
 
 /**
  * Reads the facts the questions are tailored from. Never executes a tool and
- * never writes inside the repo — the scratch dir `detect()` is entitled to
- * lives under the OS tmpdir and is removed before returning.
+ * never writes anything: detection reads the working tree and the manifests in
+ * it, and nothing else.
  */
 export async function probeRepo(path: string): Promise<RepoProbe> {
   const repoRoot = await resolveRepoRoot(path)
   const files = await discoverFiles(repoRoot)
-  const scratch = await mkdtemp(join(tmpdir(), 'crank-health-probe-'))
-  try {
-    const { projects } = await discoverProjects(repoRoot, files)
-    const repo: RepoContext = { repoRoot, files, scratch, projects }
+  const detectContext = repoDetectContext(repoRoot, files)
 
-    const ownedTools: string[] = []
-    let mutationToolOwned = false
-    // Sequential on purpose: `ownedTools` must come out in adapter order.
-    for (const adapter of ADAPTERS) {
+  const ownedTools: string[] = []
+  let mutationToolOwned = false
+  // Sequential on purpose: `ownedTools` must come out in adapter order.
+  for (const adapter of ADAPTERS) {
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await adapter.detect(detectContext))) continue
+    for (const runner of adapter.runners) {
       // eslint-disable-next-line no-await-in-loop
-      if (!(await adapter.detect(repo))) continue
-      for (const runner of adapter.runners) {
-        // eslint-disable-next-line no-await-in-loop
-        if ((await runner.detect(repo)) === null) continue
-        if (!ownedTools.includes(runner.tool)) ownedTools.push(runner.tool)
-        // Mutation tools are exactly the deep runners crank-health never
-        // imposes (StrykerJS, cosmic-ray); coverage.py is deep but not owned.
-        if (runner.deepOnly === true && runner.repoOwnedOnly === true) mutationToolOwned = true
-      }
+      if ((await runner.detect(detectContext)) === null) continue
+      if (!ownedTools.includes(runner.tool)) ownedTools.push(runner.tool)
+      // Mutation tools are exactly the deep runners crank-health never
+      // imposes (StrykerJS, cosmic-ray); coverage.py is deep but not owned.
+      if (runner.deepOnly === true && runner.repoOwnedOnly === true) mutationToolOwned = true
     }
+  }
 
-    return {
-      repoRoot,
-      jsTsFiles: files.byLanguage['js-ts'].length,
-      pythonFiles: files.byLanguage.python.length,
-      currentBranch: await currentBranch(repoRoot),
-      baseCandidates: await viableBases(repoRoot),
-      ownedTools,
-      mutationToolOwned,
-    }
-  } finally {
-    await rm(scratch, { recursive: true, force: true })
+  return {
+    repoRoot,
+    jsTsFiles: files.byLanguage['js-ts'].length,
+    pythonFiles: files.byLanguage.python.length,
+    currentBranch: await currentBranch(repoRoot),
+    baseCandidates: await viableBases(repoRoot),
+    ownedTools,
+    mutationToolOwned,
   }
 }
 

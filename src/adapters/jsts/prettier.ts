@@ -2,7 +2,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -79,8 +79,8 @@ export const prettierRunner: ToolRunner = {
   tool: PRETTIER_TOOL,
   category: 'format',
   pinnedVersion: pinnedVersion(PRETTIER_PACKAGE),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: PRETTIER_CONFIG_FILES,
       packageName: PRETTIER_PACKAGE,
       binName: PRETTIER_TOOL,

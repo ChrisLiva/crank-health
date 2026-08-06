@@ -2,7 +2,7 @@ import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/e
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -82,8 +82,8 @@ export const pyrightRunner: ToolRunner = {
   tool: PYRIGHT_TOOL,
   category: 'types',
   pinnedVersion: pinnedPythonVersion(PYRIGHT_DISTRIBUTION),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: PYRIGHT_CONFIG_FILES,
       distribution: PYRIGHT_DISTRIBUTION,
       sections: PYRIGHT_SECTIONS,

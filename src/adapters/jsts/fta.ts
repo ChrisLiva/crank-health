@@ -2,7 +2,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -56,8 +56,8 @@ export const ftaRunner: ToolRunner = {
   tool: FTA_TOOL,
   category: 'complexity',
   pinnedVersion: pinnedVersion(FTA_PACKAGE),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: FTA_CONFIG_FILES,
       packageName: FTA_PACKAGE,
       binName: FTA_TOOL,

@@ -2,7 +2,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -81,8 +81,8 @@ export const eslintRunner: ToolRunner = {
   category: 'lint',
   pinnedVersion: pinnedVersion(ESLINT_PACKAGE),
   repoOwnedOnly: true,
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: ESLINT_CONFIG_FILES,
       packageName: ESLINT_PACKAGE,
       binName: ESLINT_TOOL,

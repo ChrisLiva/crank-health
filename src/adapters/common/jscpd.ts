@@ -3,7 +3,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -69,8 +69,8 @@ export const jscpdRunner: ToolRunner = {
   tool: JSCPD_TOOL,
   category: 'duplication',
   pinnedVersion: pinnedVersion(JSCPD_PACKAGE),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: JSCPD_CONFIG_FILES,
       packageName: JSCPD_PACKAGE,
       binName: JSCPD_TOOL,

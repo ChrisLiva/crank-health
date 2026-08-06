@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Detection, RepoContext } from '../../core/types.ts'
+import { ROOT_PROJECT, ancestryOf, repoPath } from '../../core/discover.ts'
+import type { DetectContext, Detection } from '../../core/types.ts'
 import { exists } from '../support.ts'
 
 /**
@@ -9,6 +10,12 @@ import { exists } from '../support.ts'
  * `pyproject.toml`) or a declared dependency (`pyproject.toml` dependencies and
  * groups, `requirements*.txt`). Detection never spawns a process, so "installed"
  * means "there is a binary in the project's virtualenv".
+ *
+ * **Ancestors count.** Every tool here resolves its configuration upward — ruff
+ * walks parent directories for the `pyproject.toml` that applies, and a package
+ * inside a workspace is installed into, and run out of, the environment above
+ * it. So each check walks the project's directory and then its ancestors,
+ * nearest first, and the nearest answer wins.
  *
  * **Why there is a TOML reader in here.** Runtime dependencies are frozen at
  * execa + picocolors, so `pyproject.toml` is read by the smallest scanner that
@@ -65,7 +72,7 @@ export interface Venv {
 }
 
 export interface PythonToolSpec {
-  /** Repo-root-relative config artifacts that make the tool repo-owned. */
+  /** Config artifacts that make the tool repo-owned, relative to a project dir. */
   readonly configFiles: readonly string[]
   /** PyPI distribution name, e.g. `ruff`. */
   readonly distribution: string
@@ -82,18 +89,30 @@ export interface PythonToolSpec {
  * @returns the {@link Detection} when the repo owns this tool, `null` otherwise
  */
 export async function detectPythonTool(
-  repo: RepoContext,
+  ctx: DetectContext,
   spec: PythonToolSpec,
 ): Promise<Detection | null> {
-  const manifest = await readTextFile(join(repo.repoRoot, PYPROJECT))
+  const ancestry = ancestryOf(ctx.project.path)
+  const manifests = await Promise.all(
+    ancestry.map((directory) => readTextFile(join(ctx.repoRoot, directory, PYPROJECT))),
+  )
+  const present = new Set(ctx.files.all)
 
-  const configFiles = spec.configFiles.filter((file) => repo.files.all.includes(file))
-  if (manifest !== undefined && ownsSection(manifest, spec.sections)) configFiles.push(PYPROJECT)
+  const configFiles = ancestry.flatMap((directory, depth) => {
+    const found = spec.configFiles
+      .map((file) => repoPath(directory, file))
+      .filter((file) => present.has(file))
+    const manifest = manifests[depth]
+    if (manifest !== undefined && ownsSection(manifest, spec.sections)) {
+      found.push(repoPath(directory, PYPROJECT))
+    }
+    return found
+  })
 
-  const declared = await isDeclared(repo, manifest, spec.distribution)
+  const declared = await isDeclared(ctx, ancestry, manifests, spec.distribution)
   if (configFiles.length === 0 && !declared) return null
 
-  const venv = await findVenv(repo.repoRoot)
+  const venv = await findVenv(ctx.repoRoot, ctx.project.path)
   const binPath =
     venv === undefined ? undefined : await venvBin(venv, spec.binName ?? spec.distribution)
 
@@ -111,7 +130,9 @@ export async function detectPythonTool(
 }
 
 /**
- * The project's virtualenv, or `undefined` when there is none.
+ * The project's virtualenv, or `undefined` when there is none. The project's
+ * own directory is searched first, then its ancestors: a package inside a
+ * workspace is normally installed into the environment at the root.
  *
  * A directory only counts when it actually contains an interpreter: the whole
  * point of finding it is to hand a real `python` to a type checker so that
@@ -123,8 +144,14 @@ export async function detectPythonTool(
  * toolchain" clause of the determinism contract (spec §6): a scan run inside an
  * activated environment may resolve imports a scan outside it cannot.
  */
-export async function findVenv(repoRoot: string): Promise<Venv | undefined> {
-  for (const directory of VENV_DIRECTORIES) {
+export async function findVenv(
+  repoRoot: string,
+  projectPath = ROOT_PROJECT,
+): Promise<Venv | undefined> {
+  const candidates = ancestryOf(projectPath).flatMap((directory) =>
+    VENV_DIRECTORIES.map((name) => repoPath(directory, name)),
+  )
+  for (const directory of candidates) {
     // Ordered on purpose: the first virtualenv that exists wins, deterministically.
     // eslint-disable-next-line no-await-in-loop
     const interpreter = await findInterpreter(join(repoRoot, directory))
@@ -181,29 +208,41 @@ function ownsSection(manifest: string, sections: readonly string[]): boolean {
   )
 }
 
-/** True when the distribution is named in `pyproject.toml` or a requirements file. */
+/**
+ * True when the distribution is named in a `pyproject.toml` or a requirements
+ * file — the project's own, or an ancestor's.
+ */
 async function isDeclared(
-  repo: RepoContext,
-  manifest: string | undefined,
+  ctx: DetectContext,
+  ancestry: readonly string[],
+  manifests: readonly (string | undefined)[],
   distribution: string,
 ): Promise<boolean> {
   const wanted = normalizeDistribution(distribution)
-  if (manifest !== undefined && tomlDependencies(manifest).has(wanted)) return true
+  if (
+    manifests.some((manifest) => manifest !== undefined && tomlDependencies(manifest).has(wanted))
+  )
+    return true
 
-  for (const file of requirementsFiles(repo.files.all)) {
+  for (const file of ancestry.flatMap((directory) => requirementsFiles(ctx.files.all, directory))) {
     // A handful of small files; reading them in order keeps the result stable.
     // eslint-disable-next-line no-await-in-loop
-    const text = await readTextFile(join(repo.repoRoot, file))
+    const text = await readTextFile(join(ctx.repoRoot, file))
     if (text !== undefined && requirementNames(text).has(wanted)) return true
   }
   return false
 }
 
-/** `requirements.txt`, `requirements-dev.txt`, `requirements/*.txt` (spec §1). */
-export function requirementsFiles(files: readonly string[]): string[] {
-  return files.filter(
-    (file) => /^requirements[^/]*\.txt$/.test(file) || /^requirements\/[^/]+\.txt$/.test(file),
-  )
+/**
+ * `requirements.txt`, `requirements-dev.txt`, `requirements/*.txt` (spec §1),
+ * in one project directory — the repo root unless a nearer one is named.
+ */
+export function requirementsFiles(files: readonly string[], directory = ROOT_PROJECT): string[] {
+  const prefix = directory === ROOT_PROJECT ? '' : `${directory}/`
+  return files.filter((file) => {
+    const name = file.startsWith(prefix) ? file.slice(prefix.length) : ''
+    return /^requirements[^/]*\.txt$/.test(name) || /^requirements\/[^/]+\.txt$/.test(name)
+  })
 }
 
 /**

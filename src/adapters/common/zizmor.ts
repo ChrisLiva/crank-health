@@ -3,7 +3,7 @@ import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/e
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -93,8 +93,8 @@ export const zizmorRunner: ToolRunner = {
   pinnedVersion: pinnedPythonVersion(ZIZMOR_DISTRIBUTION),
   // Workflow security is nobody else's job; see `ToolRunner.complementary`.
   complementary: true,
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: ZIZMOR_CONFIG_FILES,
       distribution: ZIZMOR_DISTRIBUTION,
       sections: ZIZMOR_SECTIONS,

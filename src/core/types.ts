@@ -144,7 +144,7 @@ export interface Project {
   readonly files: FileInventory
 }
 
-/** Everything a detector may look at. Detection never runs a tool. */
+/** Everything a scan works from. Detection never runs a tool. */
 export interface RepoContext {
   /** Absolute path to the repo root. */
   readonly repoRoot: string
@@ -157,13 +157,41 @@ export interface RepoContext {
 }
 
 /**
+ * Everything a detector may look at: one project, inside one repo.
+ *
+ * Ownership is decided for {@link project}, and not only from its own
+ * directory. A tool configured or declared in **any ancestor** up to the repo
+ * root owns it there too, and an install hoisted to an ancestor
+ * `node_modules/.bin` is the binary that runs — so both detection helpers
+ * (`adapters/jsts/node-package.ts`, `adapters/python/py-project.ts`) walk
+ * {@link import('./discover.ts').ancestryOf}. The one documented exception is
+ * `tsconfig.json`, which TypeScript does not resolve upward; see
+ * `NodeToolSpec.configInherits`.
+ *
+ * {@link files} is the whole repo's inventory, not the project's: the
+ * repo-scoped runners (a secrets scanner, a workflow auditor) answer about the
+ * repo, and their config belongs to it rather than to any one package.
+ */
+export interface DetectContext {
+  /** Absolute path to the repo root. */
+  readonly repoRoot: string
+  /** The project ownership is being decided for. */
+  readonly project: Project
+  /** The whole scan's inventory. */
+  readonly files: FileInventory
+}
+
+/**
  * What a repo-owned tool looks like. `null` from `ToolRunner.detect` means the
  * repo does not own this tool, so the runner runs our pinned default config.
  */
 export interface Detection {
   /** Why we consider the tool repo-owned (spec §1 checks it in this order). */
   readonly reason: 'config' | 'dependency' | 'config+dependency'
-  /** Repo-relative posix paths of the config artifacts found, if any. */
+  /**
+   * Repo-relative posix paths of the config artifacts found, if any: the
+   * project's own, and the ones it inherits from an ancestor directory.
+   */
   readonly configFiles: readonly string[]
   /** True when the declared tool is actually installed in the repo. */
   readonly installed: boolean
@@ -302,14 +330,14 @@ export interface ToolRunner {
    */
   readonly deepOnly?: boolean
   /** `null` = not repo-owned; the runner still runs, with default config. */
-  detect(repo: RepoContext): Promise<Detection | null>
+  detect(ctx: DetectContext): Promise<Detection | null>
   run(ctx: RunContext): Promise<ToolResult>
 }
 
 /** One language's detection rule plus its runners. */
 export interface LanguageAdapter {
   readonly language: RunnerScope
-  detect(repo: RepoContext): Promise<boolean>
+  detect(ctx: DetectContext): Promise<boolean>
   readonly runners: readonly ToolRunner[]
 }
 

@@ -4,7 +4,7 @@ import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/e
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -118,8 +118,8 @@ export const banditRunner: ToolRunner = {
   // Python SAST does not substitute for a secrets or dependency scan; see
   // `ToolRunner.complementary`.
   complementary: true,
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: BANDIT_CONFIG_FILES,
       distribution: BANDIT_DISTRIBUTION,
       sections: BANDIT_SECTIONS,

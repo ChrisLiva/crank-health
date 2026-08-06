@@ -2,7 +2,7 @@ import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/e
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -51,8 +51,8 @@ export const vultureRunner: ToolRunner = {
   tool: VULTURE_TOOL,
   category: 'dead-code',
   pinnedVersion: pinnedPythonVersion(VULTURE_DISTRIBUTION),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: [],
       distribution: VULTURE_DISTRIBUTION,
       sections: VULTURE_SECTIONS,

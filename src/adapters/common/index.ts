@@ -1,4 +1,4 @@
-import type { LanguageAdapter, RepoContext } from '../../core/types.ts'
+import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
 import { banditRunner } from './bandit.ts'
 import { gitleaksRunner } from './gitleaks.ts'
 import { jscpdRunner } from './jscpd.ts'
@@ -22,7 +22,7 @@ import { zizmorRunner } from './zizmor.ts'
  */
 export const commonAdapter: LanguageAdapter = {
   language: 'common',
-  detect: (repo: RepoContext) => Promise.resolve(repo.files.all.length > 0),
+  detect: (ctx: DetectContext) => Promise.resolve(ctx.files.all.length > 0),
   runners: [
     gitleaksRunner,
     opengrepRunner,

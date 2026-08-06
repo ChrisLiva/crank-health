@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   defaultTypeChecker,
@@ -12,8 +12,8 @@ import {
   tomlDependencies,
   tomlSections,
 } from '../src/adapters/python/py-project.ts'
-import { partitionProjects } from '../src/core/discover.ts'
-import type { FileInventory, RepoContext } from '../src/core/types.ts'
+import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
+import type { DetectContext } from '../src/core/types.ts'
 
 /**
  * Python ownership detection (spec §1) and the venv rule the two type checkers
@@ -200,17 +200,11 @@ describe('detectPythonTool', () => {
     sections: ['tool.ruff'],
   }
 
-  function context(files: string[]): RepoContext {
-    const inventory: FileInventory = {
+  function context(files: string[]): DetectContext {
+    return repoDetectContext(root, {
       all: files,
       byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')) },
-    }
-    return {
-      repoRoot: root,
-      files: inventory,
-      scratch: root,
-      projects: partitionProjects(inventory),
-    }
+    })
   }
 
   it('is null for a repo that never mentions the tool', async () => {
@@ -272,5 +266,107 @@ describe('detectPythonTool', () => {
     const detection = await detectPythonTool(context(['pyproject.toml']), ruffSpec)
     expect(detection?.installed).toBe(false)
     expect(detection?.binPath).toBeUndefined()
+  })
+})
+
+/**
+ * Ownership inside a Python workspace: ruff and its neighbours resolve their
+ * configuration upward, and a package is installed into the environment above
+ * it — so a package inherits an ancestor's config, dependency declaration and
+ * virtualenv, and its own answer wins where it has one.
+ */
+describe('detectPythonTool across a workspace', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'crank-pyworkspace-'))
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const ruffSpec = {
+    configFiles: ['ruff.toml', '.ruff.toml'],
+    distribution: 'ruff',
+    sections: ['tool.ruff'],
+  }
+
+  /** Writes a file, creating the directories above it. */
+  async function write(file: string, body: string): Promise<void> {
+    await mkdir(dirname(join(root, file)), { recursive: true })
+    await writeFile(join(root, file), body)
+  }
+
+  /** Detection context for one project of the tree, partitioned the real way. */
+  function context(files: string[], path: string): DetectContext {
+    const inventory = {
+      all: files,
+      byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')) },
+    }
+    const project = partitionProjects(inventory).find((candidate) => candidate.path === path)
+    if (project === undefined) throw new Error(`no project at ${path}`)
+    return { repoRoot: root, project, files: inventory }
+  }
+
+  /** Workspace root, one member under it, and one module in that member. */
+  const WORKSPACE = ['pyproject.toml', 'services/api/pyproject.toml', 'services/api/app.py']
+
+  it('is not owned when neither the member nor an ancestor mentions the tool', async () => {
+    await write('pyproject.toml', '[project]\nname = "root"\n')
+    await write('services/api/pyproject.toml', '[project]\nname = "api"\n')
+    expect(await detectPythonTool(context(WORKSPACE, 'services/api'), ruffSpec)).toBeNull()
+  })
+
+  it('is owned by a dependency the workspace root declares', async () => {
+    await write('pyproject.toml', '[project]\ndependencies = ["ruff"]\n')
+    await write('services/api/pyproject.toml', '[project]\nname = "api"\n')
+    expect(await detectPythonTool(context(WORKSPACE, 'services/api'), ruffSpec)).toMatchObject({
+      reason: 'dependency',
+      configFiles: [],
+    })
+  })
+
+  it('is owned by an ancestor’s requirements file', async () => {
+    await write('pyproject.toml', '[project]\nname = "root"\n')
+    await write('requirements-dev.txt', 'ruff==0.16.1\n')
+    await write('services/api/pyproject.toml', '[project]\nname = "api"\n')
+    expect(
+      await detectPythonTool(
+        context([...WORKSPACE, 'requirements-dev.txt'], 'services/api'),
+        ruffSpec,
+      ),
+    ).toMatchObject({ reason: 'dependency' })
+  })
+
+  it('is configured by an ancestor’s [tool.ruff], named at the manifest it was found in', async () => {
+    await write('pyproject.toml', '[tool.ruff]\nline-length = 100\n')
+    await write('services/api/pyproject.toml', '[project]\nname = "api"\n')
+    expect(await detectPythonTool(context(WORKSPACE, 'services/api'), ruffSpec)).toMatchObject({
+      reason: 'config',
+      configFiles: ['pyproject.toml'],
+    })
+  })
+
+  it('runs the binary in the virtualenv at the workspace root when the member has none', async () => {
+    await write('pyproject.toml', '[project]\ndependencies = ["ruff"]\n')
+    await write('services/api/pyproject.toml', '[project]\nname = "api"\n')
+    await write('.venv/bin/python', '')
+    await write('.venv/bin/ruff', '')
+
+    expect(await detectPythonTool(context(WORKSPACE, 'services/api'), ruffSpec)).toMatchObject({
+      installed: true,
+      binPath: join(root, '.venv', 'bin', 'ruff'),
+    })
+  })
+
+  it('prefers the member’s own virtualenv to the one above it', async () => {
+    await write('.venv/bin/python', '')
+    await write('services/api/.venv/bin/python', '')
+
+    expect(await findVenv(root, 'services/api')).toEqual({
+      directory: 'services/api/.venv',
+      interpreter: join(root, 'services', 'api', '.venv', 'bin', 'python'),
+    })
   })
 })

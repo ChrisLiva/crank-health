@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eslintRunner, parseEslintJson, toPendingFindings } from '../src/adapters/jsts/eslint.ts'
-import { partitionProjects } from '../src/core/discover.ts'
-import type { FileInventory, RepoContext } from '../src/core/types.ts'
+import { repoDetectContext } from '../src/core/discover.ts'
+import type { DetectContext } from '../src/core/types.ts'
 
 /**
  * Captured raw output from the pinned ESLint, run against `test/fixtures/
@@ -194,15 +194,9 @@ describe('a repo configured through the legacy eslintrc format', () => {
   })
 })
 
-function context(repoRoot: string, files: string[]): RepoContext {
-  const inventory: FileInventory = {
+function context(repoRoot: string, files: string[]): DetectContext {
+  return repoDetectContext(repoRoot, {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.js')), python: [] },
-  }
-  return {
-    repoRoot,
-    files: inventory,
-    scratch: join(repoRoot, 'scratch'),
-    projects: partitionProjects(inventory),
-  }
+  })
 }

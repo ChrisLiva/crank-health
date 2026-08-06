@@ -4,7 +4,7 @@ import { execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -102,8 +102,8 @@ export const cosmicRayRunner: ToolRunner = {
   // Mutation testing and the coverage run measure different things; neither
   // stands the other down (see `ToolRunner.complementary`).
   complementary: true,
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: COSMIC_RAY_CONFIG_FILES,
       distribution: COSMIC_RAY_DISTRIBUTION,
       sections: COSMIC_RAY_SECTIONS,

@@ -9,8 +9,8 @@ import {
   parseSarif,
   toPendingFindings,
 } from '../src/adapters/jsts/oxlint.ts'
-import { partitionProjects } from '../src/core/discover.ts'
-import type { FileInventory, RepoContext } from '../src/core/types.ts'
+import { repoDetectContext } from '../src/core/discover.ts'
+import type { DetectContext } from '../src/core/types.ts'
 
 /**
  * Wrapper tests against captured raw output (plan: "version bumps that shift
@@ -233,15 +233,9 @@ function sarifFinding(overrides: {
   }
 }
 
-function context(repoRoot: string, files: string[]): RepoContext {
-  const inventory: FileInventory = {
+function context(repoRoot: string, files: string[]): DetectContext {
+  return repoDetectContext(repoRoot, {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.js')), python: [] },
-  }
-  return {
-    repoRoot,
-    files: inventory,
-    scratch: join(repoRoot, 'scratch'),
-    projects: partitionProjects(inventory),
-  }
+  })
 }

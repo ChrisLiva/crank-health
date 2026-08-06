@@ -4,7 +4,7 @@ import { execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -98,8 +98,8 @@ export const coverageRunner: ToolRunner = {
   // Coverage and mutation testing measure different things about the same
   // suite; neither stands the other down (see `ToolRunner.complementary`).
   complementary: true,
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: COVERAGE_CONFIG_FILES,
       distribution: COVERAGE_DISTRIBUTION,
       sections: COVERAGE_SECTIONS,

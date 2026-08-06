@@ -5,7 +5,7 @@ import type {
   Category,
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -130,8 +130,8 @@ export const ruffFormatRunner: ToolRunner = {
  * Repo-owned when `ruff.toml`/`.ruff.toml` exists, when `pyproject.toml` has a
  * `[tool.ruff]` section, or when ruff is a declared dependency.
  */
-function detectRuff(repo: RepoContext): Promise<Detection | null> {
-  return detectPythonTool(repo, {
+function detectRuff(ctx: DetectContext): Promise<Detection | null> {
+  return detectPythonTool(ctx, {
     configFiles: RUFF_CONFIG_FILES,
     distribution: RUFF_DISTRIBUTION,
     sections: RUFF_SECTIONS,

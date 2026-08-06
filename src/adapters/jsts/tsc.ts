@@ -4,7 +4,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -104,11 +104,17 @@ export const tscRunner: ToolRunner = {
   tool: TSC_TOOL,
   category: 'types',
   pinnedVersion: pinnedVersion(TSC_PACKAGE),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: [TSCONFIG],
       packageName: TSC_PACKAGE,
       binName: TSC_TOOL,
+      // A `tsconfig.json` is a project definition, not a setting TypeScript
+      // resolves upward: a package without one is not covered by the config
+      // above it, and gets {@link DEFAULT_TSCONFIG} scoped to its own files.
+      // The declared TypeScript is still inherited — that is the compiler that
+      // runs either way.
+      configInherits: false,
     }),
   run: runTsc,
 }

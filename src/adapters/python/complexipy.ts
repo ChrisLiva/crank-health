@@ -5,7 +5,7 @@ import { COMPLEXITY_CEILING } from '../../core/grade.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -75,8 +75,8 @@ export const complexipyRunner: ToolRunner = {
   tool: COMPLEXIPY_TOOL,
   category: 'complexity',
   pinnedVersion: pinnedPythonVersion(COMPLEXIPY_DISTRIBUTION),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: COMPLEXIPY_CONFIG_FILES,
       distribution: COMPLEXIPY_DISTRIBUTION,
       sections: COMPLEXIPY_SECTIONS,

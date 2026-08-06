@@ -5,7 +5,7 @@ import { execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -114,8 +114,8 @@ export const strykerRunner: ToolRunner = {
   pinnedVersion: verifiedRepoVersion(STRYKER_PACKAGE),
   repoOwnedOnly: true,
   deepOnly: true,
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: STRYKER_CONFIG_FILES,
       packageName: STRYKER_PACKAGE,
       binName: STRYKER_TOOL,

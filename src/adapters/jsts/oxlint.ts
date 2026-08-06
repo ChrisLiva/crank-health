@@ -4,7 +4,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -96,8 +96,8 @@ export const oxlintRunner: ToolRunner = {
  * `package.json` scripts corroborate but never decide (spec §1), so they are
  * not consulted here at all.
  */
-async function detectOxlint(repo: RepoContext): Promise<Detection | null> {
-  return detectNodeTool(repo, {
+async function detectOxlint(ctx: DetectContext): Promise<Detection | null> {
+  return detectNodeTool(ctx, {
     configFiles: OXLINT_CONFIG_FILES,
     packageName: OXLINT_PACKAGE,
     binName: OXLINT_TOOL,

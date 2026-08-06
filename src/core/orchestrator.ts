@@ -1,3 +1,4 @@
+import { repoDetectContext } from './discover.ts'
 import { mapLimit } from './pool.ts'
 import type {
   Category,
@@ -250,6 +251,7 @@ async function plan(
   warnings: string[],
 ): Promise<Job[]> {
   const jobs: Job[] = []
+  const detectContext = repoDetectContext(repo.repoRoot, repo.files)
 
   for (const adapter of adapters) {
     const runners = adapter.runners.filter(
@@ -267,7 +269,7 @@ async function plan(
     try {
       // Detection is cheap and ordered; the concurrency cap covers the runs.
       // eslint-disable-next-line no-await-in-loop
-      applies = await adapter.detect(repo)
+      applies = await adapter.detect(detectContext)
     } catch (error) {
       warnings.push(`${adapter.language}: language detection failed: ${describe(error)}`)
       continue
@@ -279,7 +281,7 @@ async function plan(
       let detection: Detection | null = null
       try {
         // eslint-disable-next-line no-await-in-loop
-        detection = await runner.detect(repo)
+        detection = await runner.detect(detectContext)
       } catch (error) {
         warnings.push(`${runner.tool}: detection failed, using default config: ${describe(error)}`)
       }

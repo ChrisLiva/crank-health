@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
-import { partitionProjects } from '../src/core/discover.ts'
-import type { Detection, FileInventory, RepoContext } from '../src/core/types.ts'
+import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
+import type { DetectContext, Detection } from '../src/core/types.ts'
 
 /** Captured raw output from the pinned tsc, run against `test/fixtures/ts-owned`. */
 const CAPTURED = fileURLToPath(new URL('./captured/tsc-7.0.2.txt', import.meta.url))
@@ -131,6 +131,28 @@ describe('tsc detection', () => {
     await writeFile(join(repo, 'package.json'), '{"name":"x"}')
     expect(await tscRunner.detect(context(repo, ['package.json', 'src/a.ts']))).toBeNull()
   })
+
+  /**
+   * A `tsconfig.json` is the definition of one project, not a setting the
+   * package below it inherits — so a package without its own gets the bundled
+   * default, and only the declared TypeScript reaches it from above.
+   */
+  it('does not hand a package the tsconfig.json of the workspace above it', async () => {
+    await mkdir(join(repo, 'packages', 'a'), { recursive: true })
+    await writeFile(join(repo, 'tsconfig.json'), '{}')
+    await writeFile(join(repo, 'package.json'), '{"devDependencies":{"typescript":"5.9.4"}}')
+    await writeFile(join(repo, 'packages', 'a', 'package.json'), '{"name":"a"}')
+
+    const files = ['package.json', 'tsconfig.json', 'packages/a/package.json', 'packages/a/a.ts']
+    const inventory = { all: files, byLanguage: { 'js-ts': ['packages/a/a.ts'], python: [] } }
+    const project = partitionProjects(inventory).find(({ path }) => path === 'packages/a')
+    if (project === undefined) throw new Error('no project at packages/a')
+
+    expect(await tscRunner.detect({ repoRoot: repo, project, files: inventory })).toMatchObject({
+      reason: 'dependency',
+      configFiles: [],
+    })
+  })
 })
 
 describe('a repo with neither a tsconfig.json nor TypeScript sources', () => {
@@ -218,15 +240,9 @@ describe('a tsconfig.json that type-checks nothing', () => {
     })
 })
 
-function context(repoRoot: string, files: string[]): RepoContext {
-  const inventory: FileInventory = {
+function context(repoRoot: string, files: string[]): DetectContext {
+  return repoDetectContext(repoRoot, {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.ts')), python: [] },
-  }
-  return {
-    repoRoot,
-    files: inventory,
-    scratch: join(repoRoot, 'scratch'),
-    projects: partitionProjects(inventory),
-  }
+  })
 }

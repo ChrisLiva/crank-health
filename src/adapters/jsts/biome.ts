@@ -3,7 +3,7 @@ import type {
   Category,
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -96,8 +96,8 @@ export const biomeFormatRunner: ToolRunner = {
   run: (ctx: RunContext) => runBiome(ctx, 'format'),
 }
 
-function detectBiome(repo: RepoContext): Promise<Detection | null> {
-  return detectNodeTool(repo, {
+function detectBiome(ctx: DetectContext): Promise<Detection | null> {
+  return detectNodeTool(ctx, {
     configFiles: BIOME_CONFIG_FILES,
     packageName: BIOME_PACKAGE,
     binName: BIOME_BIN,

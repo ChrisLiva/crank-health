@@ -2,7 +2,7 @@ import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execa } from 'execa'
 import { mapLimit } from './pool.ts'
-import type { FileInventory, Language, Project } from './types.ts'
+import type { DetectContext, FileInventory, Language, Project } from './types.ts'
 import { LANGUAGES } from './types.ts'
 
 /**
@@ -148,6 +148,38 @@ export function partitionProjects(files: FileInventory): readonly Project[] {
   return projects.length > 0
     ? projects
     : [projectOf(ROOT_PROJECT, manifests.get(ROOT_PROJECT) ?? [], claimed.get(ROOT_PROJECT) ?? [])]
+}
+
+/**
+ * The whole inventory taken as one project at the repo root — the unit a
+ * repo-wide scan detects against.
+ */
+export function repoDetectContext(repoRoot: string, files: FileInventory): DetectContext {
+  const manifests = files.all.filter(
+    (file) => MANIFEST_LANGUAGE[baseName(file)] !== undefined && directoryOf(file) === ROOT_PROJECT,
+  )
+  return { repoRoot, project: projectOf(ROOT_PROJECT, manifests, files.all), files }
+}
+
+/**
+ * A project's own directory followed by every ancestor of it up to the repo
+ * root, nearest first — the chain detection walks for an inherited config, an
+ * inherited dependency declaration, a hoisted install or an ancestor's
+ * virtualenv. The root project's chain is itself alone.
+ */
+export function ancestryOf(projectPath: string): readonly string[] {
+  const chain = [projectPath]
+  let directory = projectPath
+  while (directory !== ROOT_PROJECT) {
+    directory = directoryOf(directory)
+    chain.push(directory)
+  }
+  return chain
+}
+
+/** A repo-relative path inside a project directory; the root adds no segment. */
+export function repoPath(directory: string, name: string): string {
+  return directory === ROOT_PROJECT ? name : `${directory}/${name}`
 }
 
 /** Candidate directories → their manifests, repo-relative and stable-sorted. */

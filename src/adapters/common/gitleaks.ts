@@ -3,7 +3,7 @@ import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -78,8 +78,8 @@ export const gitleaksRunner: ToolRunner = {
  * command line. There is no dependency half to this check: gitleaks is a binary
  * no manifest declares.
  */
-function detectGitleaks(repo: RepoContext): Promise<Detection | null> {
-  const configFiles = GITLEAKS_CONFIG_FILES.filter((file) => repo.files.all.includes(file))
+function detectGitleaks(ctx: DetectContext): Promise<Detection | null> {
+  const configFiles = GITLEAKS_CONFIG_FILES.filter((file) => ctx.files.all.includes(file))
   return Promise.resolve(
     configFiles.length === 0 ? null : { reason: 'config', configFiles, installed: true },
   )

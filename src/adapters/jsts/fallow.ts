@@ -3,7 +3,7 @@ import { COMPLEXITY_CEILING } from '../../core/grade.ts'
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -84,8 +84,8 @@ export const fallowHealthRunner: ToolRunner = {
   run: runHealth,
 }
 
-function detectFallow(repo: RepoContext): Promise<Detection | null> {
-  return detectNodeTool(repo, {
+function detectFallow(ctx: DetectContext): Promise<Detection | null> {
+  return detectNodeTool(ctx, {
     configFiles: FALLOW_CONFIG_FILES,
     packageName: FALLOW_PACKAGE,
     binName: FALLOW_BIN,

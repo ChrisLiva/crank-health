@@ -2,7 +2,7 @@ import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/e
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   Severity,
   ToolResult,
@@ -94,8 +94,8 @@ export const tyRunner: ToolRunner = {
   tool: TY_TOOL,
   category: 'types',
   pinnedVersion: pinnedPythonVersion(TY_DISTRIBUTION),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectPythonTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectPythonTool(ctx, {
       configFiles: TY_CONFIG_FILES,
       distribution: TY_DISTRIBUTION,
       sections: TY_SECTIONS,

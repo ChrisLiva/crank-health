@@ -2,7 +2,7 @@ import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../
 import type {
   Detection,
   PendingFinding,
-  RepoContext,
+  DetectContext,
   RunContext,
   ToolResult,
   ToolRunner,
@@ -71,8 +71,8 @@ export const knipRunner: ToolRunner = {
   tool: KNIP_TOOL,
   category: 'dead-code',
   pinnedVersion: pinnedVersion(KNIP_PACKAGE),
-  detect: (repo: RepoContext): Promise<Detection | null> =>
-    detectNodeTool(repo, {
+  detect: (ctx: DetectContext): Promise<Detection | null> =>
+    detectNodeTool(ctx, {
       configFiles: KNIP_CONFIG_FILES,
       packageName: KNIP_PACKAGE,
       binName: KNIP_TOOL,
