@@ -292,6 +292,59 @@ describe('buildReport projects', () => {
   })
 
   /**
+   * `"repo"` is a directory name a package may have, so the attribution string
+   * alone cannot say whether a run spanned the repo. The flag is additive and
+   * emitted only where it is true.
+   */
+  it('marks the runs that spanned the repo, and only those', () => {
+    const report = buildReport(
+      input({
+        runs: [
+          { record: { ...record(), repoWide: false, project: 'repo' }, raw: [] },
+          {
+            record: {
+              ...record(),
+              tool: 'gitleaks',
+              category: 'security',
+              scope: 'common',
+              repoWide: true,
+              project: 'repo',
+            },
+            raw: [],
+          },
+        ],
+      }),
+    )
+
+    expect(report.tools.map((tool) => [tool.tool, tool.project, tool.repoWide])).toEqual([
+      ['gitleaks', 'repo', true],
+      ['oxlint', 'repo', undefined],
+    ])
+    expect('repoWide' in (report.tools.at(-1) ?? {})).toBe(false)
+  })
+
+  /** …and a package called `repo/` does not own the repo's secrets scanner. */
+  it('keeps a repo-spanning run out of every project’s toolchain', () => {
+    const spanning: RunRecord = {
+      ...record(),
+      tool: 'gitleaks',
+      category: 'security',
+      scope: 'common',
+      repoWide: true,
+      project: 'repo',
+      detection: { reason: 'config', configFiles: ['.gitleaks.toml'], installed: true },
+    }
+    const [project] = buildReport(
+      input({
+        projects: [makeProjectScan({ project: projectAt('packages/web') })],
+        runs: [{ record: { ...spanning, project: 'packages/web' }, raw: [] }],
+      }),
+    ).projects
+
+    expect(project?.toolchain).toEqual([])
+  })
+
+  /**
    * Under `--project` the rollup covers the selection rather than the repo, and
    * nothing else in the report says so — a reader (or a renderer) would take the
    * top-level grades for the whole tree's.

@@ -4,11 +4,13 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { RUN_DIRNAME_PATTERN } from '../src/core/output.ts'
-import type { Finding } from '../src/core/types.ts'
+import type { Finding, RunContext, ToolRunner } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
-import { runHealthScan } from '../src/run.ts'
+import { runHealthScan, scanTree } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import type { HistoryRepo } from './support/history.ts'
+import { createHistoryRepo } from './support/history.ts'
 import { normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
@@ -859,6 +861,75 @@ function pick(result: HealthScanResult): Finding | undefined {
 function fromFetchableTool(name: string): boolean {
   return !SYSTEM_TOOLS.some((tool) => name.startsWith(tool))
 }
+
+/** Records what each run was told about its project, without running a tool. */
+function nestingProbe(): { runner: ToolRunner; nested: string[][] } {
+  const nested: string[][] = []
+  return {
+    runner: {
+      tool: 'jscpd',
+      category: 'duplication',
+      pinnedVersion: '1.0.0',
+      repoWidePass: true,
+      detect: async () => null,
+      run: async (ctx: RunContext) => {
+        nested.push([...(ctx.nestedProjects ?? [])])
+        return { state: 'ok', findings: [], rawFiles: [] }
+      },
+    },
+    nested,
+  }
+}
+
+/**
+ * What `--project` narrows, and what it must not.
+ *
+ * Scoping picks which projects are graded. A project's own measurement is not
+ * one of those things: the packages inside it are inside it however the run was
+ * scoped, and a runner handed a directory has to be told so — or scoping the
+ * parent would fold its packages' code into the parent's own grade.
+ */
+describe('--project scoping and what a project is measured over', () => {
+  let repo: HistoryRepo
+  let scratch: string
+
+  beforeAll(async () => {
+    repo = await createHistoryRepo({
+      base: {
+        'package.json': '{ "name": "root" }\n',
+        'src/a.ts': 'export const a = 1\n',
+        'packages/web/package.json': '{ "name": "web" }\n',
+        'packages/web/src/b.ts': 'export const b = 2\n',
+      },
+      head: [],
+    })
+    scratch = await mkdtemp(join(tmpdir(), 'crank-scope-'))
+  })
+
+  afterAll(async () => {
+    await repo.remove()
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  async function nestedFor(projects?: readonly string[]): Promise<string[][]> {
+    const { runner, nested } = nestingProbe()
+    await scanTree({
+      repoRoot: repo.root,
+      scratch,
+      only: ['duplication'],
+      adapters: [{ language: 'common', runners: [runner], detect: async () => true }],
+      ...(projects === undefined ? {} : { projects }),
+    })
+    return nested
+  }
+
+  it('tells the root project the same nested projects, scoped or not', async () => {
+    expect(await nestedFor(['.'])).toEqual([['packages/web']])
+    // The unscoped run adds the package's own pass and the repo-wide one; the
+    // root's own list is the same list.
+    expect(await nestedFor()).toEqual([['packages/web'], [], []])
+  })
+})
 
 /** The parts of a finding a planted-finding table is about. */
 function shape(finding: Finding) {

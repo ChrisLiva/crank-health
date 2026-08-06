@@ -213,6 +213,15 @@ export interface ReportTool {
    */
   readonly project: string
   /**
+   * Present and `true` exactly on the runs that spanned the repo.
+   *
+   * `project` cannot carry that on its own: `"repo"` is also a directory name a
+   * package may have, so a reader of a repo containing `repo/` cannot tell a
+   * secrets scan from that package's own lint run. Additive, and emitted only
+   * where it is true, so a report without a repo-spanning run is unchanged.
+   */
+  readonly repoWide?: boolean
+  /**
    * PR mode only: which of the two scans this record is from. Without it the
    * two runs of the same tool are indistinguishable, and "the tool errored"
    * would not say on which side — the difference between a real improvement and
@@ -366,7 +375,11 @@ function toReportProject(scan: ProjectScan, runs: readonly ResolvedRun[]): Repor
     metrics: orderedMetrics(scan.metrics),
     toolchain: runs.flatMap(({ record, side }) => {
       const detection = record.detection
-      if (side === 'base' || record.project !== scan.project.path || detection === null) return []
+      // `repoWide` and not the path alone: a repo-spanning run belongs to no
+      // project, and it carries the same `project` string a package called
+      // `repo/` does — that package does not own the repo's secrets scanner.
+      if (side === 'base' || record.repoWide || record.project !== scan.project.path) return []
+      if (detection === null) return []
       return [
         {
           tool: record.tool,
@@ -391,6 +404,7 @@ function toReportTool(run: ResolvedRun): ReportTool {
     category: record.category,
     scope: record.scope,
     project: record.project,
+    ...(record.repoWide ? { repoWide: true } : {}),
     ...(run.side === undefined ? {} : { side: run.side }),
     execution: installed ? 'repo-installed' : 'ephemeral-pinned',
     // The runner's own answer wins when it gave one: detection can be non-null

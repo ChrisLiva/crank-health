@@ -286,6 +286,48 @@ describe('runScan repo-wide duplication pass', () => {
   })
 
   /**
+   * A package directory called `repo/` has the same attribution string a
+   * repo-spanning run does. If ownership were decided on that string, the
+   * package's own config would stand the repo-wide pass down — and the rollup's
+   * duplication would quietly fall back to the largest package's, which is the
+   * number the repo-wide pass exists to replace.
+   */
+  it('is not stood down by a package that happens to be called repo/', async () => {
+    const files = inventoryOf([
+      'package.json',
+      'repo/.jscpd.json',
+      'repo/package.json',
+      'repo/src/b.ts',
+      'src/a.ts',
+    ])
+    const owned: ToolRunner = {
+      ...fakeRunner(
+        'jscpd',
+        'duplication',
+        async (ctx) => ({
+          ...ok(),
+          metrics: { duplicationPercent: ctx.files.length === files.all.length ? 5 : 40 },
+        }),
+        async (ctx) => (ctx.project.path === 'repo' ? DETECTION : null),
+      ),
+      repoWidePass: true,
+    }
+
+    const result = await runScan(
+      { repoRoot: '/repo', files, scratch: SCRATCH, projects: partitionProjects(files) },
+      [commonAdapter([owned])],
+    )
+
+    expect(result.runs.map((run) => [run.project, run.repoWide, run.rollupOnly])).toEqual([
+      ['.', false, false],
+      ['repo', false, false],
+      [REPO_SCOPE, true, true],
+    ])
+    // The rollup's percentage is the repo-wide pass's, not the package's 40.
+    expect(result.metrics.duplication).toEqual({ duplicationPercent: 5 })
+  })
+
+  /**
    * Scoping narrows the project dimension and nothing else: two packages
    * selected out of three still have a "between" to measure, and the rollup is
    * where that measurement belongs.
@@ -334,6 +376,24 @@ describe('runScan repo-wide duplication pass', () => {
       'packages/web → []',
       // The repo-wide pass is the one that is supposed to see everything.
       'repo-wide → []',
+    ])
+  })
+
+  /**
+   * …and the list is the repo's, not the selection's. `--project .` must not
+   * make the packages inside the root part of it: a project's own grade cannot
+   * depend on which *other* projects a run was scoped to.
+   */
+  it('keeps the nested list the same when the scan is scoped', async () => {
+    const runner = fakeRunner('jscpd', 'duplication', async () => ok())
+    const root = MONO.projects.filter((project) => project.path === '.')
+
+    await runScan({ ...MONO, projects: root, allProjects: MONO.projects }, [
+      commonAdapter([{ ...runner, repoWidePass: true }]),
+    ])
+
+    expect((runner as FakeRunner).calls.map((call) => call.nestedProjects)).toEqual([
+      ['packages/api', 'packages/web'],
     ])
   })
 
@@ -550,6 +610,31 @@ describe('runScan rollup metrics', () => {
     ])
 
     expect(result.metrics.format).toEqual({ formattableFiles: 5 })
+  })
+
+  /**
+   * Three units measured three things: the root project, a package called
+   * `repo/`, and the repo-spanning run whose attribution string that package
+   * shares. Merging any two of them as "the same files measured twice" would
+   * lose a measurement.
+   */
+  it('keeps a package called repo/ and a repo-spanning run apart', async () => {
+    const files = inventoryOf(['package.json', 'repo/package.json', 'repo/src/b.ts', 'src/a.ts'])
+    const spanning: ToolRunner = {
+      ...fakeRunner('secretlint', 'format', async () => ({
+        ...ok(),
+        metrics: { formattableFiles: 10 },
+      })),
+      repoScoped: true,
+      complementary: true,
+    }
+
+    const result = await runScan(
+      { repoRoot: '/repo', files, scratch: SCRATCH, projects: partitionProjects(files) },
+      [commonAdapter([formatter('prettier', 1), spanning])],
+    )
+
+    expect(result.metrics.format).toEqual({ formattableFiles: 12 })
   })
 
   it('sums the mutation counts and re-derives the score over all of them', async () => {

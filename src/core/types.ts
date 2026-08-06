@@ -171,8 +171,19 @@ export interface RepoContext {
   readonly files: FileInventory
   /** Absolute path to a scratch dir outside the repo. */
   readonly scratch: string
-  /** The repo's projects, stable-sorted by path; never empty. */
+  /** The projects this scan analyzes, stable-sorted by path; never empty. */
   readonly projects: readonly Project[]
+  /**
+   * Every project discovery found, stable-sorted — including the ones
+   * `--project` left out of {@link projects}. Defaults to {@link projects},
+   * which is what an unscoped scan has.
+   *
+   * Nesting is a fact about the repo and not about the selection: a package
+   * inside another package is still not its parent's, however the scan was
+   * scoped. Without this, scoping to the parent would make its nested packages
+   * part of it — see `RunContext.nestedProjects`.
+   */
+  readonly allProjects?: readonly Project[]
 }
 
 /**

@@ -16,7 +16,12 @@ import { failingFilePercent, gradeCategory } from './core/grade.ts'
 import { aggregateCategories, aggregateMetrics, runScan } from './core/orchestrator.ts'
 import type { RunRecord, ScanResult } from './core/orchestrator.ts'
 import type { OutputDir } from './core/output.ts'
-import { DEFAULT_OUTPUT_DIRNAME, createOutputDir, rawPrefix } from './core/output.ts'
+import {
+  BASE_RAW_DIRNAME,
+  DEFAULT_OUTPUT_DIRNAME,
+  createOutputDir,
+  rawPrefix,
+} from './core/output.ts'
 import type {
   Category,
   CategoryOutcome,
@@ -175,6 +180,10 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
     files,
     scratch: options.scratch,
     projects: scanned,
+    // The whole partition travels with the selection: what is *inside* a project
+    // is a fact about the tree, and scoping must not change a project's own
+    // grade (see `RepoContext.allProjects`).
+    allProjects: discovery.projects,
   }
 
   const scan = await runScan(repo, options.adapters ?? ADAPTERS, {
@@ -211,7 +220,9 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
  *
  * @param side which scan this is, in PR mode. The base scan's evidence goes
  * under `raw/base/` with the same nesting below it, because the two scans run
- * the same tools and a reader has to be able to tell which side a failure was on.
+ * the same tools and a reader has to be able to tell which side a failure was
+ * on. `base` is a reserved name like the others, so a project directory called
+ * `base/` is escaped away from it rather than into head's copy of it.
  */
 export async function adoptRawFiles(
   out: OutputDir,
@@ -226,7 +237,7 @@ export async function adoptRawFiles(
     // eslint-disable-next-line no-await-in-loop
     const raw = await out.adoptRaw(
       record.result.rawFiles,
-      side === 'base' ? `base/${prefix}` : prefix,
+      side === 'base' ? `${BASE_RAW_DIRNAME}/${prefix}` : prefix,
     )
     runs.push({ record, raw, ...(side === undefined ? {} : { side }) })
   }

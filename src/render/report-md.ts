@@ -336,12 +336,13 @@ function measurements(report: Report): string[] {
  */
 function projectsSection(report: Report): string[] {
   if (report.projects.length < 2 && report.rootShell === undefined) return []
+  const count = report.projects.length
   const blocks = [
     '## Projects',
-    `${plural(report.projects.length, 'project')}, each graded on its own files, its own toolchain ` +
-      `and its own denominators; the grades above are ${rollupCoverage(report)}. A category marked ` +
-      '`repo-scoped` is one a repo-spanning scan answered — secrets, dependency audits, workflow ' +
-      'checks — so it is graded once, above, and not per project.',
+    `${plural(count, 'project')}, ${count === 1 ? 'graded' : 'each graded'} on its own files, ` +
+      `its own toolchain and its own denominators; the grades above are ${rollupCoverage(report)}. ` +
+      'A category marked `repo-scoped` is one a repo-spanning scan answered — secrets, dependency ' +
+      'audits, workflow checks — so it is graded once, above, and not per project.',
   ]
   if (report.rootShell !== undefined) blocks.push(rootShellNote(report.rootShell))
   return [...blocks, ...report.projects.flatMap((project) => projectBlock(report, project))]

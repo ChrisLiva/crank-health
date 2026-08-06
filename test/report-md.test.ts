@@ -311,6 +311,13 @@ describe('renderReportMarkdown projects', () => {
       }),
     )
     expect(single).toContain('The repo root is a workspace shell (declared by pnpm-workspace.yaml)')
+    // …in a sentence written for one project rather than for several.
+    expect(single).toContain('1 project, graded on its own files')
+    expect(single).not.toContain('1 project, each graded')
+  })
+
+  it('says "each" only where there is more than one project', () => {
+    expect(markdown).toContain('2 projects, each graded on its own files')
   })
 
   it('says the grades are the repo as a whole when nothing scoped the run', () => {

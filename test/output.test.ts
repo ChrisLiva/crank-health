@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CliUsageError } from '../src/args.ts'
 import { writeScratchRaw } from '../src/core/exec.ts'
 import {
+  BASE_RAW_DIRNAME,
   DEFAULT_OUTPUT_DIRNAME,
   REPO_RAW_DIRNAME,
   ROOT_RAW_DIRNAME,
@@ -50,7 +51,7 @@ describe('rawPrefix', () => {
   })
 
   it('never collides a real project with a reserved directory', () => {
-    const paths = ['.', 'root', 'repo', 'root_', 'repo_', 'root/nested', 'repo/nested']
+    const paths = ['.', 'root', 'repo', 'base', 'root_', 'repo_', 'root/nested', 'repo/nested']
     const prefixes = [rawPrefix(REPO_SCOPE, true), ...paths.map((path) => projectPrefix(path))]
 
     expect(new Set(prefixes).size).toBe(prefixes.length)
@@ -59,11 +60,28 @@ describe('rawPrefix', () => {
       ROOT_RAW_DIRNAME,
       'root_',
       'repo_',
+      'base_',
       'root__',
       'repo__',
       'root_/nested',
       'repo_/nested',
     ])
+  })
+
+  /**
+   * A `--pr` run nests the base scan's whole prefix tree under `raw/base/`, so
+   * `base` is reserved like the others: a project at `base/root/` must not write
+   * over the base scan's copy of the root project's evidence.
+   */
+  it('never collides a project with the --pr base scan’s tree', () => {
+    const headSide = ['base', 'base/root', 'base/repo'].map((path) => projectPrefix(path))
+    const baseSide = ['.', 'root', 'repo'].map(
+      (path) => `${BASE_RAW_DIRNAME}/${projectPrefix(path)}`,
+    )
+
+    expect(new Set([...headSide, ...baseSide]).size).toBe(headSide.length + baseSide.length)
+    expect(headSide).toEqual(['base_', 'base_/root', 'base_/repo'])
+    expect(baseSide).toEqual(['base/root', 'base/root_', 'base/repo_'])
   })
 })
 

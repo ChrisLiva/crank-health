@@ -208,6 +208,29 @@ function gradedProject(report: Report, theme: Theme): ReportProject | undefined 
   return named?.categories[theme.category].status === 'graded' ? named : undefined
 }
 
+/**
+ * Whether `--project` would make this category's check about this project alone.
+ *
+ * It would not, where a tool answers the category **only** across the repo: a
+ * secrets scan spans the whole tree under `--project` too — it must, or a scoped
+ * run would miss the secret — so its findings from elsewhere are in the rollup
+ * the gate also reads, and a scoped command could stay red however completely
+ * this package was fixed. A check the work cannot satisfy is worse than the
+ * repo-wide one.
+ *
+ * A tool that ran repo-wide *and* per project is the other kind: the whole-repo
+ * pass is the rollup's extra measurement of what lies between projects (jscpd),
+ * and scoping to one project leaves only that project's own pass — which is
+ * exactly what the task is about.
+ */
+function scopable(report: Report, category: Category): boolean {
+  return report.tools
+    .filter((tool) => tool.repoWide === true && tool.category === category)
+    .every((spanning) =>
+      report.tools.some((tool) => tool.tool === spanning.tool && tool.repoWide !== true),
+    )
+}
+
 function isDirect(theme: Theme, touched: ReadonlySet<string>): boolean {
   return theme.findings.some((finding) => touched.has(finding.id))
 }
@@ -239,7 +262,7 @@ function toTask(
     gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
     findings: theme.findings,
     evidence,
-    verify: verifyArgv(theme.category, graded?.path),
+    verify: verifyArgv(theme.category, scopable(report, theme.category) ? graded?.path : undefined),
   }
 }
 

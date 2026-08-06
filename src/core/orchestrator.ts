@@ -257,8 +257,8 @@ function combinedMutationScore(
 interface ScopedValue {
   /** The language the measuring runner speaks. */
   readonly scope: RunnerScope
-  /** The project it measured, or {@link REPO_SCOPE} for a repo-spanning run. */
-  readonly project: string
+  /** The unit it measured — one project, or the repo. See {@link unitKey}. */
+  readonly unit: string
   readonly value: number
 }
 
@@ -281,7 +281,7 @@ function combine(
     (record) =>
       ({
         scope: record.scope,
-        project: record.project,
+        unit: unitKey(record.repoWide, record.project),
         value: record.result.metrics?.[field] ?? 0,
       }) satisfies ScopedValue,
   )
@@ -295,9 +295,9 @@ function combine(
  */
 function countAcrossUnits(values: readonly ScopedValue[]): number {
   const perUnit = new Map<string, number>()
-  for (const { scope, project, value } of values) {
-    const unit = `${scope} ${project}`
-    perUnit.set(unit, Math.max(perUnit.get(unit) ?? Number.NEGATIVE_INFINITY, value))
+  for (const { scope, unit, value } of values) {
+    const key = `${scope} ${unit}`
+    perUnit.set(key, Math.max(perUnit.get(key) ?? Number.NEGATIVE_INFINITY, value))
   }
   return [...perUnit.values()].reduce((total, value) => total + value, 0)
 }
@@ -343,6 +343,22 @@ interface Job {
 /** What one job's results are attributed to: a project path, or the repo. */
 function attributionOf(job: Job): string {
   return job.repoWide ? REPO_SCOPE : job.project.path
+}
+
+/**
+ * The unit a run answered about, as a key nothing else can collide with: one
+ * project, or the repo itself.
+ *
+ * The attribution string alone will not do. {@link REPO_SCOPE} is `repo`, which
+ * is a perfectly ordinary directory name, so a package called `repo/` and a
+ * repo-spanning run share it — and every rule keyed on "the same unit"
+ * (ownership, standby resolution, metric merging) would then treat the two as
+ * one thing: the package's own jscpd config would stand the repo-wide
+ * duplication pass down, and their measurements would be merged as if they were
+ * two tools looking at the same files.
+ */
+function unitKey(repoWide: boolean, project: string): string {
+  return repoWide ? 'repo-wide' : `project ${project}`
 }
 
 /**
@@ -547,9 +563,9 @@ function withoutRedundantDefaults(candidates: readonly Job[]): Job[] {
   })
 }
 
-/** A category in one project: the unit ownership is decided over. */
+/** A category in one unit of analysis: what ownership is decided over. */
 function ownershipKey(job: Job): string {
-  return `${job.runner.category} ${attributionOf(job)}`
+  return `${job.runner.category} ${unitKey(job.repoWide, attributionOf(job))}`
 }
 
 /** This runner claims its category: the repo chose it, and it is an alternative. */
@@ -583,7 +599,7 @@ function resolveStandby(
   const owners = new Map<string, Set<string>>()
   for (const job of jobs) {
     if (job.standby || job.detection === null || job.runner.complementary === true) continue
-    const key = ownerKey(job.runner.category, job.scope, attributionOf(job))
+    const key = ownerKey(job.runner.category, job.scope, job.repoWide, attributionOf(job))
     const tools = owners.get(key) ?? new Set<string>()
     tools.add(job.runner.tool)
     owners.set(key, tools)
@@ -592,11 +608,13 @@ function resolveStandby(
   return records.map((record) => {
     if (!record.standby) return record
     const mine =
-      owners.get(ownerKey(record.category, record.scope, record.project)) ?? new Set<string>()
+      owners.get(ownerKey(record.category, record.scope, record.repoWide, record.project)) ??
+      new Set<string>()
     const ownerRecords = records.filter(
       (other) =>
         other.category === record.category &&
         other.scope === record.scope &&
+        other.repoWide === record.repoWide &&
         other.project === record.project &&
         mine.has(other.tool),
     )
@@ -621,8 +639,13 @@ function resolveStandby(
   })
 }
 
-function ownerKey(category: Category, scope: RunnerScope, project: string): string {
-  return `${category} ${scope} ${project}`
+function ownerKey(
+  category: Category,
+  scope: RunnerScope,
+  repoWide: boolean,
+  project: string,
+): string {
+  return `${category} ${scope} ${unitKey(repoWide, project)}`
 }
 
 /**
@@ -724,7 +747,9 @@ async function execute(
 function nestedProjectsOf(repo: RepoContext, job: Job): readonly string[] {
   if (job.repoWide) return []
   const prefix = job.project.path === ROOT_PROJECT ? '' : `${job.project.path}/`
-  return repo.projects
+  // Every discovered project, not the scanned selection: `--project` narrows
+  // what is graded, and a package it left out is still not its parent's.
+  return (repo.allProjects ?? repo.projects)
     .filter((project) => project.path !== job.project.path && project.path.startsWith(prefix))
     .map((project) => project.path)
 }

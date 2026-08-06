@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../src/args.ts'
 import type { Category, CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES, categoryRank } from '../src/core/types.ts'
+import type { RunRecord } from '../src/core/orchestrator.ts'
 import type { AgentTask } from '../src/render/agent-md.ts'
 import { MAX_TASKS, buildAgentTasks, renderAgentMarkdown } from '../src/render/agent-md.ts'
-import type { Report } from '../src/render/json.ts'
+import type { Report, ReportInput } from '../src/render/json.ts'
 import {
   allGraded,
   makeFinding,
@@ -474,8 +475,8 @@ describe('tasks in a monorepo', () => {
 })
 
 /** The rollup is fine; one small package is not. */
-function skewed(): Report {
-  return makeReport({
+function skewedInput(): Partial<ReportInput> {
+  return {
     categories: { ...allGraded(), lint: { status: 'graded', grade: 'A' } },
     projects: [
       makeProjectScan({
@@ -487,7 +488,11 @@ function skewed(): Report {
     findings: [
       makeFinding({ id: 'api', file: 'packages/api/api/main.py', project: 'packages/api' }),
     ],
-  })
+  }
+}
+
+function skewed(): Report {
+  return makeReport(skewedInput())
 }
 
 /**
@@ -559,4 +564,116 @@ describe('tasks against per-project grades', () => {
     expect(task?.gradeImpact).toBe('security · F → A')
     expect(task?.verify).not.toContain('--project')
   })
+
+  /**
+   * A repo-spanning scanner scans the whole tree under `--project` too — it must,
+   * or a scoped run would miss the secret — so its findings from elsewhere are in
+   * the rollup the gate also reads. A scoped check for such a category could stay
+   * red however completely this package was fixed, so the check stays repo-wide.
+   */
+  it('does not scope the check for a category a repo-spanning scan answers', () => {
+    const graded = { ...allGraded(), security: { status: 'graded', grade: 'F' } } as const
+    const report = makeReport({
+      categories: graded,
+      projects: [
+        makeProjectScan({ project: projectAt('packages/api'), categories: graded }),
+        makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+      ],
+      findings: [
+        makeFinding({
+          id: 'sast',
+          category: 'security',
+          tool: 'opengrep',
+          rule: 'shell-injection',
+          severity: 'error',
+          file: 'packages/api/api/main.py',
+          project: 'packages/api',
+        }),
+      ],
+      runs: [
+        { record: { ...spanningRecord('gitleaks', 'security') }, raw: [] },
+        { record: { ...spanningRecord('opengrep', 'security'), repoWide: false }, raw: [] },
+      ],
+    })
+
+    const task = buildAgentTasks(report)[0]
+    // The package is graded F in its own right, so the task is its…
+    expect(task?.project).toBe('packages/api')
+    expect(task?.gradeImpact).toBe('security · F → A')
+    // …but the command it can be checked with is the repo's.
+    expect(task?.verify).toEqual(['--only', 'security', '--fail-under', 'A'])
+  })
+
+  it('still scopes a category no repo-spanning run touched', () => {
+    const report = makeReport({
+      ...skewedInput(),
+      runs: [{ record: spanningRecord('gitleaks', 'security'), raw: [] }],
+    })
+    expect(buildAgentTasks(report)[0]?.verify).toContain('--project')
+  })
+
+  /**
+   * The repo-wide duplication pass is not a repo-spanning *tool*: it runs beside
+   * jscpd's per-project passes, and scoping to one project leaves that project's
+   * own pass — which is what the task is about. Treating it like the secrets scan
+   * would hand the agent a check it cannot satisfy either.
+   */
+  it('still scopes duplication, whose repo-wide pass sits beside per-project ones', () => {
+    const graded = { ...allGraded(), duplication: { status: 'graded', grade: 'F' } } as const
+    const report = makeReport({
+      categories: allGraded(),
+      projects: [
+        makeProjectScan({ project: projectAt('packages/api'), categories: graded }),
+        makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+      ],
+      findings: [
+        makeFinding({
+          id: 'clone',
+          category: 'duplication',
+          tool: 'jscpd',
+          rule: 'jscpd/duplicate-block',
+          gradeScope: false,
+          file: 'packages/api/api/main.py',
+          project: 'packages/api',
+        }),
+      ],
+      runs: [
+        { record: spanningRecord('jscpd', 'duplication'), raw: [] },
+        {
+          record: {
+            ...spanningRecord('jscpd', 'duplication'),
+            repoWide: false,
+            project: 'packages/api',
+          },
+          raw: [],
+        },
+      ],
+    })
+
+    expect(buildAgentTasks(report)[0]?.verify).toEqual([
+      '--only',
+      'duplication',
+      '--project',
+      'packages/api',
+      '--fail-under',
+      'A',
+    ])
+  })
 })
+
+/** A run that spanned the repo, as `report.tools` records one. */
+function spanningRecord(tool: string, category: Category): RunRecord {
+  return {
+    tool,
+    category,
+    scope: 'common',
+    project: 'repo',
+    repoWide: true,
+    rollupOnly: false,
+    pinnedVersion: '1.0.0',
+    detection: null,
+    result: { state: 'ok', findings: [], rawFiles: [] },
+    durationMs: 1,
+    standby: false,
+  }
+}

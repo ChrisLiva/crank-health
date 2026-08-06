@@ -13,10 +13,17 @@ export const REPO_RAW_DIRNAME = 'repo'
 export const ROOT_RAW_DIRNAME = 'root'
 
 /**
- * A first path segment the reserved names would collide with: `root` and `repo`
- * themselves, and the escapes of them ({@link rawPrefix}).
+ * …and the `--pr` base scan's, which nests a whole prefix tree of its own under
+ * it: `raw/base/<the same nesting>`. The two scans run the same tools, so
+ * `raw/oxlint.sarif.json` would otherwise mean whichever wrote it last.
  */
-const RESERVED_SEGMENT = /^(?:root|repo)_*$/
+export const BASE_RAW_DIRNAME = 'base'
+
+/**
+ * A first path segment the reserved names would collide with: `root`, `repo`
+ * and `base` themselves, and the escapes of them ({@link rawPrefix}).
+ */
+const RESERVED_SEGMENT = /^(?:root|repo|base)_*$/
 
 /**
  * The `raw/` subdirectory one run's evidence belongs in: the project's own
@@ -25,14 +32,15 @@ const RESERVED_SEGMENT = /^(?:root|repo)_*$/
  * keeps the same tool's output in two projects apart, since every runner names
  * its raw files after itself.
  *
- * A repo may of course contain a package directory called `root/` or `repo/`,
- * and it must not land in the reserved one — two runs writing the same file is
- * evidence one of them silently loses, and a tool that reads its report back out
- * of the run directory would read the other's (jscpd runs both per project and
- * once over the repo, under one file name). Such a first segment therefore gains
- * a trailing `_`, and so does one that already ends in `_`s: `root` → `root_`,
- * `root_` → `root__`. Doubling is what keeps the escape injective, so no two
- * projects can ever be handed the same directory.
+ * A repo may of course contain a package directory called `root/`, `repo/` or
+ * `base/`, and it must not land in the reserved one — two runs writing the same
+ * file is evidence one of them silently loses, and a tool that reads its report
+ * back out of the run directory would read the other's (jscpd runs both per
+ * project and once over the repo, under one file name; a `--pr` scan runs every
+ * tool twice). Such a first segment therefore gains a trailing `_`, and so does
+ * one that already ends in `_`s: `root` → `root_`, `root_` → `root__`. Doubling
+ * is what keeps the escape injective, so no two projects — and no project and
+ * base-side prefix — can ever be handed the same directory.
  *
  * @param project a project path, or {@link import('./types.ts').REPO_SCOPE}
  * @param repoWide whether this run spanned the repo. Not derivable from
