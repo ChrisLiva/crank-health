@@ -41,7 +41,7 @@ import { systemToolFailure, systemToolVersion } from './system-tool.ts'
 
 export const GITLEAKS_TOOL = 'gitleaks'
 
-const GITLEAKS: SystemToolSpec = {
+export const GITLEAKS: SystemToolSpec = {
   binary: 'gitleaks',
   versionArgs: ['version'],
   install: 'brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing',

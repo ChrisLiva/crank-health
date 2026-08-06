@@ -5,6 +5,9 @@ import { basename, isAbsolute, join, resolve } from 'node:path'
 /** Output dir when `--out` is not given (spec §9). */
 export const DEFAULT_OUTPUT_DIRNAME = '.codebase-health'
 
+/** What a default run directory is named: local date plus a 4-hex run id. */
+export const RUN_DIRNAME_PATTERN = /^\d{4}-\d{2}-\d{2}-[0-9a-f]{4}$/
+
 /**
  * The run directory: `.codebase-health/` by default, always self-ignoring so a
  * scan leaves `git status --porcelain` clean (spec §7 and §9). The repo's own
@@ -49,20 +52,28 @@ export interface OutputDir {
  * directory is unaffected: it is crank-health's own, and the marker lands the
  * first time it is created.
  *
+ * **Default runs keep their history.** Without `--out`, each run gets its own
+ * directory under `.codebase-health/`, named `YYYY-MM-DD-xxxx` (local date
+ * plus a 4-hex-char run id), so consecutive runs coexist instead of the new
+ * report overwriting the last one. The self-ignoring marker lives once at
+ * `.codebase-health/.gitignore` and covers every run under it. `--out` keeps
+ * its exact meaning: the named directory IS the run directory, because a user
+ * who names a destination gets that destination.
+ *
  * @param repoRoot absolute path to the target repo
  * @param out `--out` override; relative paths resolve against the cwd
  */
 export async function createOutputDir(repoRoot: string, out?: string): Promise<OutputDir> {
   const root =
     out === undefined
-      ? join(repoRoot, DEFAULT_OUTPUT_DIRNAME)
+      ? await createRunRoot(join(repoRoot, DEFAULT_OUTPUT_DIRNAME))
       : isAbsolute(out)
         ? out
         : resolve(out)
   const raw = join(root, 'raw')
 
   await mkdir(raw, { recursive: true })
-  await writeMarker(join(root, '.gitignore'))
+  if (out !== undefined) await writeMarker(join(root, '.gitignore'))
 
   return {
     root,
@@ -88,6 +99,36 @@ export async function createOutputDir(repoRoot: string, out?: string): Promise<O
       return adopted
     },
   }
+}
+
+/**
+ * Creates this run's directory under the default parent: marker at the parent,
+ * then an exclusive `mkdir` of `<date>-<id>` — `EEXIST` means another run won
+ * the name this instant, so try another id rather than share a directory.
+ */
+async function createRunRoot(parent: string): Promise<string> {
+  await mkdir(parent, { recursive: true })
+  await writeMarker(join(parent, '.gitignore'))
+  for (;;) {
+    const root = join(parent, `${localDate()}-${randomUUID().slice(0, 4)}`)
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await mkdir(root)
+      return root
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    }
+  }
+}
+
+/** The run's calendar date as the user's wall clock shows it. */
+function localDate(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+function pad(part: number): string {
+  return String(part).padStart(2, '0')
 }
 
 /**

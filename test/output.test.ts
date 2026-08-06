@@ -10,12 +10,12 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { execa } from 'execa'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CliUsageError } from '../src/args.ts'
 import { writeScratchRaw } from '../src/core/exec.ts'
-import { DEFAULT_OUTPUT_DIRNAME, createOutputDir } from '../src/core/output.ts'
+import { DEFAULT_OUTPUT_DIRNAME, RUN_DIRNAME_PATTERN, createOutputDir } from '../src/core/output.ts'
 import { createRunDirectory, resolveRepoRoot } from '../src/run.ts'
 
 describe('createOutputDir', () => {
@@ -29,16 +29,24 @@ describe('createOutputDir', () => {
     await rm(repo, { recursive: true, force: true })
   })
 
-  it('defaults to .codebase-health/ inside the repo, with a raw/ subdir', async () => {
+  it('defaults to a dated run dir under .codebase-health/, with a raw/ subdir', async () => {
     const out = await createOutputDir(repo)
-    expect(out.root).toBe(join(repo, DEFAULT_OUTPUT_DIRNAME))
-    expect(out.raw).toBe(join(repo, DEFAULT_OUTPUT_DIRNAME, 'raw'))
+    expect(dirname(out.root)).toBe(join(repo, DEFAULT_OUTPUT_DIRNAME))
+    expect(basename(out.root)).toMatch(RUN_DIRNAME_PATTERN)
+    expect(out.raw).toBe(join(out.root, 'raw'))
     expect((await stat(out.raw)).isDirectory()).toBe(true)
   })
 
-  it('writes a .gitignore that hides the whole run directory', async () => {
-    const out = await createOutputDir(repo)
-    expect(await readFile(join(out.root, '.gitignore'), 'utf8')).toBe('*\n')
+  it('gives consecutive default runs their own directories', async () => {
+    const first = await createOutputDir(repo)
+    const second = await createOutputDir(repo)
+    expect(second.root).not.toBe(first.root)
+    expect(dirname(second.root)).toBe(dirname(first.root))
+  })
+
+  it('writes a .gitignore that hides every run directory', async () => {
+    await createOutputDir(repo)
+    expect(await readFile(join(repo, DEFAULT_OUTPUT_DIRNAME, '.gitignore'), 'utf8')).toBe('*\n')
   })
 
   it('writes that marker into a fresh --out directory too', async () => {
@@ -99,19 +107,20 @@ describe('createOutputDir', () => {
     expect(await readFile(raw, 'utf8')).toBe('boom\n')
   })
 
-  it('overwrites a previous run without leaving temp files behind', async () => {
+  it('overwrites a same-name artifact without leaving temp files behind', async () => {
     const out = await createOutputDir(repo)
     await out.write('report.json', '{"run":1}')
     await out.write('report.json', '{"run":2}')
 
     expect(await readFile(out.path('report.json'), 'utf8')).toBe('{"run":2}')
-    expect((await readdir(out.root)).toSorted()).toEqual(['.gitignore', 'raw', 'report.json'])
+    expect((await readdir(out.root)).toSorted()).toEqual(['raw', 'report.json'])
   })
 
-  it('reuses an existing run directory', async () => {
-    const first = await createOutputDir(repo)
+  it('reuses an existing --out directory, which names the run dir exactly', async () => {
+    const target = join(repo, 'health-out')
+    const first = await createOutputDir(repo, target)
     await first.writeRaw('keep.txt', 'kept\n')
-    const second = await createOutputDir(repo)
+    const second = await createOutputDir(repo, target)
     expect(await readFile(join(second.raw, 'keep.txt'), 'utf8')).toBe('kept\n')
   })
 

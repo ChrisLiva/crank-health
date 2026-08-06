@@ -41,7 +41,7 @@ import { explainMissing, systemToolVersion } from './system-tool.ts'
 
 export const OSV_SCANNER_TOOL = 'osv-scanner'
 
-const OSV_SCANNER: SystemToolSpec = {
+export const OSV_SCANNER: SystemToolSpec = {
   binary: 'osv-scanner',
   versionArgs: ['--version'],
   install: 'brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/',

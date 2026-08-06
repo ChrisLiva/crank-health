@@ -1,8 +1,9 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { RUN_DIRNAME_PATTERN } from '../src/core/output.ts'
 import type { Finding } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
@@ -220,7 +221,7 @@ describe('quick scan of the js-basic fixture', () => {
   it('writes report.md and agent.md alongside report.json', async () => {
     expect(await readFile(scan.markdownPath, 'utf8')).toBe(scan.markdown)
     expect(await readFile(scan.agentPath, 'utf8')).toBe(scan.agentMarkdown)
-    expect(await readdir(join(fixture.root, '.codebase-health'))).toEqual(
+    expect(await readdir(scan.outputDir)).toEqual(
       expect.arrayContaining(['report.json', 'report.md', 'agent.md', 'raw']),
     )
   })
@@ -248,7 +249,9 @@ describe('quick scan of the js-basic fixture', () => {
 
   it('leaves the target repo clean: the run directory ignores itself', async () => {
     expect(await fixture.status()).toBe('')
-    expect(await readdir(join(fixture.root, '.codebase-health'))).toContain('report.json')
+    expect(basename(scan.outputDir)).toMatch(RUN_DIRNAME_PATTERN)
+    expect(dirname(scan.outputDir)).toBe(join(fixture.root, '.codebase-health'))
+    expect(await readdir(scan.outputDir)).toContain('report.json')
   })
 
   it(

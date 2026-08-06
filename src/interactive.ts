@@ -4,6 +4,10 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { execa } from 'execa'
 import pc from 'picocolors'
+import { GITLEAKS } from './adapters/common/gitleaks.ts'
+import { OPENGREP } from './adapters/common/opengrep.ts'
+import { OSV_SCANNER } from './adapters/common/osv-scanner.ts'
+import type { SystemToolSpec } from './adapters/common/system-tool.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import type { CliOptions } from './args.ts'
 import { discoverFiles } from './core/discover.ts'
@@ -52,6 +56,53 @@ export interface RepoProbe {
 export interface PromptIO {
   say(line: string): void
   ask(prompt: string): Promise<string>
+}
+
+/**
+ * The security tools crank-health cannot fetch (release binaries; see
+ * `adapters/common/system-tool.ts`), with what each one adds to the scan.
+ */
+const SYSTEM_TOOLS: readonly { spec: SystemToolSpec; purpose: string }[] = [
+  { spec: GITLEAKS, purpose: 'secrets scanning' },
+  { spec: OPENGREP, purpose: 'SAST rules for JS/TS and Python' },
+  { spec: OSV_SCANNER, purpose: 'known-vulnerability scan of dependencies' },
+]
+
+/** One system tool's PATH status; `version` undefined means not installed. */
+export interface SystemToolStatus {
+  readonly spec: SystemToolSpec
+  readonly purpose: string
+  readonly version: string | undefined
+}
+
+/**
+ * The session's touchpoints with the machine, injectable so tests can script
+ * a toolchain (and never actually install anything).
+ */
+export interface SessionDeps {
+  checkSystemTools(): Promise<readonly SystemToolStatus[]>
+  hasBrew(): Promise<boolean>
+  /** Runs the install, streaming its output; true on success. */
+  install(spec: SystemToolSpec): Promise<boolean>
+}
+
+const REAL_DEPS: SessionDeps = {
+  checkSystemTools: () =>
+    Promise.all(
+      SYSTEM_TOOLS.map(async ({ spec, purpose }) => ({
+        spec,
+        purpose,
+        version: await installedVersion(spec),
+      })),
+    ),
+  hasBrew: async () => (await execa('brew', ['--version'], { reject: false })).exitCode === 0,
+  install: async (spec) => {
+    const result = await execa('brew', ['install', spec.binary], {
+      stdio: 'inherit',
+      reject: false,
+    })
+    return result.exitCode === 0
+  },
 }
 
 export interface InteractiveOutcome {
@@ -130,6 +181,7 @@ export async function probeRepo(path: string): Promise<RepoProbe> {
 export async function runInteractiveSession(
   base: CliOptions,
   io: PromptIO,
+  deps: SessionDeps = REAL_DEPS,
 ): Promise<InteractiveOutcome> {
   const probe = await probeRepo(base.path)
   sayHeader(probe, io)
@@ -137,6 +189,7 @@ export async function runInteractiveSession(
   const pr = await askScope(base, probe, io)
   const deep = await askDepth(base, probe, io)
   const only = await askCategories(base, deep, io)
+  if (only === undefined || only.includes('security')) await askSystemTools(io, deps)
   const failUnder = await askGate(base, io)
   const allowMissing = failUnder === undefined ? false : await askAllowMissing(base, deep, only, io)
   const out = await askOutputDir(base, probe, io)
@@ -264,6 +317,52 @@ async function askCategories(
   }
 }
 
+/**
+ * Security-tool status and, where Homebrew can do it, guided installs. Only
+ * reached when the security category is selected: these three run as release
+ * binaries crank-health cannot fetch ephemerally, so a missing one quietly
+ * narrows what security can assess — this step is where that stops being
+ * quiet. Declining (the default) changes nothing; the scan degrades exactly
+ * as before.
+ */
+async function askSystemTools(io: PromptIO, deps: SessionDeps): Promise<void> {
+  const status = await deps.checkSystemTools()
+  io.say('')
+  io.say('Security tools (release binaries crank-health cannot fetch itself):')
+  for (const tool of status) {
+    io.say(
+      tool.version === undefined
+        ? `  ✗ ${tool.spec.binary}  not on PATH — ${tool.purpose} will read not-available`
+        : `  ✓ ${tool.spec.binary} ${tool.version}  — ${tool.purpose}`,
+    )
+  }
+
+  const missing = status.filter((tool) => tool.version === undefined)
+  if (missing.length === 0) return
+
+  if (!(await deps.hasBrew())) {
+    io.say('  Homebrew was not found, so crank-health cannot install these for you:')
+    for (const tool of missing) io.say(`    ${tool.spec.install}`)
+    return
+  }
+
+  for (const tool of missing) {
+    const question = `Install ${tool.spec.binary} now (brew install ${tool.spec.binary})?`
+    // eslint-disable-next-line no-await-in-loop
+    if (!(await confirm(io, question, false))) {
+      io.say(`  skipped — later: ${tool.spec.install}`)
+      continue
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const installed = await deps.install(tool.spec)
+    io.say(
+      installed
+        ? `  ✓ ${tool.spec.binary} installed`
+        : `  ✗ ${tool.spec.binary} install failed — ${tool.spec.install}`,
+    )
+  }
+}
+
 /** `--fail-under`: empty answer means the gate stays off. */
 async function askGate(base: CliOptions, io: PromptIO): Promise<string | undefined> {
   io.say('')
@@ -307,6 +406,10 @@ async function askOutputDir(
   io: PromptIO,
 ): Promise<string | undefined> {
   io.say('')
+  if (base.out === undefined) {
+    io.say('The default keeps every run: each one lands in its own dated folder underneath.')
+    io.say('Naming a directory instead writes this run exactly there.')
+  }
   const fallback = base.out ?? join(probe.repoRoot, DEFAULT_OUTPUT_DIRNAME)
   const answer = (await io.ask(`Output directory [${fallback}]: `)).trim()
   return answer.length === 0 ? base.out : answer
@@ -347,6 +450,21 @@ async function confirm(io: PromptIO, question: string, fallback: boolean): Promi
     if (answer === 'n' || answer === 'no') return false
     io.say('  y or n')
   }
+}
+
+/**
+ * The tool's installed version, or `undefined` when it is not on PATH. A tool
+ * that runs but prints an unparseable version is still installed — the label
+ * degrades, not the status.
+ */
+async function installedVersion(spec: SystemToolSpec): Promise<string | undefined> {
+  const result = await execa(spec.binary, [...spec.versionArgs], {
+    reject: false,
+    timeout: 10_000,
+  })
+  if (result.exitCode !== 0) return undefined
+  const line = (result.stdout || result.stderr).split('\n', 1)[0] ?? ''
+  return /\d+\.\d+\.\d+\S*/.exec(line)?.[0] ?? 'installed'
 }
 
 /** The checked-out branch name, or `null` on a detached HEAD. */

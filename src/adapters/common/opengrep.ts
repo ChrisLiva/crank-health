@@ -48,7 +48,7 @@ import { explainMissing, systemToolVersion } from './system-tool.ts'
 
 export const OPENGREP_TOOL = 'opengrep'
 
-const OPENGREP: SystemToolSpec = {
+export const OPENGREP: SystemToolSpec = {
   binary: 'opengrep',
   versionArgs: ['--version'],
   install: 'brew install opengrep, or see https://github.com/opengrep/opengrep#installation',

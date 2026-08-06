@@ -1,8 +1,9 @@
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../src/args.ts'
+import type { SystemToolSpec } from '../src/adapters/common/system-tool.ts'
 import { equivalentCommand, probeRepo, runInteractiveSession } from '../src/interactive.ts'
-import type { PromptIO } from '../src/interactive.ts'
+import type { PromptIO, SessionDeps, SystemToolStatus } from '../src/interactive.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 
@@ -10,9 +11,51 @@ import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
  * The interactive walk-through is a front-end over `CliOptions`, so these
  * tests script the prompts and assert on the options that come out — the same
  * contract the printed "equivalent command" makes to the user.
+ *
+ * The machine's toolchain must not decide what the session asks, so every test
+ * injects a scripted {@link SessionDeps} instead of probing `PATH` for real.
  */
 
 const TEST_TIMEOUT_MS = 60_000
+
+function spec(binary: string): SystemToolSpec {
+  return {
+    binary: binary as SystemToolSpec['binary'],
+    versionArgs: ['--version'],
+    install: `brew install ${binary}`,
+  }
+}
+
+/**
+ * A scripted toolchain: `versions` says what is installed, `brew`/`installOk`
+ * script the install path, and `installed` records what got installed.
+ */
+function toolchain(
+  versions: Record<string, string | undefined>,
+  options: { brew?: boolean; installOk?: boolean } = {},
+) {
+  const installed: string[] = []
+  const deps: SessionDeps = {
+    checkSystemTools: () =>
+      Promise.resolve(
+        Object.entries(versions).map(([binary, version]): SystemToolStatus => ({
+          spec: spec(binary),
+          purpose: `${binary} purpose`,
+          version,
+        })),
+      ),
+    hasBrew: () => Promise.resolve(options.brew ?? true),
+    install: (toolSpec) => {
+      installed.push(toolSpec.binary)
+      return Promise.resolve(options.installOk ?? true)
+    },
+  }
+  return { deps, installed }
+}
+
+/** Every tool present: the session shows status and asks nothing extra. */
+const ALL_INSTALLED = () =>
+  toolchain({ gitleaks: '8.30.1', opengrep: '1.26.0', 'osv-scanner': '2.4.0' }).deps
 
 /** A PromptIO fed from a fixed answer list; empty string = accept the default. */
 function scriptedIO(answers: readonly string[]) {
@@ -46,7 +89,7 @@ describe('interactive session', () => {
       // depth, categories, gate, output dir, final confirm — no scope question,
       // because the only branch is the one we are on.
       const { io, transcript, exhausted } = scriptedIO(['', '', '', '', ''])
-      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io)
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.run).toBe(true)
       expect(session.options).toMatchObject({
@@ -83,7 +126,7 @@ describe('interactive session', () => {
     async () => {
       // depth=quick, categories, gate, allow-missing, out dir, confirm.
       const { io } = scriptedIO(['1', 'lint, types', 'b', '', '', ''])
-      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io)
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.only).toEqual(['lint', 'types'])
       expect(session.options.failUnder).toBe('B')
@@ -99,7 +142,7 @@ describe('interactive session', () => {
     async () => {
       // depth, categories=all, gate=B, allow-missing (default yes), out, confirm.
       const { io, transcript } = scriptedIO(['', '', 'B', '', '', ''])
-      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io)
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.failUnder).toBe('B')
       expect(session.options.allowMissing).toBe(true)
@@ -114,7 +157,7 @@ describe('interactive session', () => {
       // depth: "9" is out of range, then deep; categories: unknown, then valid;
       // gate, out dir, confirm all default.
       const { io, exhausted } = scriptedIO(['9', '2', 'nope', 'lint', '', '', ''])
-      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io)
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.deep).toBe(true)
       expect(session.options.only).toEqual(['lint'])
@@ -127,7 +170,7 @@ describe('interactive session', () => {
     'declining the final confirmation does not run',
     async () => {
       const { io } = scriptedIO(['', '', '', '', 'n'])
-      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io)
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
       expect(session.run).toBe(false)
     },
     TEST_TIMEOUT_MS,
@@ -153,7 +196,7 @@ describe('interactive session on a feature branch', () => {
     async () => {
       // scope=2 (changes vs main), depth, categories, gate, out dir, confirm.
       const { io, transcript } = scriptedIO(['2', '', '', '', '', ''])
-      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io)
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.pr).toBe('main')
       expect(transcript.join('\n')).toContain('Changes vs main')
@@ -167,8 +210,102 @@ describe('interactive session on a feature branch', () => {
     async () => {
       // Accept every default: scope defaults to the passed base.
       const { io } = scriptedIO(['', '', '', '', '', ''])
-      const session = await runInteractiveSession(parseCliArgs(['--pr', 'main', fixture.root]), io)
+      const session = await runInteractiveSession(
+        parseCliArgs(['--pr', 'main', fixture.root]),
+        io,
+        ALL_INSTALLED(),
+      )
       expect(session.options.pr).toBe('main')
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe('security tool walkthrough', () => {
+  let fixture: FixtureRepo
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('js-basic')
+  }, TEST_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it(
+    'shows status and offers installs for missing tools; declining installs nothing',
+    async () => {
+      const { deps, installed } = toolchain({ gitleaks: undefined, opengrep: '1.26.0' })
+      // depth, categories, install gitleaks? (default no), gate, out, confirm.
+      const { io, transcript, exhausted } = scriptedIO(['', '', '', '', '', ''])
+      await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
+
+      const text = transcript.join('\n')
+      expect(text).toContain('✗ gitleaks')
+      expect(text).toContain('✓ opengrep 1.26.0')
+      expect(text).toContain('skipped — later: brew install gitleaks')
+      expect(installed).toEqual([])
+      expect(exhausted()).toBe(true)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'accepting an install runs it and reports success',
+    async () => {
+      const { deps, installed } = toolchain({ gitleaks: undefined })
+      const { io, transcript } = scriptedIO(['', '', 'y', '', '', ''])
+      await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
+
+      expect(installed).toEqual(['gitleaks'])
+      expect(transcript.join('\n')).toContain('✓ gitleaks installed')
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'a failed install reports the hint and the session continues',
+    async () => {
+      const { deps, installed } = toolchain({ gitleaks: undefined }, { installOk: false })
+      const { io, transcript } = scriptedIO(['', '', 'y', '', '', ''])
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
+
+      expect(installed).toEqual(['gitleaks'])
+      expect(transcript.join('\n')).toContain('✗ gitleaks install failed — brew install gitleaks')
+      expect(session.run).toBe(true)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'without Homebrew it prints the hints and asks nothing',
+    async () => {
+      const { deps, installed } = toolchain({ gitleaks: undefined }, { brew: false })
+      // depth, categories, gate, out, confirm — no install question.
+      const { io, transcript, exhausted } = scriptedIO(['', '', '', '', ''])
+      await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
+
+      const text = transcript.join('\n')
+      expect(text).toContain('Homebrew was not found')
+      expect(text).toContain('brew install gitleaks')
+      expect(installed).toEqual([])
+      expect(exhausted()).toBe(true)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'is skipped entirely when security is not among the selected categories',
+    async () => {
+      const deps: SessionDeps = {
+        checkSystemTools: () => Promise.reject(new Error('must not be called')),
+        hasBrew: () => Promise.reject(new Error('must not be called')),
+        install: () => Promise.reject(new Error('must not be called')),
+      }
+      // depth, categories=lint, gate, out, confirm.
+      const { io } = scriptedIO(['', 'lint', '', '', ''])
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
+      expect(session.options.only).toEqual(['lint'])
     },
     TEST_TIMEOUT_MS,
   )
