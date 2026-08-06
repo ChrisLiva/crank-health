@@ -6,10 +6,10 @@
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
-| types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category; no tsconfig.json and no TypeScript sources — nothing owns the types category |
+| security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 22 functions over cognitive complexity 15 (0.0%). |
+| complexity | A | 0 of 11 functions over cognitive complexity 15 (0.0%). |
 | duplication | F | 41.2% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade. |
 | lint | F | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
 | format | C | 1 of 8 checked files fail the formatter (12.5%). |
@@ -17,7 +17,7 @@
 
 ### Measurements
 
-- Complexity: 0 of 22 functions over cognitive complexity 15 (0.0%).
+- Complexity: 0 of 11 functions over cognitive complexity 15 (0.0%).
 - Duplication: 41.2% of tokens duplicated.
 - Format: 8 files checked by a formatter.
 
@@ -36,7 +36,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 | security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 11 functions over cognitive complexity 15 (0.0%). |
+| complexity | A | 0 of 6 functions over cognitive complexity 15 (0.0%). |
 | duplication | A | 0.0% of tokens duplicated; the 1 clone below are the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
 | format | C | 1 of 4 checked files fail the formatter (25.0%). |
@@ -55,7 +55,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 | security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 11 functions over cognitive complexity 15 (0.0%). |
+| complexity | A | 0 of 5 functions over cognitive complexity 15 (0.0%). |
 | duplication | A | 0.0% of tokens duplicated; the 1 clone below are the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
 | format | A | 0 of 4 checked files fail the formatter (0.0%). |
@@ -68,7 +68,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 
 ## security — not assessed
 
-Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected
+Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
@@ -82,7 +82,7 @@ Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or se
 
 ## types — not assessed
 
-Not graded: no tsconfig.json and no TypeScript sources — nothing owns the types category; no tsconfig.json and no TypeScript sources — nothing owns the types category
+Not graded: no tsconfig.json and no TypeScript sources — nothing owns the types category
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
@@ -106,7 +106,7 @@ Evidence: [raw/packages/api/fallow-dead-code.json](raw/packages/api/fallow-dead-
 
 ## complexity — A
 
-0 of 22 functions over cognitive complexity 15 (0.0%).
+0 of 11 functions over cognitive complexity 15 (0.0%).
 
 Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 

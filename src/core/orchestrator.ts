@@ -840,10 +840,21 @@ export function aggregateCategories(
   return outcomes
 }
 
+/**
+ * Why a category has no grade, from the runs that were supposed to give it one.
+ *
+ * Identical reasons collapse: the same tool runs once per project, and a
+ * scanner that is not on this machine's PATH says so in every one of them — a
+ * hundred-package repo would otherwise print that sentence a hundred times in
+ * the one place a reader goes to find out what happened. One repo, one reason,
+ * however many runs reached it.
+ */
 function reasons(records: readonly RunRecord[]): string {
-  return records
-    .map((record) => record.result.reason ?? `${record.tool}: ${record.result.state}`)
-    .join('; ')
+  return [
+    ...new Set(
+      records.map((record) => record.result.reason ?? `${record.tool}: ${record.result.state}`),
+    ),
+  ].join('; ')
 }
 
 function describe(error: unknown): string {

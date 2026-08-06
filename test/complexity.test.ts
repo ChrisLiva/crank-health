@@ -25,6 +25,10 @@ describe('parseHealth', () => {
     const report = parseHealth(await readFile(HEALTH, 'utf8'))
     expect(report.version).toBe('3.14.0')
     expect(report.functionsAnalyzed).toBe(9)
+    // The denominator has to be splittable by file: a project is graded on the
+    // functions in its own files, not on everything the walk reached.
+    expect(report.fileScores.map((score) => score.functionCount).reduce((a, b) => a + b, 0)).toBe(9)
+    expect(report.fileScores).toContainEqual({ file: 'src/complex.js', functionCount: 1 })
     expect(report.findings).toEqual([
       {
         file: 'src/complex.js',
@@ -70,6 +74,10 @@ describe('toHealthFindings', () => {
   const report = {
     version: '3.14.0',
     functionsAnalyzed: 9,
+    fileScores: [
+      { file: 'src/complex.js', functionCount: 5 },
+      { file: 'src/other.js', functionCount: 4 },
+    ],
     findings: [
       {
         file: 'src/complex.js',

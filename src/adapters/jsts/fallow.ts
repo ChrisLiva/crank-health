@@ -19,6 +19,7 @@ import {
   firstLine,
   identify,
   repoRelative,
+  underProject,
 } from '../support.ts'
 import { detectNodeTool, isLibraryPackage } from './node-package.ts'
 
@@ -29,9 +30,12 @@ import { detectNodeTool, isLibraryPackage } from './node-package.ts'
  *
  * fallow discovers its own files rather than taking a list, as every
  * whole-project analyzer must — dead code and complexity are global metrics
- * (spec §4). The guarantee discovery exists to give is restored on the way out
- * instead: results are filtered to the paths crank-health discovered, so
- * gitignored files and dependencies can never reach a report.
+ * (spec §4). It is pointed at the project it is running for (`--root`), so the
+ * tree it walks is that project's, and it reports paths inside it — which
+ * {@link underProject} puts back on the repo's terms. The guarantee discovery
+ * exists to give is restored on the way out: results are filtered to the paths
+ * crank-health discovered, so gitignored files, dependencies and the projects
+ * nested inside this one can never reach a report.
  */
 
 export const FALLOW_DEAD_CODE_TOOL = 'fallow-dead-code'
@@ -109,9 +113,9 @@ async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toDeadCodeFindings(report, ctx.detection !== null, isLibrary).filter((finding) =>
-        analyzed.has(finding.file),
-      ),
+      toDeadCodeFindings(report, ctx.detection !== null, isLibrary)
+        .map((finding) => ({ ...finding, file: underProject(ctx.project.path, finding.file) }))
+        .filter((finding) => analyzed.has(finding.file)),
     ),
     ...(report.version === undefined ? {} : { toolVersion: report.version }),
     rawFiles: run.rawFiles,
@@ -126,6 +130,11 @@ async function runHealth(ctx: RunContext): Promise<ToolResult> {
   const run = await invoke(ctx, FALLOW_HEALTH_TOOL, [
     'health',
     '--complexity',
+    // The denominator, file by file. `summary.functions_analyzed` counts every
+    // function fallow walked, and a project that holds another project holds
+    // that one's functions too — counted there as well, they would land in the
+    // rollup twice and give both projects a ratio neither of them has.
+    '--file-scores',
     '--max-cognitive',
     String(COMPLEXITY_CEILING),
   ])
@@ -139,21 +148,39 @@ async function runHealth(ctx: RunContext): Promise<ToolResult> {
   }
 
   const analyzed = new Set(ctx.files)
-  const overCeiling = report.findings.filter((finding) => finding.exceedsCognitive)
+  const own = (file: string): boolean => analyzed.has(underProject(ctx.project.path, file))
+
+  // A report that measured functions but scored no file leaves the ratio with a
+  // denominator nobody counted, and 0 of 0 would grade A. Say so instead.
+  if (report.fileScores.length === 0 && report.functionsAnalyzed > 0) {
+    return {
+      state: 'error',
+      findings: [],
+      rawFiles: run.rawFiles,
+      reason: `fallow health scored no files, so the ${report.functionsAnalyzed} functions it analyzed cannot be counted per project`,
+    }
+  }
+
   return {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toHealthFindings(report, ctx.detection !== null).filter((finding) =>
-        analyzed.has(finding.file),
-      ),
+      toHealthFindings(report, ctx.detection !== null)
+        .map((finding) => ({ ...finding, file: underProject(ctx.project.path, finding.file) }))
+        .filter((finding) => analyzed.has(finding.file)),
     ),
     ...(report.version === undefined ? {} : { toolVersion: report.version }),
     rawFiles: run.rawFiles,
-    // Spec §3's complexity ratio, exactly: % of functions over cognitive 15.
+    // Spec §3's complexity ratio, exactly: % of functions over cognitive 15 —
+    // over this project's own files, so the project's grade is its own and the
+    // rollup's is the sum of the parts.
     metrics: {
-      functionsTotal: report.functionsAnalyzed,
-      functionsOverCeiling: overCeiling.length,
+      functionsTotal: report.fileScores
+        .filter((score) => own(score.file))
+        .reduce((total, score) => total + score.functionCount, 0),
+      functionsOverCeiling: report.findings.filter(
+        (finding) => finding.exceedsCognitive && own(finding.file),
+      ).length,
     },
   }
 }
@@ -171,7 +198,11 @@ async function invoke(ctx: RunContext, tool: string, args: string[]): Promise<In
       : ephemeralCommand(FALLOW_PACKAGE, args, FALLOW_BIN)
 
   const execution = await execTool(
-    { ...command, args: [...command.args, ...BASE_ARGS] },
+    // `--root` is the project, so the walk is this project's tree rather than
+    // the whole repo once per project. The repo root stays the working
+    // directory: that is where a config the project inherits lives, and fallow
+    // resolves one from above `--root` as long as it starts there.
+    { ...command, args: [...command.args, ...BASE_ARGS, '--root', ctx.project.path] },
     { cwd: ctx.repoRoot, timeoutMs: ctx.timeoutMs },
   )
 
@@ -323,12 +354,23 @@ export function toDeadCodeFindings(
   return [...files, ...exports].toSorted(byLocation)
 }
 
-/** The parts of `fallow health --complexity --format json` we report on. */
+/** The parts of `fallow health --complexity --file-scores --format json` we report on. */
 export interface FallowHealth {
   readonly version: string | undefined
-  /** The `complexity` denominator: every function fallow measured. */
+  /** Every function fallow measured, across everything it walked. */
   readonly functionsAnalyzed: number
+  /**
+   * The `complexity` denominator, split by file, so it can be counted over one
+   * project's files. Sums to {@link functionsAnalyzed}; files holding no
+   * function are absent rather than zero.
+   */
+  readonly fileScores: readonly FallowFileScore[]
   readonly findings: readonly FallowComplexity[]
+}
+
+export interface FallowFileScore {
+  readonly file: string
+  readonly functionCount: number
 }
 
 export interface FallowComplexity {
@@ -374,9 +416,18 @@ export function parseHealth(stdout: string): FallowHealth {
     ]
   })
 
+  const fileScores = (asArray(document['file_scores']) ?? []).flatMap((entry) => {
+    const score = asRecord(entry)
+    const file = asString(score?.['path'])
+    const functionCount = asNumber(score?.['function_count'])
+    if (file === undefined || functionCount === undefined) return []
+    return [{ file: repoRelative(file), functionCount } satisfies FallowFileScore]
+  })
+
   return {
     version: asString(document['version']),
     functionsAnalyzed: asNumber(summary?.['functions_analyzed']) ?? 0,
+    fileScores,
     findings,
   }
 }

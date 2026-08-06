@@ -17,6 +17,7 @@ import {
   firstLine,
   identify,
   repoRelative,
+  underProject,
 } from '../support.ts'
 import { detectNodeTool } from './node-package.ts'
 
@@ -71,10 +72,11 @@ async function runFta(ctx: RunContext): Promise<ToolResult> {
   }
 
   const detection = ctx.detection
-  // fta takes a project directory, not a file list, and walks it itself; the
-  // results are filtered to discovered paths below so nothing gitignored or
-  // vendored can reach a report.
-  const args = ['.', '--json']
+  // fta takes a project directory, not a file list, and walks it itself — so it
+  // is given this project's, not the repo's. The results are filtered to
+  // discovered paths below, so nothing gitignored, vendored, or belonging to a
+  // project nested inside this one can reach a report.
+  const args = [ctx.project.path, '--json']
   const command =
     detection?.installed === true && detection.binPath !== undefined
       ? repoCommand(detection.binPath, args)
@@ -121,7 +123,9 @@ async function runFta(ctx: RunContext): Promise<ToolResult> {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toPendingFindings(scores, detection !== null).filter((finding) => analyzed.has(finding.file)),
+      toPendingFindings(scores, detection !== null)
+        .map((finding) => ({ ...finding, file: underProject(ctx.project.path, finding.file) }))
+        .filter((finding) => analyzed.has(finding.file)),
     ),
     ...(detection?.version === undefined
       ? { toolVersion: pinnedVersion(FTA_PACKAGE) }

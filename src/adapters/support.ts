@@ -85,6 +85,22 @@ export function repoRelative(file: string, repoRoot = ''): string {
   return relativized.replace(/^\.\//, '')
 }
 
+/**
+ * A path reported by a tool that was pointed at one project, as the repo sees
+ * it. A whole-tree analyzer takes a directory rather than a file list, and it
+ * reports inside that directory — `src/index.js`, not
+ * `packages/api/src/index.js`. Everything downstream is repo-root-relative, and
+ * finding identity is computed from that path, so the offset goes back on here.
+ *
+ * The root project is the identity case: its directory is the repo's.
+ *
+ * @param project repo-relative posix project directory, `.` for the root
+ */
+export function underProject(project: string, file: string): string {
+  const path = repoRelative(file)
+  return project === '.' ? path : `${project}/${path}`
+}
+
 /** Byte-wise ordering, not locale-aware: the sort must not vary by machine. */
 export function compare(a: string, b: string): number {
   if (a === b) return 0

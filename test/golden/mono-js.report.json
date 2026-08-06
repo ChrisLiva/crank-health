@@ -20,11 +20,11 @@
   "categories": {
     "security": {
       "status": "not-assessed",
-      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
     },
     "types": {
       "status": "not-assessed",
-      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category; no tsconfig.json and no TypeScript sources — nothing owns the types category"
+      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
     },
     "dead-code": {
       "status": "graded",
@@ -53,7 +53,7 @@
   },
   "metrics": {
     "complexity": {
-      "functionsTotal": 22,
+      "functionsTotal": 11,
       "functionsOverCeiling": 0
     },
     "duplication": {
@@ -115,7 +115,7 @@
       },
       "metrics": {
         "complexity": {
-          "functionsTotal": 11,
+          "functionsTotal": 6,
           "functionsOverCeiling": 0
         },
         "duplication": {
@@ -181,7 +181,7 @@
       },
       "metrics": {
         "complexity": {
-          "functionsTotal": 11,
+          "functionsTotal": 5,
           "functionsOverCeiling": 0
         },
         "duplication": {

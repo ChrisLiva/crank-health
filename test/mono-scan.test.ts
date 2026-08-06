@@ -179,6 +179,24 @@ describe('quick scan of the mono-js fixture', () => {
   })
 
   /**
+   * A grade per project needs a denominator per project. The complexity tools
+   * take a directory and walk it themselves, so the failure to guard against is
+   * not a missing measurement but a repo-wide one wearing a package's name:
+   * every package reporting the same number, and the rollup adding that number
+   * up once per package for a repo that has it once.
+   */
+  it('counts each package’s own functions, and the rollup counts them once', () => {
+    const totals = scan.report.projects.map(
+      (project) => project.metrics.complexity?.functionsTotal ?? 0,
+    )
+    // The packages hold different code; one number for both would be the repo's.
+    expect(totals).toEqual([6, 5])
+    expect(scan.report.metrics.complexity?.functionsTotal).toBe(
+      totals.reduce((sum, total) => sum + total, 0),
+    )
+  })
+
+  /**
    * Acceptance criterion 8. The clone is between the packages, so neither
    * package's own measurement can see it — and the repo-wide pass that can is
    * the rollup's alone.
@@ -381,6 +399,21 @@ describe('quick scan of the mono-mixed fixture', () => {
       expect.arrayContaining(['fallow-health', 'fta', 'oxlint', 'prettier']),
     )
     expect(toolsIn('services/web')).not.toContain('ruff-lint')
+  })
+
+  /**
+   * The same denominator rule across two languages: each service is counted by
+   * its own tool over its own files, and the rollup is those two counts added
+   * together — not either tool's view of the whole repo.
+   */
+  it('counts each service’s own functions, and the rollup counts them once', () => {
+    const totals = scan.report.projects.map(
+      (project) => project.metrics.complexity?.functionsTotal ?? 0,
+    )
+    expect(totals).toEqual([2, 1])
+    expect(scan.report.metrics.complexity?.functionsTotal).toBe(
+      totals.reduce((sum, total) => sum + total, 0),
+    )
   })
 
   it('grades each service on the categories its own tools reached', () => {
