@@ -113,7 +113,7 @@ async function runCoverage(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Python files' }
   }
 
-  const venv = await findVenv(ctx.repoRoot)
+  const venv = await findVenv(ctx.repoRoot, ctx.project.path)
   if (venv === undefined) {
     return unavailable(
       `this project has no virtualenv to run its tests in — ${COVERAGE_SETUP_HINT}`,

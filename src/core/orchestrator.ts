@@ -1,18 +1,23 @@
-import { repoDetectContext } from './discover.ts'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
+import { nearestProjectMap, repoProject } from './discover.ts'
+import { rawPrefix } from './output.ts'
 import { mapLimit } from './pool.ts'
 import type {
   Category,
   CategoryOutcome,
+  DetectContext,
   Detection,
   Finding,
   LanguageAdapter,
+  Project,
   RepoContext,
   RunnerScope,
   ToolMetrics,
   ToolResult,
   ToolRunner,
 } from './types.ts'
-import { CATEGORIES, categoryRank } from './types.ts'
+import { CATEGORIES, REPO_SCOPE, categoryRank } from './types.ts'
 
 /** How many tools run at once. */
 export const DEFAULT_CONCURRENCY = 4
@@ -49,6 +54,18 @@ export interface RunRecord {
   readonly tool: string
   readonly category: Category
   readonly scope: RunnerScope
+  /**
+   * What this run was about: the project's repo-relative path, or
+   * {@link REPO_SCOPE} for a run that spanned the repo.
+   */
+  readonly project: string
+  /**
+   * True for the repo-wide pass of a {@link ToolRunner.repoWidePass} runner —
+   * the one that measures what no single project can see (a clone *between* two
+   * packages). Only the rollup's grade is built from it; no project's is, and
+   * the per-project passes it sits beside are the ones the projects grade on.
+   */
+  readonly rollupOnly: boolean
   /** The version this release pins for ephemeral runs of this tool (spec §6). */
   readonly pinnedVersion: string
   readonly detection: Detection | null
@@ -84,6 +101,13 @@ export interface ScanResult {
  * `error`, one that outlives its budget becomes `timeout`, one whose
  * prerequisites are missing becomes `not-available` — and the scan finishes
  * either way. One tool can never abort the run.
+ *
+ * The unit of work is a **(runner × project)** pair (see {@link plan}), so a
+ * monorepo runs each tool once per project that has its language, under that
+ * project's own configuration. The categories and metrics aggregated here are
+ * the **rollup's** — the whole repo, which is what a single-project repo has
+ * always been; `runs` and `findings` carry the project each of them belongs to,
+ * for the per-project half of the report.
  */
 export async function runScan(
   repo: RepoContext,
@@ -108,12 +132,40 @@ export async function runScan(
   const resolved = resolveStandby(jobs, records, warnings)
 
   return {
-    findings: sortFindings(resolved.flatMap((record) => record.result.findings)),
+    findings: sortFindings(attribute(resolved, repo.projects)),
     runs: resolved,
     categories: aggregate(requested, resolved),
     metrics: aggregateMetrics(resolved),
     warnings,
   }
+}
+
+/**
+ * Stamps every finding with the project it is in and drops the duplicates the
+ * project dimension can produce.
+ *
+ * Attribution is by *path*, never by which run produced it: a repo-scoped
+ * secrets scan reports across every package at once, and a reader looking at a
+ * package wants its own secret listed there. See {@link nearestProjectMap}.
+ *
+ * The de-duplication is what makes the repo-wide duplication pass safe to add:
+ * it re-reports the clones the per-project passes already found, under the same
+ * identity (identity is path-based and the path did not change). One finding
+ * with one id is what the report needs, so the first run to report it keeps it —
+ * job order is fixed, so which one that is never varies.
+ */
+function attribute(records: readonly RunRecord[], projects: readonly Project[]): Finding[] {
+  const projectOf = nearestProjectMap(projects)
+  const seen = new Set<string>()
+  const findings: Finding[] = []
+  for (const record of records) {
+    for (const finding of record.result.findings) {
+      if (seen.has(finding.id)) continue
+      seen.add(finding.id)
+      findings.push({ ...finding, project: projectOf(finding.file) })
+    }
+  }
+  return findings
 }
 
 /**
@@ -195,12 +247,20 @@ function combine(
   field: keyof ToolMetrics,
   fold: (values: readonly ScopedValue[]) => number,
 ): ToolMetrics {
-  const values = reported.flatMap((record) => {
+  const measured = reported.filter((record) => {
     const value = record.result.metrics?.[field]
-    return value === undefined || !Number.isFinite(value)
-      ? []
-      : [{ scope: record.scope, value } satisfies ScopedValue]
+    return value !== undefined && Number.isFinite(value)
   })
+
+  // A repo-wide pass measured this field over the whole repo, which is what a
+  // rollup metric *is* — so when one ran it decides, and the per-project passes
+  // beside it (whose numbers are their own projects') are not merged in. Without
+  // this, one small package's 40 % duplication would become the repo's.
+  const rollup = measured.filter((record) => record.rollupOnly)
+  const values = (rollup.length > 0 ? rollup : measured).map(
+    (record) =>
+      ({ scope: record.scope, value: record.result.metrics?.[field] ?? 0 }) satisfies ScopedValue,
+  )
   return values.length === 0 ? {} : { [field]: fold(values) }
 }
 
@@ -235,6 +295,15 @@ export function sortFindings(findings: readonly Finding[]): Finding[] {
 interface Job {
   readonly runner: ToolRunner
   readonly scope: RunnerScope
+  /**
+   * The project this job analyzes — the whole repo as one project when it is
+   * repo-spanning ({@link repoWide}).
+   */
+  readonly project: Project
+  /** Spans the repo: a {@link ToolRunner.repoScoped} run, or a rollup pass. */
+  readonly repoWide: boolean
+  /** The repo-wide pass of a {@link ToolRunner.repoWidePass} runner. */
+  readonly rollupOnly: boolean
   readonly detection: Detection | null
   /** Files this runner gets: its language's subset, or everything for `common`. */
   readonly files: readonly string[]
@@ -242,7 +311,32 @@ interface Job {
   readonly standby: boolean
 }
 
-/** Detects languages, then per-runner ownership. Detection never runs a tool. */
+/** What one job's results are attributed to: a project path, or the repo. */
+function attributionOf(job: Job): string {
+  return job.repoWide ? REPO_SCOPE : job.project.path
+}
+
+/**
+ * The work of a scan: one job per **(runner, project)** pair, plus the
+ * repo-spanning ones.
+ *
+ * Three kinds of job come out of this, and the difference is what each tool can
+ * answer about:
+ *
+ * - **per project** — every language-scoped runner, in each project whose own
+ *   inventory has its language, detected against that project (ownership
+ *   inherits from its ancestors — see `DetectContext`). This is what makes a
+ *   package's grade its package's: its own config, its own files, its own
+ *   toolchain.
+ * - **repo-spanning** — one job for each {@link ToolRunner.repoScoped} runner,
+ *   over the whole inventory, however many projects there are.
+ * - **the rollup pass** — one extra whole-repo job for a
+ *   {@link ToolRunner.repoWidePass} runner, and only in a repo that has more
+ *   than one project to be *between*.
+ *
+ * Jobs are grouped by runner and then by project, so a single-project repo
+ * produces exactly the sequence it always has. Detection never runs a tool.
+ */
 async function plan(
   repo: RepoContext,
   adapters: readonly LanguageAdapter[],
@@ -251,7 +345,7 @@ async function plan(
   warnings: string[],
 ): Promise<Job[]> {
   const jobs: Job[] = []
-  const detectContext = repoDetectContext(repo.repoRoot, repo.files)
+  const wholeRepo = repoProject(repo.files)
 
   for (const adapter of adapters) {
     const runners = adapter.runners.filter(
@@ -262,40 +356,121 @@ async function plan(
     )
     if (runners.length === 0) continue
 
-    const files =
-      adapter.language === 'common' ? repo.files.all : repo.files.byLanguage[adapter.language]
-
-    let applies: boolean
-    try {
-      // Detection is cheap and ordered; the concurrency cap covers the runs.
-      // eslint-disable-next-line no-await-in-loop
-      applies = await adapter.detect(detectContext)
-    } catch (error) {
-      warnings.push(`${adapter.language}: language detection failed: ${describe(error)}`)
-      continue
-    }
-    if (!applies) continue
+    // Which projects this adapter has anything to say about, decided once per
+    // project rather than once per runner.
+    // eslint-disable-next-line no-await-in-loop
+    const targets = await applicableProjects(adapter, repo, warnings)
 
     const candidates: Job[] = []
     for (const runner of runners) {
-      let detection: Detection | null = null
-      try {
+      for (const unit of unitsFor(runner, targets, wholeRepo, repo.projects.length)) {
         // eslint-disable-next-line no-await-in-loop
-        detection = await runner.detect(detectContext)
-      } catch (error) {
-        warnings.push(`${runner.tool}: detection failed, using default config: ${describe(error)}`)
+        const job = await candidate(runner, adapter, unit, repo, warnings)
+        if (job !== undefined) candidates.push(job)
       }
-      // A tool crank-health never imposes as a default is simply absent from a
-      // repo that did not choose it — not a failure, and not a reason for the
-      // category to degrade (spec §1: `ToolRunner.repoOwnedOnly`).
-      if (runner.repoOwnedOnly === true && detection === null) continue
-      candidates.push({ runner, scope: adapter.language, detection, files, standby: false })
     }
 
     jobs.push(...withoutRedundantDefaults(candidates))
   }
 
   return jobs
+}
+
+/** One thing a runner is asked about: which project, and on whose behalf. */
+interface Unit {
+  readonly project: Project
+  readonly repoWide: boolean
+  readonly rollupOnly: boolean
+}
+
+/** The units one runner is planned for; see {@link plan} for the three kinds. */
+function unitsFor(
+  runner: ToolRunner,
+  targets: readonly Project[],
+  wholeRepo: Project,
+  projectCount: number,
+): Unit[] {
+  // A repo-scoped runner is asked once, and only where its adapter applies at all.
+  if (runner.repoScoped === true) {
+    return targets.length === 0 ? [] : [{ project: wholeRepo, repoWide: true, rollupOnly: false }]
+  }
+
+  const perProject = targets.map((project) => ({
+    project,
+    repoWide: false,
+    rollupOnly: false,
+  }))
+  // Plus, for the runner that measures across projects, the pass that sees what
+  // none of them can. A single-project repo has no "across" to measure.
+  return runner.repoWidePass === true && projectCount > 1
+    ? [...perProject, { project: wholeRepo, repoWide: true, rollupOnly: true }]
+    : perProject
+}
+
+/**
+ * The projects this adapter applies to, in `RepoContext.projects` order. A
+ * detector that throws takes only its own adapter out of the scan, with a
+ * warning — as it always has.
+ */
+async function applicableProjects(
+  adapter: LanguageAdapter,
+  repo: RepoContext,
+  warnings: string[],
+): Promise<Project[]> {
+  const applicable: Project[] = []
+  for (const project of repo.projects) {
+    try {
+      // Detection is cheap and ordered; the concurrency cap covers the runs.
+      // eslint-disable-next-line no-await-in-loop
+      if (await adapter.detect(detectContextFor(repo, project))) applicable.push(project)
+    } catch (error) {
+      warnings.push(
+        `${adapter.language}: language detection failed in ${project.path}: ${describe(error)}`,
+      )
+    }
+  }
+  return applicable
+}
+
+/** One job, or nothing when the repo did not choose a tool we never impose. */
+async function candidate(
+  runner: ToolRunner,
+  adapter: LanguageAdapter,
+  unit: Unit,
+  repo: RepoContext,
+  warnings: string[],
+): Promise<Job | undefined> {
+  const project = unit.project
+  let detection: Detection | null = null
+  try {
+    detection = await runner.detect(detectContextFor(repo, project))
+  } catch (error) {
+    warnings.push(`${runner.tool}: detection failed, using default config: ${describe(error)}`)
+  }
+  // A tool crank-health never imposes as a default is simply absent from a
+  // repo that did not choose it — not a failure, and not a reason for the
+  // category to degrade (spec §1: `ToolRunner.repoOwnedOnly`). Ownership is the
+  // project's: a package that owns ESLint gets it, its sibling does not.
+  if (runner.repoOwnedOnly === true && detection === null) return undefined
+
+  return {
+    runner,
+    scope: adapter.language,
+    project,
+    repoWide: unit.repoWide,
+    rollupOnly: unit.rollupOnly,
+    detection,
+    files:
+      adapter.language === 'common'
+        ? project.files.all
+        : project.files.byLanguage[adapter.language],
+    standby: false,
+  }
+}
+
+/** Detection's view: one project, the repo it sits in, the whole inventory. */
+function detectContextFor(repo: RepoContext, project: Project): DetectContext {
+  return { repoRoot: repo.repoRoot, project, files: repo.files }
 }
 
 /**
@@ -305,9 +480,12 @@ async function plan(
  * it — a repo formatted with Biome is not badly formatted for disagreeing with
  * prettier's defaults, and grading it against both would say it was.
  *
- * Ownership is per language, not global: Python owning `ruff format` says
- * nothing about who formats the JavaScript next to it, so this is applied
- * within one adapter's runners.
+ * Ownership is per language and per project, not global: Python owning `ruff
+ * format` says nothing about who formats the JavaScript next to it, and one
+ * package owning ESLint says nothing about its sibling. So this is applied
+ * within one adapter's runners, keyed by the project each job is for — a
+ * package that owns ESLint stands oxlint down *there*, and the sibling that
+ * does not still gets it.
  *
  * Two repo-owned tools in one category still both run and merge (spec §1's
  * "multiple tools detected for one category → run all"); it is only the
@@ -327,17 +505,22 @@ async function plan(
  * category, promoted if it did not.
  */
 function withoutRedundantDefaults(candidates: readonly Job[]): Job[] {
-  const suppressed = new Set(candidates.filter(canRun).map((job) => job.runner.category))
-  const claimed = new Set(candidates.filter(owns).map((job) => job.runner.category))
+  const suppressed = new Set(candidates.filter(canRun).map(ownershipKey))
+  const claimed = new Set(candidates.filter(owns).map(ownershipKey))
 
   // A flatMap over the candidates keeps them in candidate order; `runs` is in
   // job order, and appending the kept standbys at the end would reorder it.
   return candidates.flatMap((job) => {
     if (job.detection !== null || job.runner.complementary === true) return [job]
-    if (suppressed.has(job.runner.category)) return []
-    if (claimed.has(job.runner.category)) return [{ ...job, standby: true }]
+    if (suppressed.has(ownershipKey(job))) return []
+    if (claimed.has(ownershipKey(job))) return [{ ...job, standby: true }]
     return [job]
   })
+}
+
+/** A category in one project: the unit ownership is decided over. */
+function ownershipKey(job: Job): string {
+  return `${job.runner.category} ${attributionOf(job)}`
 }
 
 /** This runner claims its category: the repo chose it, and it is an alternative. */
@@ -353,10 +536,11 @@ function canRun(job: Job): boolean {
 /**
  * Settles what each standby run was for, once every runner has finished.
  *
- * Owner identity comes from the *jobs*, keyed by category and language scope, so
- * a complementary runner that happened to succeed cannot stand a standby down —
- * it never conferred ownership in the first place — and nothing depends on
- * records and jobs lining up by index.
+ * Owner identity comes from the *jobs*, keyed by category, language scope and
+ * project, so a complementary runner that happened to succeed cannot stand a
+ * standby down — it never conferred ownership in the first place — a package's
+ * owner cannot settle its sibling's standby, and nothing depends on records and
+ * jobs lining up by index.
  *
  * Records are rebuilt, never mutated.
  */
@@ -370,7 +554,7 @@ function resolveStandby(
   const owners = new Map<string, Set<string>>()
   for (const job of jobs) {
     if (job.standby || job.detection === null || job.runner.complementary === true) continue
-    const key = ownerKey(job.runner.category, job.scope)
+    const key = ownerKey(job.runner.category, job.scope, attributionOf(job))
     const tools = owners.get(key) ?? new Set<string>()
     tools.add(job.runner.tool)
     owners.set(key, tools)
@@ -378,10 +562,14 @@ function resolveStandby(
 
   return records.map((record) => {
     if (!record.standby) return record
-    const mine = owners.get(ownerKey(record.category, record.scope)) ?? new Set<string>()
+    const mine =
+      owners.get(ownerKey(record.category, record.scope, record.project)) ?? new Set<string>()
     const ownerRecords = records.filter(
       (other) =>
-        other.category === record.category && other.scope === record.scope && mine.has(other.tool),
+        other.category === record.category &&
+        other.scope === record.scope &&
+        other.project === record.project &&
+        mine.has(other.tool),
     )
 
     const graded = ownerRecords.filter((other) => other.result.state === 'ok')
@@ -404,8 +592,8 @@ function resolveStandby(
   })
 }
 
-function ownerKey(category: Category, scope: RunnerScope): string {
-  return `${category} ${scope}`
+function ownerKey(category: Category, scope: RunnerScope, project: string): string {
+  return `${category} ${scope} ${project}`
 }
 
 /**
@@ -446,7 +634,15 @@ interface Profile {
   readonly changedFiles?: readonly string[]
 }
 
-/** Runs one tool with every failure mode converted into a `ToolResult`. */
+/**
+ * Runs one tool with every failure mode converted into a `ToolResult`.
+ *
+ * The scratch directory is the job's, not the scan's: it mirrors the `raw/`
+ * nesting the pipeline adopts these files into ({@link rawPrefix}), so two
+ * projects running the same tool cannot write over each other's evidence. It is
+ * created here because runners are entitled to a working directory that exists —
+ * several start their tool with `cwd` set to it.
+ */
 async function execute(
   repo: RepoContext,
   job: Job,
@@ -455,12 +651,17 @@ async function execute(
 ): Promise<RunRecord> {
   const startedAt = Date.now()
   const timeoutMs = job.runner.deepOnly === true ? budgets.deep : budgets.normal
+  const project = attributionOf(job)
+  const scratch = join(repo.scratch, ...rawPrefix(project).split('/'))
+  await mkdir(scratch, { recursive: true })
+
   const result = await withTimeout(
     () =>
       job.runner.run({
         repoRoot: repo.repoRoot,
+        project: job.project,
         files: job.files,
-        scratch: repo.scratch,
+        scratch,
         detection: job.detection,
         timeoutMs,
         deep: profile.deep,
@@ -473,6 +674,8 @@ async function execute(
     tool: job.runner.tool,
     category: job.runner.category,
     scope: job.scope,
+    project,
+    rollupOnly: job.rollupOnly,
     pinnedVersion: job.runner.pinnedVersion,
     detection: job.detection,
     result,

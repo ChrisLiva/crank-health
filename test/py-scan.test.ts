@@ -239,8 +239,9 @@ describe('quick scan of the py-basic fixture', () => {
 
       expect(result.outputDir).toBe(outside)
       expect(await fixture.status()).toBe('')
-      // Every tool's evidence is kept next to the report (spec §9).
-      const raw = (await readdir(join(outside, 'raw'))).toSorted()
+      // Every tool's evidence is kept next to the report (spec §9), under the
+      // project that produced it — one project here, so `raw/root/`.
+      const raw = (await readdir(join(outside, 'raw', 'root'))).toSorted()
       expect(GOLDEN_TOOLCHAIN ? raw : raw.filter(fromFetchableTool)).toEqual([
         'bandit.json',
         'complexipy.json',

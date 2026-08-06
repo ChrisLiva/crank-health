@@ -272,9 +272,14 @@ export function toPendingFindings(
     .toSorted(byLocation)
 }
 
+/**
+ * Config paths are repo-relative, and a project inherits the ones above it, so
+ * the question is asked of each file's name — `packages/a/.eslintrc.json` is as
+ * legacy as `.eslintrc.json`.
+ */
 function onlyLegacyConfig(detection: Detection): boolean {
   return (
     detection.configFiles.length > 0 &&
-    detection.configFiles.every((file) => LEGACY_CONFIG_FILES.has(file))
+    detection.configFiles.every((file) => LEGACY_CONFIG_FILES.has(file.split('/').at(-1) ?? file))
   )
 }

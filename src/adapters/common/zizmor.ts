@@ -93,6 +93,9 @@ export const zizmorRunner: ToolRunner = {
   pinnedVersion: pinnedPythonVersion(ZIZMOR_DISTRIBUTION),
   // Workflow security is nobody else's job; see `ToolRunner.complementary`.
   complementary: true,
+  // Workflows live at the repo root and act on the whole repo, so they are
+  // audited once, not once per project.
+  repoScoped: true,
   detect: (ctx: DetectContext): Promise<Detection | null> =>
     detectPythonTool(ctx, {
       configFiles: ZIZMOR_CONFIG_FILES,

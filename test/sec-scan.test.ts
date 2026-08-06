@@ -340,10 +340,12 @@ describe('quick scan of the sec-basic fixture', () => {
 
       expect(result.outputDir).toBe(outside)
       expect(await fixture.status()).toBe('')
-      const raw = await readdir(join(outside, 'raw'))
-      expect(raw).toContain('jscpd-report.json')
-      expect(raw).toContain('bandit.json')
-      expect(raw).toContain('zizmor.json')
+      expect((await readdir(join(outside, 'raw'))).toSorted()).toEqual(['repo', 'root'])
+      const perProject = await readdir(join(outside, 'raw', 'root'))
+      expect(perProject).toContain('jscpd-report.json')
+      expect(perProject).toContain('bandit.json')
+      // Workflow auditing is the repo's, not any one project's.
+      expect(await readdir(join(outside, 'raw', 'repo'))).toContain('zizmor.json')
     },
     SCAN_TIMEOUT_MS,
   )

@@ -64,7 +64,7 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/base/oxlint.sarif.json"
+        "raw/base/root/oxlint.sarif.json"
       ]
     },
     {
@@ -80,7 +80,7 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/oxlint.sarif.json"
+        "raw/root/oxlint.sarif.json"
       ]
     }
   ],

@@ -79,6 +79,17 @@ export interface Finding {
   readonly gradeScope: boolean
   readonly fixHint?: string
   /**
+   * Which project this finding is in — the nearest project up its path, stamped
+   * by the orchestrator once every runner has finished (`core/orchestrator.ts`),
+   * so that a repo-scoped scan's findings land in the right project too.
+   *
+   * **Attribution only.** {@link Finding.id} is hashed from the repo-root-relative
+   * path and never from this, so moving the project boundary around a file does
+   * not change its identity — see `core/fingerprint.ts`. Absent on findings a
+   * test constructed by hand.
+   */
+  readonly project?: string
+  /**
    * The material {@link Finding.id} was hashed from, carried so a PR delta can
    * re-hash it under a renamed path (`core/delta.ts`). Internal: `report.json`
    * rebuilds every finding field by field and never writes it.
@@ -144,6 +155,14 @@ export interface Project {
   readonly files: FileInventory
 }
 
+/**
+ * What a run that answers about the *repo* rather than about one project is
+ * attributed to: a secrets scan, a lockfile audit, the repo-wide duplication
+ * pass. Not a path — {@link Project.path} is always a directory, and this names
+ * the repo itself.
+ */
+export const REPO_SCOPE = 'repo'
+
 /** Everything a scan works from. Detection never runs a tool. */
 export interface RepoContext {
   /** Absolute path to the repo root. */
@@ -204,9 +223,20 @@ export interface Detection {
 /** Everything a runner is allowed to know. Runners never discover files. */
 export interface RunContext {
   readonly repoRoot: string
+  /**
+   * The project this run analyzes — its directory is the one a tool's config,
+   * virtualenv or manifest belongs to, and {@link files} is its slice. A
+   * repo-scoped runner ({@link ToolRunner.repoScoped}) gets the whole repo as
+   * one project at the root.
+   */
+  readonly project: Project
   /** Repo-relative posix paths, pre-filtered for this runner's language. */
   readonly files: readonly string[]
-  /** Absolute path to a scratch dir outside the repo — all writes go here. */
+  /**
+   * Absolute path to a scratch dir outside the repo — all writes go here. One
+   * per project, so the same tool running in two projects cannot overwrite the
+   * other's raw output.
+   */
   readonly scratch: string
   /** `null` → run our bundled default config from `scratch`. */
   readonly detection: Detection | null
@@ -329,6 +359,28 @@ export interface ToolRunner {
    * ({@link import('./orchestrator.ts').DEEP_TIMEOUT_MS}).
    */
   readonly deepOnly?: boolean
+  /**
+   * Set when this runner answers about the repo rather than about a project: a
+   * secret, a vulnerable dependency or a badly written workflow is a property of
+   * the repo, and scanning for one per project would scan the same tree N times
+   * and report each hit N times. The orchestrator plans exactly one repo-spanning
+   * job for such a runner, whatever the repo's project count, and its findings
+   * are attributed back to projects by file path.
+   */
+  readonly repoScoped?: boolean
+  /**
+   * Set when this runner measures something whose whole-repo value cannot be
+   * assembled from its per-project ones — duplication being the case: a clone
+   * *between* two packages is in neither package's measurement. Such a runner is
+   * planned per project **and** once over the whole repo, and the repo-wide pass
+   * is marked
+   * {@link import('./orchestrator.ts').RunRecord.rollupOnly} so that only the
+   * rollup's grade is built from it.
+   *
+   * A single-project repo gets no extra pass: there is no "between" for it to
+   * measure, and the project's own pass already covers the whole repo.
+   */
+  readonly repoWidePass?: boolean
   /** `null` = not repo-owned; the runner still runs, with default config. */
   detect(ctx: DetectContext): Promise<Detection | null>
   run(ctx: RunContext): Promise<ToolResult>

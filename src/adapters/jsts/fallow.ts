@@ -104,7 +104,7 @@ async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
   }
 
   const analyzed = new Set(ctx.files)
-  const isLibrary = await isLibraryPackage(ctx.repoRoot)
+  const isLibrary = await isLibraryPackage(ctx.repoRoot, ctx.project.path)
   return {
     state: 'ok',
     findings: await identify(

@@ -9,6 +9,7 @@ import {
 } from '../src/adapters/python/coverage.ts'
 import type { CoverageReport } from '../src/adapters/python/coverage.ts'
 import type { RunContext } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 
 /**
  * coverage.py wrapper: the captured `coverage json` a real 7.15.3 run produced,
@@ -20,6 +21,7 @@ const CAPTURED = fileURLToPath(new URL('./captured/coverage-7.15.3.json', import
 
 const CONTEXT: RunContext = {
   repoRoot: '/repo',
+  project: makeProject(['pkg/calc.py']),
   files: ['pkg/calc.py'],
   scratch: '/scratch',
   detection: null,

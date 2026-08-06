@@ -104,7 +104,7 @@ async function runPyright(ctx: RunContext): Promise<ToolResult> {
   }
 
   const repoConfig = ctx.detection !== null
-  const venv = await findVenv(ctx.repoRoot)
+  const venv = await findVenv(ctx.repoRoot, ctx.project.path)
   if (!repoConfig && defaultTypeChecker(venv) !== PYRIGHT_TOOL) {
     return {
       state: 'not-available',

@@ -24,7 +24,7 @@ Grade impact: lint · F → A
 
 - `src/clean.js:3` `eslint(no-unreachable)` — Unreachable code. [in-diff]
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 

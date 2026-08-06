@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { ancestryOf, repoPath } from '../../core/discover.ts'
+import { ROOT_PROJECT, ancestryOf, repoPath } from '../../core/discover.ts'
 import type { DetectContext, Detection } from '../../core/types.ts'
 import { asRecord, asString, exists, readJson } from '../support.ts'
 
@@ -163,7 +163,9 @@ async function installedVersion(
 const PUBLISHED_ENTRY_FIELDS: readonly string[] = ['exports', 'module', 'types']
 
 /**
- * Whether the repo publishes a package rather than being an application.
+ * Whether this project publishes a package rather than being an application.
+ * The question is its own manifest's, never an ancestor's: a workspace root
+ * publishing a package says nothing about the app in `apps/web`.
  *
  * Tools that call dead code "dead" are wrong about a library: its exports are
  * the product, consumed from outside the repo. The test is field *presence*,
@@ -175,8 +177,11 @@ const PUBLISHED_ENTRY_FIELDS: readonly string[] = ['exports', 'module', 'types']
  * `exports`/`module`/`types`: packages published from a private manifest by a
  * release pipeline are common, zustand being the canonical case.
  */
-export async function isLibraryPackage(repoRoot: string): Promise<boolean> {
-  const manifest = asRecord(await readJson(join(repoRoot, 'package.json')))
+export async function isLibraryPackage(
+  repoRoot: string,
+  projectPath = ROOT_PROJECT,
+): Promise<boolean> {
+  const manifest = asRecord(await readJson(join(repoRoot, projectPath, PACKAGE_JSON)))
   if (manifest === undefined) return false
 
   if (PUBLISHED_ENTRY_FIELDS.some((field) => manifest[field] !== undefined)) return true

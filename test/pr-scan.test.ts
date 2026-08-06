@@ -104,9 +104,11 @@ describe('a change that introduces a finding', () => {
 
   it('keeps each side’s evidence apart, base under raw/base/', async () => {
     const raw = result.report.tools.flatMap((tool) => tool.raw)
-    expect(raw).toContain('raw/oxlint.sarif.json')
-    expect(raw).toContain('raw/base/oxlint.sarif.json')
-    expect(await readdir(join(result.outputDir, 'raw', 'base'))).toContain('oxlint.sarif.json')
+    expect(raw).toContain('raw/root/oxlint.sarif.json')
+    expect(raw).toContain('raw/base/root/oxlint.sarif.json')
+    expect(await readdir(join(result.outputDir, 'raw', 'base', 'root'))).toContain(
+      'oxlint.sarif.json',
+    )
   })
 
   it('leaves the target repo clean, with no leftover worktree', async () => {

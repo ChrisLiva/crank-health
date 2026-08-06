@@ -152,13 +152,38 @@ export function partitionProjects(files: FileInventory): readonly Project[] {
 
 /**
  * The whole inventory taken as one project at the repo root — the unit a
- * repo-wide scan detects against.
+ * repo-scoped runner (a secrets scan, a lockfile audit) works on, and what it
+ * detects against.
  */
-export function repoDetectContext(repoRoot: string, files: FileInventory): DetectContext {
+export function repoProject(files: FileInventory): Project {
   const manifests = files.all.filter(
     (file) => MANIFEST_LANGUAGE[baseName(file)] !== undefined && directoryOf(file) === ROOT_PROJECT,
   )
-  return { repoRoot, project: projectOf(ROOT_PROJECT, manifests, files.all), files }
+  return projectOf(ROOT_PROJECT, manifests, files.all)
+}
+
+/** {@link repoProject} as the context detection is handed. */
+export function repoDetectContext(repoRoot: string, files: FileInventory): DetectContext {
+  return { repoRoot, project: repoProject(files), files }
+}
+
+/**
+ * Which project a repo-relative path belongs to: the nearest project directory
+ * up its path. That is the same nearest-ancestor rule
+ * {@link partitionProjects} assigns source files by, applied to paths no project
+ * claimed — the `.env` a secrets scan flagged, a workflow file, a lockfile — so
+ * a repo-scoped finding is attributed where a reader would look for it.
+ *
+ * A path under no project at all (a repo whose root is a workspace shell) is the
+ * repo's own, {@link ROOT_PROJECT}.
+ */
+export function nearestProjectMap(projects: readonly Project[]): (file: string) => string {
+  const paths = new Set(projects.map((project) => project.path))
+  return (file) => {
+    let directory = directoryOf(file)
+    while (directory !== ROOT_PROJECT && !paths.has(directory)) directory = directoryOf(directory)
+    return directory
+  }
 }
 
 /**
@@ -218,7 +243,7 @@ function projectOf(path: string, manifests: readonly string[], files: readonly s
 }
 
 /** The language subsets of a file list, computed the one way. */
-function inventoryOf(files: readonly string[]): FileInventory {
+export function inventoryOf(files: readonly string[]): FileInventory {
   return {
     all: files,
     byLanguage: {

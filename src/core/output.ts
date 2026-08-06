@@ -1,9 +1,31 @@
 import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve } from 'node:path'
+import { ROOT_PROJECT } from './discover.ts'
+import { REPO_SCOPE } from './types.ts'
 
 /** Output dir when `--out` is not given (spec §9). */
 export const DEFAULT_OUTPUT_DIRNAME = '.codebase-health'
+
+/** Where a repo-scoped run's evidence lands under `raw/`. */
+export const REPO_RAW_DIRNAME = 'repo'
+
+/** …and the root project's, whose path `.` is not a directory name. */
+export const ROOT_RAW_DIRNAME = 'root'
+
+/**
+ * The `raw/` subdirectory one run's evidence belongs in: the project's own
+ * repo-relative posix path, with two reserved names — `repo/` for a run that
+ * answered about the repo and `root/` for the root project. The nesting is what
+ * keeps the same tool's output in two projects apart, since every runner names
+ * its raw files after itself.
+ *
+ * @param project a project path, or {@link REPO_SCOPE}
+ */
+export function rawPrefix(project: string): string {
+  if (project === REPO_SCOPE) return REPO_RAW_DIRNAME
+  return project === ROOT_PROJECT ? ROOT_RAW_DIRNAME : project
+}
 
 /** What a default run directory is named: local date plus a 4-hex run id. */
 export const RUN_DIRNAME_PATTERN = /^\d{4}-\d{2}-\d{2}-[0-9a-f]{4}$/

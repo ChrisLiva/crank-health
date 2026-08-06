@@ -122,7 +122,7 @@ async function runTy(ctx: RunContext): Promise<ToolResult> {
 
   const repoConfig = ctx.detection !== null
   if (!repoConfig) {
-    const venv = await findVenv(ctx.repoRoot)
+    const venv = await findVenv(ctx.repoRoot, ctx.project.path)
     if (defaultTypeChecker(venv) !== TY_TOOL) {
       return {
         state: 'not-available',

@@ -68,6 +68,9 @@ export const gitleaksRunner: ToolRunner = {
   // Secrets are nobody else's job: no other security runner looks for them, so
   // a repo owning bandit or osv-scanner must not stand this one down.
   complementary: true,
+  // A secret is the repo's, wherever in it the file sits: one scan of the whole
+  // tree, and each leak attributed to the project it landed in.
+  repoScoped: true,
   detect: detectGitleaks,
   run: runGitleaks,
 }

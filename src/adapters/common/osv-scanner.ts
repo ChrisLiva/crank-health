@@ -88,6 +88,9 @@ export const osvScannerRunner: ToolRunner = {
   // Dependency vulnerabilities are nobody else's job; see
   // `ToolRunner.complementary`.
   complementary: true,
+  // osv-scanner walks the tree for lockfiles itself, and a workspace's lockfile
+  // covers every package under it: one scan, findings attributed by path.
+  repoScoped: true,
   detect: detectOsvScanner,
   run: runOsvScanner,
 }

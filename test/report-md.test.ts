@@ -138,6 +138,8 @@ describe('renderReportMarkdown', () => {
             tool: 'oxlint',
             category: 'lint',
             scope: 'js-ts',
+            project: '.',
+            rollupOnly: false,
             pinnedVersion: '1.77.0',
             detection: null,
             result: { state: 'error', findings: [], rawFiles: [], reason: 'a | b\nc' },

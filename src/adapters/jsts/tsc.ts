@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { repoPath } from '../../core/discover.ts'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
@@ -121,7 +122,10 @@ export const tscRunner: ToolRunner = {
 
 async function runTsc(ctx: RunContext): Promise<ToolResult> {
   const detection = ctx.detection
-  const ownsConfig = detection?.configFiles.includes(TSCONFIG) === true
+  // The project's own `tsconfig.json`, not an ancestor's: TypeScript does not
+  // resolve one upward, so detection never inherits it (`configInherits: false`)
+  // and the path to look for is this project's.
+  const ownsConfig = detection?.configFiles.includes(repoPath(ctx.project.path, TSCONFIG)) === true
   const typeScriptFiles = ctx.files.filter((file) =>
     TS_EXTENSIONS.some((extension) => file.endsWith(extension)),
   )
@@ -136,8 +140,11 @@ async function runTsc(ctx: RunContext): Promise<ToolResult> {
     }
   }
 
+  // Either way the project being checked is named explicitly. Left implicit,
+  // tsc resolves a `tsconfig.json` from its working directory — which is the
+  // repo root, and in a monorepo that is another project's config.
   const projectArgs = ownsConfig
-    ? []
+    ? ['--project', join(ctx.repoRoot, ctx.project.path)]
     : ['--project', await materializeDefaultConfig(ctx.scratch, ctx.repoRoot, typeScriptFiles)]
 
   const command =

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eslintRunner, parseEslintJson, toPendingFindings } from '../src/adapters/jsts/eslint.ts'
 import { repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 
 /**
  * Captured raw output from the pinned ESLint, run against `test/fixtures/
@@ -180,6 +181,7 @@ describe('a repo configured through the legacy eslintrc format', () => {
     try {
       const result = await eslintRunner.run({
         repoRoot: scratch,
+        project: makeProject(['src/a.js']),
         files: ['src/a.js'],
         scratch,
         detection: { reason: 'config', configFiles: ['.eslintrc.json'], installed: false },

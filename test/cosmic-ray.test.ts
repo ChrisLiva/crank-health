@@ -12,6 +12,7 @@ import {
   toPendingFindings,
 } from '../src/adapters/python/cosmic-ray.ts'
 import type { RunContext } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 
 /**
  * cosmic-ray wrapper: the captured `cosmic-ray dump` a real 8.4.6 session
@@ -24,6 +25,13 @@ const CAPTURED = fileURLToPath(new URL('./captured/cosmic-ray-8.4.6.jsonl', impo
 
 const CONTEXT: RunContext = {
   repoRoot: '/repo',
+  project: makeProject([
+    'pkg/__init__.py',
+    'pkg/calc.py',
+    'pkg/util.py',
+    'tests/test_calc.py',
+    'test_top.py',
+  ]),
   files: ['pkg/__init__.py', 'pkg/calc.py', 'pkg/util.py', 'tests/test_calc.py', 'test_top.py'],
   scratch: '/scratch',
   detection: {

@@ -13,6 +13,7 @@ import {
 } from '../src/adapters/jsts/stryker.ts'
 import type { Mutant } from '../src/adapters/jsts/stryker.ts'
 import type { RunContext } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 
 /**
  * StrykerJS wrapper: the captured `mutation-report.json` a real 9.6.1 run of the
@@ -25,6 +26,7 @@ const CAPTURED = fileURLToPath(new URL('./captured/stryker-9.6.1.json', import.m
 
 const CONTEXT: RunContext = {
   repoRoot: '/repo',
+  project: makeProject(['src/calc.js', 'src/other.ts', 'test/calc.test.js', 'README.md']),
   files: ['src/calc.js', 'src/other.ts', 'test/calc.test.js', 'README.md'],
   scratch: '/scratch',
   detection: null,

@@ -34,6 +34,12 @@ import {
  * healths, and only the percentage can tell them apart. Every clone finding is
  * therefore `gradeScope: false` — reported so a reader knows *where*, never
  * double-counted into a grade the percentage already decided.
+ *
+ * **Once per project, plus once over the repo** (`ToolRunner.repoWidePass`).
+ * Each project's percentage is measured over that project's directory alone, so
+ * it grades what that project duplicated; a clone *between* two packages is in
+ * neither of those measurements, which is what the repo-wide pass is for — its
+ * percentage is the rollup's.
  */
 
 export const JSCPD_TOOL = 'jscpd'
@@ -69,6 +75,9 @@ export const jscpdRunner: ToolRunner = {
   tool: JSCPD_TOOL,
   category: 'duplication',
   pinnedVersion: pinnedVersion(JSCPD_PACKAGE),
+  // Duplication between two projects belongs to neither of them; see the file
+  // comment and `ToolRunner.repoWidePass`.
+  repoWidePass: true,
   detect: (ctx: DetectContext): Promise<Detection | null> =>
     detectNodeTool(ctx, {
       configFiles: JSCPD_CONFIG_FILES,
@@ -99,7 +108,10 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       : ephemeralCommand(JSCPD_PACKAGE, [])
 
   const execution = await execTool(
-    { ...command, args: [...command.args, ...invocationArgs(ctx.repoRoot, output)] },
+    {
+      ...command,
+      args: [...command.args, ...invocationArgs(join(ctx.repoRoot, ctx.project.path), output)],
+    },
     // Started outside the repo: jscpd's default reporter writes `report/` into
     // the working directory, and `-o` is the flag that redirects it — but a
     // scratch cwd means even a flag we got wrong cannot land in the target.
@@ -166,7 +178,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
  * The command line, exported so the license-and-footprint test can read it
  * without running anything.
  *
- * jscpd is handed the repo root rather than the discovered file list, for one
+ * jscpd is handed a *directory* rather than the discovered file list, for one
  * blunt reason: with explicit file arguments it reports every clone with an
  * empty file name, so the findings would have nowhere to point. It honors
  * `.gitignore` itself, which puts its file set within a hair of discovery's,
@@ -174,8 +186,11 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
  * discovery excluded can never reach a report. The percentage is jscpd's own
  * over its own set; on a repo where those sets differ it is an approximation,
  * and a documented one.
+ *
+ * @param scanRoot absolute path of the directory to measure: the project's own,
+ * or the repo root for the repo-wide pass
  */
-export function invocationArgs(repoRoot: string, output: string): string[] {
+export function invocationArgs(scanRoot: string, output: string): string[] {
   return [
     '--reporters',
     'json',
@@ -190,7 +205,7 @@ export function invocationArgs(repoRoot: string, output: string): string[] {
     // against its own cwd, which is the scratch dir, not the repo.
     '--absolute',
     '--no-colors',
-    repoRoot,
+    scanRoot,
   ]
 }
 

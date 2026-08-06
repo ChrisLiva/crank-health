@@ -1,14 +1,24 @@
+import { inventoryOf, repoProject } from '../src/core/discover.ts'
 import type {
   Category,
   CategoryState,
   Finding,
   Grade,
+  Project,
   Severity,
   ToolMetrics,
 } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import type { Report, ReportInput } from '../src/render/json.ts'
 import { buildReport } from '../src/render/json.ts'
+
+/**
+ * A file list as one project at the repo root — the unit a single-project scan
+ * hands its runners, and what a runner test needs to build a `RunContext`.
+ */
+export function makeProject(files: readonly string[] = []): Project {
+  return repoProject(inventoryOf(files))
+}
 
 /** A minimal valid finding; override only what the assertion is about. */
 export function makeFinding(overrides: Partial<Finding> = {}): Finding {

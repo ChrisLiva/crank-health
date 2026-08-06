@@ -1,11 +1,19 @@
-import { describe, expect, it } from 'vitest'
-import { partitionProjects } from '../src/core/discover.ts'
+import { mkdtempSync } from 'node:fs'
+import { rm, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
+import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
+import type { RunRecord } from '../src/core/orchestrator.ts'
 import { runScan, sortFindings } from '../src/core/orchestrator.ts'
+import { rawPrefix } from '../src/core/output.ts'
 import type {
   Category,
+  DetectContext,
   Detection,
   FileInventory,
   Finding,
+  Language,
   LanguageAdapter,
   RepoContext,
   RunContext,
@@ -16,15 +24,26 @@ import type {
 } from '../src/core/types.ts'
 import { makeFinding } from './factories.ts'
 
+async function isDirectory(path: string): Promise<boolean> {
+  return (await stat(path)).isDirectory()
+}
+
 const FILES: FileInventory = {
   all: ['src/a.ts', 'src/b.py', 'README.md'],
   byLanguage: { 'js-ts': ['src/a.ts'], python: ['src/b.py'] },
 }
 
+/** Real, because the orchestrator stages each project's scratch dir on disk. */
+const SCRATCH = mkdtempSync(join(tmpdir(), 'crank-orchestrator-'))
+
+afterAll(async () => {
+  await rm(SCRATCH, { recursive: true, force: true })
+})
+
 const REPO: RepoContext = {
   repoRoot: '/repo',
   files: FILES,
-  scratch: '/scratch',
+  scratch: SCRATCH,
   projects: partitionProjects(FILES),
 }
 
@@ -36,7 +55,7 @@ function fakeRunner(
   tool: string,
   category: Category,
   run: (ctx: RunContext) => Promise<ToolResult>,
-  detect: () => Promise<Detection | null> = async () => null,
+  detect: (ctx: DetectContext) => Promise<Detection | null> = async () => null,
 ): FakeRunner {
   const calls: RunContext[] = []
   return {
@@ -71,6 +90,305 @@ const never = () => new Promise<ToolResult>(() => {})
 
 /** A repo-owned detection; the details never matter, only that it is not null. */
 const DETECTION: Detection = { reason: 'config', configFiles: ['x'], installed: false }
+
+/**
+ * A monorepo: a root project with sources of its own, a JS package and a Python
+ * package. `.env` belongs to no language — it is what a repo-scoped scan flags.
+ */
+const MONO_FILES: FileInventory = inventoryOf([
+  '.env',
+  'package.json',
+  'packages/api/api/main.py',
+  'packages/api/pyproject.toml',
+  'packages/web/package.json',
+  'packages/web/src/app.ts',
+  'src/root.ts',
+])
+
+const MONO: RepoContext = {
+  repoRoot: '/repo',
+  files: MONO_FILES,
+  scratch: SCRATCH,
+  projects: partitionProjects(MONO_FILES),
+}
+
+/** A language adapter that applies where the *project's* inventory has its language. */
+function languageAdapter(language: Language, runners: readonly ToolRunner[]): LanguageAdapter {
+  return {
+    language,
+    runners,
+    detect: async (ctx) => ctx.project.files.byLanguage[language].length > 0,
+  }
+}
+
+/** The cross-language adapter, which applies to any repo with a file in it. */
+function commonAdapter(runners: readonly ToolRunner[]): LanguageAdapter {
+  return { language: 'common', runners, detect: async (ctx) => ctx.files.all.length > 0 }
+}
+
+/** What ran, and where: the planning matrix as a readable table. */
+function matrix(result: { readonly runs: readonly RunRecord[] }): [string, string][] {
+  return result.runs.map((run) => [run.tool, run.project])
+}
+
+describe('runScan planning across projects', () => {
+  it('plans a language runner once per project that has its language', async () => {
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+    const ruff = fakeRunner('ruff', 'lint', async () => ok())
+
+    const result = await runScan(MONO, [
+      languageAdapter('js-ts', [oxlint]),
+      languageAdapter('python', [ruff]),
+    ])
+
+    expect(matrix(result)).toEqual([
+      ['oxlint', '.'],
+      ['oxlint', 'packages/web'],
+      ['ruff', 'packages/api'],
+    ])
+    // Each run sees its own project's files, not the repo's.
+    expect(oxlint.calls.map((call) => call.files)).toEqual([
+      ['src/root.ts'],
+      ['packages/web/src/app.ts'],
+    ])
+    expect(oxlint.calls.map((call) => call.project.path)).toEqual(['.', 'packages/web'])
+  })
+
+  it('detects ownership per project, so each run gets its own project’s config', async () => {
+    const detections: string[] = []
+    const tsc = fakeRunner(
+      'tsc',
+      'types',
+      async () => ok(),
+      async (ctx) => {
+        detections.push(ctx.project.path)
+        return ctx.project.path === 'packages/web' ? DETECTION : null
+      },
+    )
+
+    const result = await runScan(MONO, [languageAdapter('js-ts', [tsc])])
+
+    expect(detections).toEqual(['.', 'packages/web'])
+    expect(result.runs.map((run) => [run.project, run.detection !== null])).toEqual([
+      ['.', false],
+      ['packages/web', true],
+    ])
+  })
+
+  it('runs a repo-scoped runner once over the whole repo, whatever the project count', async () => {
+    const gitleaks: ToolRunner = {
+      ...fakeRunner('gitleaks', 'security', async () => ok()),
+      repoScoped: true,
+      complementary: true,
+    }
+    const opengrep = {
+      ...fakeRunner('opengrep', 'security', async () => ok()),
+      complementary: true,
+    }
+
+    const result = await runScan(MONO, [commonAdapter([gitleaks, opengrep])])
+
+    expect(matrix(result)).toEqual([
+      ['gitleaks', 'repo'],
+      ['opengrep', '.'],
+      ['opengrep', 'packages/api'],
+      ['opengrep', 'packages/web'],
+    ])
+    expect((gitleaks as FakeRunner).calls[0]?.files).toEqual(MONO_FILES.all)
+  })
+
+  /** Spec §1's exclusive branches, decided per project rather than per repo. */
+  it('stands our default down only in the project that owns the tool', async () => {
+    const eslint: ToolRunner = {
+      ...fakeRunner(
+        'eslint',
+        'lint',
+        async () => ok(),
+        async (ctx) =>
+          ctx.project.path === 'packages/web' ? { ...DETECTION, installed: true } : null,
+      ),
+      repoOwnedOnly: true,
+    }
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+
+    const result = await runScan(MONO, [languageAdapter('js-ts', [eslint, oxlint])])
+
+    expect(matrix(result)).toEqual([
+      ['eslint', 'packages/web'],
+      ['oxlint', '.'],
+    ])
+  })
+
+  it('resolves a standby against its own project, never against a sibling’s owner', async () => {
+    const eslint: ToolRunner = {
+      ...fakeRunner(
+        'eslint',
+        'lint',
+        async () => ok(),
+        async (ctx) => (ctx.project.path === 'packages/web' ? DETECTION : null),
+      ),
+      repoOwnedOnly: true,
+    }
+    const oxlint = fakeRunner('oxlint', 'lint', async (ctx) =>
+      ok([makeFinding({ id: `o-${ctx.project.path}`, tool: 'oxlint', category: 'lint' })]),
+    )
+
+    const result = await runScan(MONO, [languageAdapter('js-ts', [eslint, oxlint])])
+
+    // The root project never had an owner, so its oxlint run is not a standby…
+    expect(result.runs.find((run) => run.project === '.')?.result.reason).toBeUndefined()
+    // …while the package that owns ESLint has its oxlint stood down by it.
+    expect(
+      result.runs.find((run) => run.project === 'packages/web' && run.tool === 'oxlint')?.result
+        .reason,
+    ).toBe('stood down: lint graded by eslint')
+  })
+})
+
+describe('runScan repo-wide duplication pass', () => {
+  /**
+   * A jscpd stand-in. The repo-wide pass is the one handed the whole inventory;
+   * every other run gets its own project's slice, which is what tells them apart
+   * from inside a runner.
+   */
+  const jscpd = (repoWide: number, perProject: Readonly<Record<string, number>>): ToolRunner => ({
+    ...fakeRunner('jscpd', 'duplication', async (ctx) => ({
+      ...ok(),
+      metrics: {
+        duplicationPercent:
+          ctx.files.length === MONO_FILES.all.length
+            ? repoWide
+            : (perProject[ctx.project.path] ?? 0),
+      },
+    })),
+    repoWidePass: true,
+  })
+
+  it('runs beside the per-project passes and is marked for the rollup alone', async () => {
+    const result = await runScan(MONO, [commonAdapter([jscpd(5, {})])])
+
+    expect(result.runs.map((run) => [run.project, run.rollupOnly])).toEqual([
+      ['.', false],
+      ['packages/api', false],
+      ['packages/web', false],
+      ['repo', true],
+    ])
+  })
+
+  /** A clone between two packages is in neither package's measurement. */
+  it('gives the rollup the whole-repo percentage, not the worst project’s', async () => {
+    const result = await runScan(MONO, [
+      commonAdapter([jscpd(5, { '.': 4, 'packages/api': 40, 'packages/web': 2 })]),
+    ])
+
+    expect(result.metrics.duplication).toEqual({ duplicationPercent: 5 })
+  })
+
+  it('adds no second pass to a single-project repo', async () => {
+    const runner: ToolRunner = {
+      ...fakeRunner('jscpd', 'duplication', async () => ({
+        ...ok(),
+        metrics: { duplicationPercent: 3 },
+      })),
+      repoWidePass: true,
+    }
+
+    const result = await runScan(REPO, [commonAdapter([runner])])
+
+    expect(result.runs.map((run) => [run.project, run.rollupOnly])).toEqual([['.', false]])
+    expect(result.metrics.duplication).toEqual({ duplicationPercent: 3 })
+  })
+
+  it('reports a clone both passes found once, under its one identity', async () => {
+    const clone = makeFinding({ id: 'clone-1', category: 'duplication', file: 'src/root.ts' })
+    const runner: ToolRunner = {
+      ...fakeRunner('jscpd', 'duplication', async (ctx) =>
+        ok(ctx.project.path === 'packages/api' ? [] : [clone]),
+      ),
+      repoWidePass: true,
+    }
+
+    const result = await runScan(MONO, [commonAdapter([runner])])
+
+    expect(result.findings.map((finding) => finding.id)).toEqual(['clone-1'])
+  })
+})
+
+describe('runScan finding attribution', () => {
+  it('stamps every finding with the project its file is in', async () => {
+    const runner = fakeRunner('oxlint', 'lint', async (ctx) =>
+      ok(
+        ctx.project.path === '.'
+          ? [makeFinding({ id: 'root', file: 'src/root.ts' })]
+          : [makeFinding({ id: 'web', file: 'packages/web/src/app.ts' })],
+      ),
+    )
+
+    const result = await runScan(MONO, [languageAdapter('js-ts', [runner])])
+
+    expect(result.findings.map((finding) => [finding.id, finding.project])).toEqual([
+      ['web', 'packages/web'],
+      ['root', '.'],
+    ])
+  })
+
+  /** The whole point of a repo-scoped scan: one run, findings in many projects. */
+  it('attributes a repo-scoped run’s findings by path, not to the run’s scope', async () => {
+    const gitleaks: ToolRunner = {
+      ...fakeRunner('gitleaks', 'security', async () =>
+        ok([
+          makeFinding({ id: 'in-web', category: 'security', file: 'packages/web/src/app.ts' }),
+          makeFinding({ id: 'in-api', category: 'security', file: 'packages/api/api/main.py' }),
+          makeFinding({ id: 'at-root', category: 'security', file: '.env' }),
+          makeFinding({ id: 'unclaimed', category: 'security', file: 'infra/deploy.yaml' }),
+        ]),
+      ),
+      repoScoped: true,
+    }
+
+    const result = await runScan(MONO, [commonAdapter([gitleaks])])
+
+    expect(
+      Object.fromEntries(result.findings.map((finding) => [finding.id, finding.project])),
+    ).toEqual({
+      'in-web': 'packages/web',
+      'in-api': 'packages/api',
+      'at-root': '.',
+      // Under no project at all: the repo's own, so a reader still sees it.
+      unclaimed: '.',
+    })
+  })
+})
+
+describe('runScan raw staging', () => {
+  it('gives every job a distinct posix-nested scratch dir that exists', async () => {
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+    const ruff = fakeRunner('ruff', 'lint', async () => ok())
+    const gitleaks: ToolRunner = {
+      ...fakeRunner('gitleaks', 'security', async () => ok()),
+      repoScoped: true,
+    }
+
+    const result = await runScan(MONO, [
+      languageAdapter('js-ts', [oxlint]),
+      languageAdapter('python', [ruff]),
+      commonAdapter([gitleaks]),
+    ])
+
+    const prefixes = result.runs.map((run) => rawPrefix(run.project))
+    expect(prefixes).toEqual(['root', 'packages/web', 'packages/api', 'repo'])
+    expect(new Set(prefixes).size).toBe(prefixes.length)
+    expect(prefixes.some((prefix) => prefix.includes('\\'))).toBe(false)
+
+    const scratches = [...oxlint.calls, ...ruff.calls, ...(gitleaks as FakeRunner).calls]
+      .map((call) => call.scratch)
+      .toSorted()
+    expect(scratches).toEqual(
+      prefixes.map((prefix) => join(SCRATCH, ...prefix.split('/'))).toSorted(),
+    )
+    expect(await Promise.all(scratches.map(isDirectory))).toEqual(scratches.map(() => true))
+  })
+})
 
 describe('runScan degradation', () => {
   it('gives every failure mode its own state and still completes the run', async () => {
@@ -188,7 +506,8 @@ describe('runScan context', () => {
     expect(common.calls[0]?.files).toEqual(REPO.files.all)
     expect(js.calls[0]).toMatchObject({
       repoRoot: '/repo',
-      scratch: '/scratch',
+      // The root project's own scratch dir, mirroring where its raw output lands.
+      scratch: join(SCRATCH, 'root'),
       timeoutMs: 4321,
       detection: null,
     })

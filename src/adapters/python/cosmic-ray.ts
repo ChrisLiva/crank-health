@@ -125,7 +125,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
       `this project declares cosmic-ray but has not installed it in its virtualenv — ${COSMIC_RAY_SETUP_HINT}`,
     )
   }
-  const venv = await findVenv(ctx.repoRoot)
+  const venv = await findVenv(ctx.repoRoot, ctx.project.path)
   if (venv === undefined) {
     return unavailable('this project has no virtualenv to run its tests in')
   }

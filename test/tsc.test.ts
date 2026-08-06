@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
 import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext, Detection } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 
 /** Captured raw output from the pinned tsc, run against `test/fixtures/ts-owned`. */
 const CAPTURED = fileURLToPath(new URL('./captured/tsc-7.0.2.txt', import.meta.url))
@@ -161,6 +162,7 @@ describe('a repo with neither a tsconfig.json nor TypeScript sources', () => {
     try {
       const result = await tscRunner.run({
         repoRoot: scratch,
+        project: makeProject(['src/a.js', 'src/b.jsx']),
         files: ['src/a.js', 'src/b.jsx'],
         scratch,
         detection: null,
@@ -232,6 +234,7 @@ describe('a tsconfig.json that type-checks nothing', () => {
   const run = (repoRoot: string) =>
     tscRunner.run({
       repoRoot,
+      project: makeProject(['src/a.ts']),
       files: ['src/a.ts'],
       scratch: repoRoot,
       detection: OWNED,

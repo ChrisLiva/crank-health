@@ -263,8 +263,11 @@ describe('quick scan of the js-basic fixture', () => {
       expect(result.outputDir).toBe(outside)
       expect(await fixture.status()).toBe('')
       expect(await readdir(fixture.root)).toEqual(['.git', 'README.md', 'package.json', 'src'])
-      // Every tool's evidence is kept next to the report (spec §9).
-      const raw = (await readdir(join(outside, 'raw'))).toSorted()
+      // Every tool's evidence is kept next to the report (spec §9), under the
+      // project that produced it — one project here, so `raw/root/`. A machine
+      // with the release-binary security tools also has a `raw/repo/`.
+      expect(await readdir(join(outside, 'raw'))).toContain('root')
+      const raw = (await readdir(join(outside, 'raw', 'root'))).toSorted()
       expect(GOLDEN_TOOLCHAIN ? raw : raw.filter(fromFetchableTool)).toEqual([
         'fallow-dead-code.json',
         'fallow-dead-code.stderr.txt',
@@ -281,7 +284,7 @@ describe('quick scan of the js-basic fixture', () => {
   )
 
   it('keeps raw tool evidence next to the report', async () => {
-    const raw = await readFile(join(outside, 'raw', 'oxlint.sarif.json'), 'utf8')
+    const raw = await readFile(join(outside, 'raw', 'root', 'oxlint.sarif.json'), 'utf8')
     expect(JSON.parse(raw)).toMatchObject({ version: '2.1.0' })
   })
 })
@@ -759,7 +762,10 @@ describe('quick scan of crank-health itself', () => {
           out,
           only: ['lint'],
         })
-        expect(result.report.tools[0]).toMatchObject({
+        // crank-health's own root project. `test/fixtures/` holds manifests of
+        // its own, so crank-health scanning itself is a multi-project scan, and
+        // a fixture that owns Biome contributes a lint tool record too.
+        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')).toMatchObject({
           tool: 'oxlint',
           execution: 'repo-installed',
           provenance: 'repo-config',
@@ -814,7 +820,7 @@ describe('a repo whose own linter is broken', () => {
         expect(result.report.categories.lint).toMatchObject({ status: 'error' })
         expect(result.report.tools[0]?.reason).toContain('could not parse oxlint output')
         // The evidence is kept even though nothing could be made of it (spec §8).
-        expect(result.report.tools[0]?.raw).toEqual(['raw/oxlint.sarif.json'])
+        expect(result.report.tools[0]?.raw).toEqual(['raw/root/oxlint.sarif.json'])
       } finally {
         await fixture.remove()
       }

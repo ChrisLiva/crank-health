@@ -76,7 +76,7 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 - error `src/clean.js:3` `eslint(no-unreachable)` — Unreachable code. (oxlint) [default-config]
 - error `src/renamed.js:2` `eslint(no-dupe-keys)` — Duplicate key 'x' (oxlint) [default-config]
 
-Evidence: [raw/base/oxlint.sarif.json](raw/base/oxlint.sarif.json) · [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/base/root/oxlint.sarif.json](raw/base/root/oxlint.sarif.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 ## format — not assessed
 

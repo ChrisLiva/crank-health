@@ -9,7 +9,7 @@ import { failingFilePercent, gradeCategory } from './core/grade.ts'
 import { runScan } from './core/orchestrator.ts'
 import type { ScanResult } from './core/orchestrator.ts'
 import type { OutputDir } from './core/output.ts'
-import { DEFAULT_OUTPUT_DIRNAME, createOutputDir } from './core/output.ts'
+import { DEFAULT_OUTPUT_DIRNAME, createOutputDir, rawPrefix } from './core/output.ts'
 import type { Category, CategoryState, Grade, LanguageAdapter, RepoContext } from './core/types.ts'
 import { CATEGORIES, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
@@ -149,11 +149,15 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
 }
 
 /**
- * Copies each runner's staged raw output into the run directory.
+ * Copies each runner's staged raw output into the run directory, under the
+ * project it came from: `raw/<project-path>/`, with `raw/root/` for the root
+ * project and `raw/repo/` for a repo-scoped run ({@link rawPrefix}). Every
+ * runner names its raw files after itself, so the nesting is what keeps the same
+ * tool's output in two projects apart.
  *
- * @param side which scan this is, in PR mode. The base scan's evidence goes to
- * `raw/base/` and its tool records say so, because the two scans run the same
- * tools and a reader has to be able to tell which side a failure was on.
+ * @param side which scan this is, in PR mode. The base scan's evidence goes
+ * under `raw/base/` with the same nesting below it, because the two scans run
+ * the same tools and a reader has to be able to tell which side a failure was on.
  */
 export async function adoptRawFiles(
   out: OutputDir,
@@ -162,10 +166,14 @@ export async function adoptRawFiles(
 ): Promise<ResolvedRun[]> {
   const runs: ResolvedRun[] = []
   for (const record of scan.runs) {
+    const prefix = rawPrefix(record.project)
     // Sequential: raw files must land in the run directory before the scratch
     // dir is destroyed, and there are only a handful of them.
     // eslint-disable-next-line no-await-in-loop
-    const raw = await out.adoptRaw(record.result.rawFiles, side === 'base' ? 'base' : undefined)
+    const raw = await out.adoptRaw(
+      record.result.rawFiles,
+      side === 'base' ? `base/${prefix}` : prefix,
+    )
     runs.push({ record, raw, ...(side === undefined ? {} : { side }) })
   }
   return runs
