@@ -1,13 +1,25 @@
-import { mkdtemp, readdir, realpath, rm, symlink } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { mypyRunner } from '../src/adapters/python/mypy.ts'
 import type { Finding } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
+import { makeProject } from './factories.ts'
 import type { FixtureRepo } from './support/fixture.ts'
-import { createFixtureRepo } from './support/fixture.ts'
+import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
@@ -559,6 +571,297 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
   })
 })
 
+/**
+ * Which config mypy reads is the whole difference between grading a package
+ * against its own strictness policy and grading it against a policy that
+ * happened to be lying around. Two packages, the same untyped source, one
+ * `mypy.ini` between them: the package that wrote it is the only one held to it.
+ */
+describe('quick scan of a monorepo where one package configures mypy', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      // No `[tool.mypy]` at the root: every package inherits ownership by
+      // declaration alone, so the only config in play is the one api wrote.
+      'pyproject.toml':
+        '[project]\nname = "root"\nversion = "0.1.0"\n\n[dependency-groups]\ndev = ["mypy"]\n',
+      'packages/api/pyproject.toml': '[project]\nname = "api"\nversion = "0.1.0"\n',
+      'packages/api/mypy.ini': '[mypy]\ndisallow_untyped_defs = True\n',
+      'packages/api/handler.py': UNTYPED_DEF,
+      'packages/lib/pyproject.toml': '[project]\nname = "lib"\nversion = "0.1.0"\n',
+      'packages/lib/util.py': UNTYPED_DEF,
+    })
+    // One environment at the root; both packages find it by ancestry.
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    result = await runHealthScan({ path: fixture.root })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('owns mypy in each package through the nearest artifact', () => {
+    expect(
+      parse(result.json)
+        .tools.filter((tool) => tool.tool === 'mypy')
+        .map((tool) => tool.detection),
+    ).toEqual([
+      expect.objectContaining({ reason: 'config+dependency', ownedVia: 'packages/api/mypy.ini' }),
+      expect.objectContaining({ reason: 'dependency', ownedVia: 'pyproject.toml' }),
+    ])
+  })
+
+  /**
+   * The same source in both packages, and only one finding: api is checked
+   * against its own `disallow_untyped_defs`, lib against mypy's defaults —
+   * which is what `--config-file=` buys the package that only declared mypy.
+   */
+  it('holds only the package that configured mypy to its config', () => {
+    expect(mypyFindings(result)).toEqual([
+      { rule: 'no-untyped-def', file: 'packages/api/handler.py', startLine: 1 },
+    ])
+  })
+})
+
+/**
+ * The hermeticity half of the same flag. A package that only *declares* mypy
+ * has no config to be pointed at, and mypy's own discovery would then walk up
+ * to whatever it finds — the repo's `setup.cfg` here, and on a developer's
+ * machine `~/.mypy.ini`, which no portable test can plant and no report should
+ * depend on.
+ */
+describe('quick scan of a repo that declares mypy without configuring it', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      'pyproject.toml':
+        '[project]\nname = "x"\nversion = "0.1.0"\n\n[dependency-groups]\ndev = ["mypy"]\n',
+      // Not one of mypy's config artifacts as far as detection is concerned, and
+      // very much one as far as mypy is concerned.
+      'setup.cfg': '[mypy]\ndisallow_untyped_defs = True\n',
+      'app.py': `${UNTYPED_DEF}\n\ndef label(count: int) -> str:\n    return count\n`,
+    })
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    result = await runHealthScan({ path: fixture.root })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  /**
+   * `return-value` proves mypy ran at all; the absence of `no-untyped-def`
+   * proves it never read the `setup.cfg` two lines above the source it checked.
+   */
+  it('runs mypy on its own defaults, reading no config the repo did not point it at', () => {
+    expect(mypyFindings(result)).toEqual([{ rule: 'return-value', file: 'app.py', startLine: 6 }])
+  })
+})
+
+/**
+ * mypy cannot always speak. A repo whose layout it refuses to build gets an
+ * `error` state quoting what mypy said — never an empty clean bill — the scan
+ * still completes, and the default mypy displaced grades the category instead.
+ */
+describe('quick scan of a repo whose layout mypy refuses to check', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+  let byTool: Map<string, ReportShape['tools'][number]>
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      'mypy.ini': '[mypy]\n',
+      // Two top-level modules of the same name: mypy builds one dependency
+      // graph over its whole file list and cannot hold both.
+      'pkg1/util.py': 'x = 1\n',
+      'pkg2/util.py': 'x = 1\n',
+    })
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    result = await runHealthScan({ path: fixture.root })
+    byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  /**
+   * mypy writes this refusal to stdout as a diagnostic and leaves stderr empty,
+   * so the reason comes from the first parsed message — the other branch of the
+   * same fallback is covered by the fake-binary cases in `mypy.test.ts`.
+   */
+  it('reports the blocking error in mypy’s own words, and completes the scan', () => {
+    expect(byTool.get('mypy')?.state).toBe('error')
+    expect(byTool.get('mypy')?.reason).toContain('exit 2')
+    expect(byTool.get('mypy')?.reason).toContain('Duplicate module named "util"')
+  })
+
+  it('grades types from the promoted default, and says the grade is not the repo’s', () => {
+    expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'A' })
+    expect(result.report.warnings).toEqual([
+      'pyright: graded types on its default config because mypy reported error',
+    ])
+  })
+
+  /** No owner graded, so nothing was stood down and ty keeps its own words. */
+  it('leaves the other standby its own reason', () => {
+    expect(byTool.get('ty')).toMatchObject({
+      state: 'not-available',
+      reason: 'standing down: this project has a virtualenv (.venv), so pyright type-checks it',
+    })
+  })
+})
+
+/**
+ * Spec §1's "multiple tools detected for one category → run all": two owners
+ * both run and both report, and the default they displaced is not planned at
+ * all — pyright *is* an owner here, so there is no standby left to stand down.
+ */
+describe('quick scan of a repo that owns both mypy and pyright', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      'mypy.ini': '[mypy]\n',
+      'pyrightconfig.json': '{}\n',
+      'app.py': await readFile(join(PY_VENV_FIXTURE, 'app.py'), 'utf8'),
+      'main.py': await readFile(join(PY_VENV_FIXTURE, 'main.py'), 'utf8'),
+    })
+    // Neither tool is installed into it: ownership never required installation,
+    // so both run from their pins against the repo's own configs.
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    result = await runHealthScan({ path: fixture.root })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('runs both owners on the repo’s own configs, standing neither down', () => {
+    const byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
+    for (const tool of ['mypy', 'pyright']) {
+      expect(byTool.get(tool)).toMatchObject({ state: 'ok', provenance: 'repo-config' })
+      expect(byTool.get(tool)?.reason ?? '').not.toMatch(/^stood down/)
+    }
+  })
+
+  /** An owner that can be counted on suppresses the default outright. */
+  it('plans no default type checker at all', () => {
+    expect(parse(result.json).tools.map((tool) => tool.tool)).not.toContain('ty')
+  })
+
+  /**
+   * Tool is part of finding identity, so the same error from two owners merges
+   * as two findings under one graded category. They come back in the report's
+   * own order — same category, same file, same line, so it is the rule name
+   * that separates them, not which runner finished first.
+   */
+  it('reports the one type error once per owner, under one graded category', () => {
+    expect(
+      result.report.findings
+        .filter((finding) => finding.category === 'types')
+        .map((finding) => ({
+          tool: finding.tool,
+          rule: finding.rule,
+          file: finding.file,
+          startLine: finding.range.startLine,
+        })),
+    ).toEqual([
+      { tool: 'pyright', rule: 'reportReturnType', file: 'app.py', startLine: 6 },
+      { tool: 'mypy', rule: 'return-value', file: 'app.py', startLine: 6 },
+    ])
+    expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
+  })
+})
+
+/**
+ * mypy type-checks the transitive closure of what it is given, so a file the
+ * job never listed can produce a diagnostic. Reporting it would attribute a
+ * finding to a scan that was not asked about that file — in a PR delta, to a
+ * package whose files nobody touched — so the runner drops it and keeps the raw
+ * output that shows it happened. Driven through the orchestrator's own seam,
+ * because the file list is exactly what the orchestrator controls.
+ */
+describe('the mypy runner given one file that imports another', () => {
+  let fixture: FixtureRepo
+  let scratch: string
+  let result: Awaited<ReturnType<typeof mypyRunner.run>>
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      'mypy.ini': '[mypy]\n',
+      'h.py': 'def f() -> str:\n    return 1\n',
+      'i.py': 'import h\n',
+    })
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    scratch = await mkdtemp(join(tmpdir(), 'crank-mypy-scratch-'))
+    result = await mypyRunner.run({
+      repoRoot: fixture.root,
+      project: makeProject(['h.py', 'i.py', 'mypy.ini']),
+      files: ['i.py'],
+      scratch,
+      detection: {
+        reason: 'config',
+        configFiles: ['mypy.ini'],
+        ownedVia: 'mypy.ini',
+        installed: false,
+      },
+      timeoutMs: SCAN_TIMEOUT_MS,
+      deep: false,
+    })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  it('reports nothing for the file it was not asked about, and keeps the evidence', () => {
+    expect(result.state).toBe('ok')
+    expect(result.findings).toEqual([])
+    expect(result.rawFiles.map((file) => basename(file))).toContain('mypy.jsonl')
+  })
+})
+
+/**
+ * The pinned mypy runs outside the project's environment, so the interpreter it
+ * resolves third-party imports against has to be handed to it. Without that
+ * flag every import in the project comes back `import-not-found` — a confident
+ * wall of noise — and this is the repo that tells the difference.
+ */
+describe('quick scan of a repo whose imports only resolve inside its virtualenv', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      'mypy.ini': '[mypy]\n',
+      'app.py': 'import attrs\n\n\ndef f() -> str:\n    return attrs\n',
+    })
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    await execa('uv', ['pip', 'install', '--quiet', '--python', '.venv/bin/python', 'attrs'], {
+      cwd: fixture.root,
+    })
+    result = await runHealthScan({ path: fixture.root })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('resolves the project’s dependencies through its virtualenv', () => {
+    expect(mypyFindings(result)).toEqual([{ rule: 'return-value', file: 'app.py', startLine: 5 }])
+    expect(result.report.findings.some((finding) => finding.rule === 'import-not-found')).toBe(
+      false,
+    )
+  })
+})
+
 describe('quick scan of a mixed JS + Python repo', () => {
   let fixture: FixtureRepo
   let result: HealthScanResult
@@ -736,6 +1039,60 @@ describe('quick scan of the py-basic fixture reached through a symlink', () => {
     expect((await readdir(fixture.root)).toSorted()).toEqual(before)
   })
 })
+
+/** The `py-venv` fixture's sources, borrowed by the both-owners scenario. */
+const PY_VENV_FIXTURE = fileURLToPath(new URL('./fixtures/py-venv/', import.meta.url))
+
+/** One untyped definition, planted wherever a strictness setting has to bite. */
+const UNTYPED_DEF = 'def f(x):\n    return x\n'
+
+/**
+ * A throwaway git repo from a file map, committed before it is scanned.
+ *
+ * The hardening scenarios each need a tree no checked-in fixture has, and the
+ * commit has to come first: discovery is `git ls-files`-based, so files written
+ * afterwards would be invisible to it. This is `support/history.ts`'s base
+ * commit without the second one — same frozen identity, same no-signing.
+ *
+ * Virtualenvs are created by the callers *after* this returns, so `.venv` stays
+ * untracked and out of the file partition.
+ */
+async function pyTempRepo(files: Readonly<Record<string, string>>): Promise<FixtureRepo> {
+  const root = await mkdtemp(join(tmpdir(), 'crank-py-temp-'))
+  const git = (args: string[]) => execa('git', args, { cwd: root, env: COMMIT_IDENTITY })
+
+  for (const [path, content] of Object.entries(files)) {
+    const target = join(root, path)
+    // Sequential: a handful of files, and the order they are written in is the
+    // order they read in.
+    // eslint-disable-next-line no-await-in-loop
+    await mkdir(dirname(target), { recursive: true })
+    // eslint-disable-next-line no-await-in-loop
+    await writeFile(target, content, 'utf8')
+  }
+  await git(['init', '--quiet', '--initial-branch=main'])
+  await git(['add', '--all'])
+  await git(['commit', '--quiet', '--no-gpg-sign', '--message', 'fixture'])
+  const { stdout: commit } = await git(['rev-parse', 'HEAD'])
+
+  return {
+    root,
+    commit: commit.trim(),
+    status: async () => (await git(['status', '--porcelain'])).stdout,
+    remove: () => rm(root, { recursive: true, force: true }),
+  }
+}
+
+/** The parts of mypy's own findings the config-resolution oracles are about. */
+function mypyFindings(result: HealthScanResult) {
+  return result.report.findings
+    .filter((finding) => finding.tool === 'mypy')
+    .map((finding) => ({
+      rule: finding.rule,
+      file: finding.file,
+      startLine: finding.range.startLine,
+    }))
+}
 
 /**
  * Raw-output files from the tools every machine can fetch. The three
