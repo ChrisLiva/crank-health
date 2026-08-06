@@ -324,6 +324,7 @@ describe('detectPythonTool across a workspace', () => {
     expect(await detectPythonTool(context(WORKSPACE, 'services/api'), ruffSpec)).toMatchObject({
       reason: 'dependency',
       configFiles: [],
+      ownedVia: 'pyproject.toml',
     })
   })
 
@@ -336,7 +337,7 @@ describe('detectPythonTool across a workspace', () => {
         context([...WORKSPACE, 'requirements-dev.txt'], 'services/api'),
         ruffSpec,
       ),
-    ).toMatchObject({ reason: 'dependency' })
+    ).toMatchObject({ reason: 'dependency', ownedVia: 'requirements-dev.txt' })
   })
 
   it('is configured by an ancestor’s [tool.ruff], named at the manifest it was found in', async () => {
@@ -345,6 +346,7 @@ describe('detectPythonTool across a workspace', () => {
     expect(await detectPythonTool(context(WORKSPACE, 'services/api'), ruffSpec)).toMatchObject({
       reason: 'config',
       configFiles: ['pyproject.toml'],
+      ownedVia: 'pyproject.toml',
     })
   })
 

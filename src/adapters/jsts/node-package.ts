@@ -73,12 +73,20 @@ export async function detectNodeTool(
     .slice(0, spec.configInherits === false ? 1 : ancestry.length)
     .flatMap((directory, depth) => configArtifacts(directory, manifests[depth], spec, present))
 
-  const declared = manifests.some((manifest) =>
+  // The index, not just the fact: which manifest declared the tool is what
+  // `Detection.ownedVia` reports when no config artifact decided ownership.
+  const declaredAt = manifests.findIndex((manifest) =>
     DEPENDENCY_FIELDS.some(
       (field) => asRecord(manifest?.[field])?.[spec.packageName] !== undefined,
     ),
   )
+  const declared = declaredAt !== -1
   if (configFiles.length === 0 && !declared) return null
+
+  // Both chains are walked nearest-first, so the first answer is the nearest one.
+  const ownedVia =
+    configFiles[0] ??
+    (declared ? repoPath(ancestry[declaredAt] ?? ROOT_PROJECT, PACKAGE_JSON) : undefined)
 
   const depth = await nearestInstall(ctx.repoRoot, ancestry, spec.binName)
   const installedIn = depth === undefined ? undefined : (ancestry[depth] ?? undefined)
@@ -97,6 +105,7 @@ export async function detectNodeTool(
           ? 'config'
           : 'dependency',
     configFiles,
+    ...(ownedVia === undefined ? {} : { ownedVia }),
     installed: binPath !== undefined,
     ...(binPath === undefined ? {} : { binPath }),
     ...(version === undefined ? {} : { version }),

@@ -212,6 +212,17 @@ export interface Detection {
    * project's own, and the ones it inherits from an ancestor directory.
    */
   readonly configFiles: readonly string[]
+  /**
+   * Which artifact decided ownership, repo-relative posix: the nearest config
+   * the project inherits, or — when only a dependency declaration decided it —
+   * the nearest manifest that declares the tool.
+   *
+   * In a monorepo this is the difference between a package that owns its
+   * toolchain and one that inherits the root's, and {@link configFiles} cannot
+   * say it for a `dependency` detection because there is no config to name.
+   * Absent only for a detector that reports no provenance.
+   */
+  readonly ownedVia?: string
   /** True when the declared tool is actually installed in the repo. */
   readonly installed: boolean
   /** Absolute path to the repo's installed binary, when `installed`. */

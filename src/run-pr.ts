@@ -136,6 +136,9 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
         selected: headScan.selected,
         categories: headScan.categories,
         metrics: headScan.scan.metrics,
+        // Head's, like every other grade in the report: the delta says what moved.
+        projects: headScan.projects,
+        ...(headScan.rootShell === undefined ? {} : { rootShell: headScan.rootShell }),
         // Both scans' tool records, so a reader can see what ran on each side —
         // and, when a base tool failed, why a "resolved" count is not a promise.
         runs: [...baseRuns, ...(await adoptRawFiles(out, headScan.scan, 'head'))],

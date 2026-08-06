@@ -162,6 +162,7 @@ describe('eslint detection', () => {
     expect(await eslintRunner.detect(context(repo, ['eslint.config.js']))).toEqual({
       reason: 'config',
       configFiles: ['eslint.config.js'],
+      ownedVia: 'eslint.config.js',
       installed: false,
     })
   })

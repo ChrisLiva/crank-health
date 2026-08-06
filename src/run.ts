@@ -3,17 +3,28 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
+import type { RootShell } from './core/discover.ts'
 import { countPhysicalLines, discoverFiles, discoverProjects } from './core/discover.ts'
 import { headCommit } from './core/git.ts'
 import { failingFilePercent, gradeCategory } from './core/grade.ts'
-import { runScan } from './core/orchestrator.ts'
-import type { ScanResult } from './core/orchestrator.ts'
+import { aggregateCategories, aggregateMetrics, runScan } from './core/orchestrator.ts'
+import type { RunRecord, ScanResult } from './core/orchestrator.ts'
 import type { OutputDir } from './core/output.ts'
 import { DEFAULT_OUTPUT_DIRNAME, createOutputDir, rawPrefix } from './core/output.ts'
-import type { Category, CategoryState, Grade, LanguageAdapter, RepoContext } from './core/types.ts'
-import { CATEGORIES, toCategoryState } from './core/types.ts'
+import type {
+  Category,
+  CategoryOutcome,
+  CategoryState,
+  FileInventory,
+  Finding,
+  Grade,
+  LanguageAdapter,
+  RepoContext,
+  ToolMetrics,
+} from './core/types.ts'
+import { CATEGORIES, REPO_SCOPE, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
-import type { Report, ResolvedRun } from './render/json.ts'
+import type { ProjectScan, Report, ResolvedRun } from './render/json.ts'
 import { buildReport, serializeReport } from './render/json.ts'
 import { renderReportMarkdown } from './render/report-md.ts'
 
@@ -25,6 +36,16 @@ import { renderReportMarkdown } from './render/report-md.ts'
 
 /** Spec §5: quick mode grades everything except test quality. */
 export const QUICK_MODE_TEST_QUALITY_REASON = 'not assessed — run `--deep`'
+
+/**
+ * Why a project has no state of its own for a category only the repo answered.
+ *
+ * A secret, a vulnerable dependency and a badly written workflow are properties
+ * of the repo — that is why their runners span it — so when nothing
+ * project-scoped assessed a category, the honest per-project answer is that the
+ * rollup holds it, not a grade the project did not earn.
+ */
+export const REPO_SCOPED_REASON = 'repo-scoped'
 
 export interface HealthScanOptions {
   /** Target repo; relative paths resolve against the cwd. */
@@ -87,6 +108,8 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
         selected: tree.selected,
         categories: tree.categories,
         metrics: tree.scan.metrics,
+        projects: tree.projects,
+        ...(tree.rootShell === undefined ? {} : { rootShell: tree.rootShell }),
         runs: await adoptRawFiles(out, tree.scan),
         findings: tree.scan.findings,
         warnings: tree.scan.warnings,
@@ -102,8 +125,13 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
 /** One tree's scan, graded. The unit PR mode runs twice; see `run-pr.ts`. */
 export interface TreeScan {
   readonly scan: ScanResult
+  /** The rollup's states: the whole tree, on the whole tree's denominators. */
   readonly categories: Record<Category, CategoryState>
   readonly selected: readonly Category[]
+  /** The same, per project, ordered by path. Never empty. */
+  readonly projects: readonly ProjectScan[]
+  /** Present when the tree's root is a workspace shell rather than a project. */
+  readonly rootShell?: RootShell
 }
 
 export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'> {
@@ -123,12 +151,12 @@ export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'>
  */
 export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   const files = await discoverFiles(options.repoRoot)
-  const { projects } = await discoverProjects(options.repoRoot, files)
+  const discovery = await discoverProjects(options.repoRoot, files)
   const repo: RepoContext = {
     repoRoot: options.repoRoot,
     files,
     scratch: options.scratch,
-    projects,
+    projects: discovery.projects,
   }
 
   const scan = await runScan(repo, options.adapters ?? ADAPTERS, {
@@ -141,10 +169,13 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   })
 
   const selected = options.only === undefined ? CATEGORIES : options.only
+  const deep = options.deep === true
   return {
     scan,
     selected,
-    categories: await gradeAll(repo, scan, selected, options.deep === true),
+    categories: await gradeAll(repo.repoRoot, rollupScope(repo, scan), selected, deep),
+    projects: await gradeProjects(repo, scan, selected, deep),
+    ...(discovery.rootShell === undefined ? {} : { rootShell: discovery.rootShell }),
   }
 }
 
@@ -257,6 +288,94 @@ export async function resolveRepoRoot(path: string): Promise<string> {
 }
 
 /**
+ * What one grade is computed over: a set of files to be the denominator, the
+ * findings against them, and the run outcomes and measurements behind them.
+ *
+ * There are two kinds, and they are the same arithmetic on different material:
+ * the **rollup** ({@link rollupScope}) is the whole tree, and each **project**
+ * is its own slice ({@link gradeProjects}).
+ */
+interface GradedScope {
+  readonly files: FileInventory
+  readonly findings: readonly Finding[]
+  readonly categories: Readonly<Record<Category, CategoryOutcome>>
+  readonly metrics: Readonly<Record<Category, ToolMetrics>>
+}
+
+/** The whole tree, which is exactly what a single-project repo has always been. */
+function rollupScope(repo: RepoContext, scan: ScanResult): GradedScope {
+  return {
+    files: repo.files,
+    findings: scan.findings,
+    categories: scan.categories,
+    metrics: scan.metrics,
+  }
+}
+
+/**
+ * Every project graded on its own denominators: its own files' KLOC and file
+ * count, its own runs, and the findings attributed to it.
+ *
+ * Two exclusions decide what "its own" means. The repo-wide duplication pass
+ * measures what no single project can see, so only the rollup grades on it. And
+ * a repo-spanning run answers about the repo — when a category has nothing
+ * project-scoped behind it, the project's state says {@link REPO_SCOPED_REASON}
+ * rather than a grade. What such a run *found* is a different question: a secret
+ * in a package is that package's problem, so the findings attributed to it count
+ * toward the grade of any category the project did assess. A package cannot be
+ * shown an A next to a critical finding of its own.
+ */
+export async function gradeProjects(
+  repo: RepoContext,
+  scan: ScanResult,
+  selected: readonly Category[],
+  deep: boolean,
+): Promise<ProjectScan[]> {
+  const own = scan.runs.filter((record) => !record.rollupOnly)
+  const spanning = own.filter((record) => record.project === REPO_SCOPE)
+
+  const scans: ProjectScan[] = []
+  for (const project of repo.projects) {
+    const records = own.filter((record) => record.project === project.path)
+    const metrics = aggregateMetrics(records)
+    const scope: GradedScope = {
+      files: project.files,
+      findings: scan.findings.filter((finding) => finding.project === project.path),
+      categories: withRepoScoped(aggregateCategories(selected, records), records, spanning),
+      metrics,
+    }
+    scans.push({
+      project,
+      // Sequential: each project's KLOC is its own read of its own files, and
+      // the file reads inside are already pooled.
+      // eslint-disable-next-line no-await-in-loop
+      categories: await gradeAll(repo.repoRoot, scope, selected, deep),
+      metrics,
+    })
+  }
+  return scans
+}
+
+/** Categories the repo answered and the project did not; see {@link REPO_SCOPED_REASON}. */
+function withRepoScoped(
+  outcomes: Record<Category, CategoryOutcome>,
+  records: readonly RunRecord[],
+  spanning: readonly RunRecord[],
+): Record<Category, CategoryOutcome> {
+  const assessedHere = new Set(records.map((record) => record.category))
+  const assessedForRepo = new Set(spanning.map((record) => record.category))
+
+  const adjusted = {} as Record<Category, CategoryOutcome>
+  for (const category of CATEGORIES) {
+    adjusted[category] =
+      !assessedHere.has(category) && assessedForRepo.has(category)
+        ? { status: 'not-assessed', reason: REPO_SCOPED_REASON }
+        : outcomes[category]
+  }
+  return adjusted
+}
+
+/**
  * Turns each category's run outcome into its reported state.
  *
  * Denominators are the pipeline's job, not the runners': density grades are per
@@ -265,18 +384,18 @@ export async function resolveRepoRoot(path: string): Promise<string> {
  * against a README's line count would be meaningless.
  */
 async function gradeAll(
-  repo: RepoContext,
-  scan: ScanResult,
+  repoRoot: string,
+  scope: GradedScope,
   selected: readonly Category[],
   deep: boolean,
 ): Promise<Record<Category, CategoryState>> {
-  const sourceFiles = [...repo.files.byLanguage['js-ts'], ...repo.files.byLanguage.python]
-  const kloc = (await countPhysicalLines(repo.repoRoot, sourceFiles)) / 1000
+  const sourceFiles = [...scope.files.byLanguage['js-ts'], ...scope.files.byLanguage.python]
+  const kloc = (await countPhysicalLines(repoRoot, sourceFiles)) / 1000
 
   const states = {} as Record<Category, CategoryState>
   for (const category of CATEGORIES) {
-    const state = toCategoryState(scan.categories[category], () =>
-      gradeOne(category, scan, kloc, sourceFiles.length),
+    const state = toCategoryState(scope.categories[category], () =>
+      gradeOne(category, scope, kloc, sourceFiles.length),
     )
     // Spec §5: in quick mode the reason test quality has no grade is the
     // profile, whatever the repo contains — no mutation tool was even asked. In
@@ -305,12 +424,12 @@ async function gradeAll(
  */
 function gradeOne(
   category: Category,
-  scan: ScanResult,
+  scope: GradedScope,
   kloc: number,
   sourceFileCount: number,
 ): Grade | undefined {
-  const findings = scan.findings.filter((finding) => finding.category === category)
-  const metrics = scan.metrics[category]
+  const findings = scope.findings.filter((finding) => finding.category === category)
+  const metrics = scope.metrics[category]
   switch (category) {
     case 'security':
       return gradeCategory(category, { shape: 'absolute', findings })

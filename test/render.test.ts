@@ -1,11 +1,40 @@
 import { describe, expect, it } from 'vitest'
+import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
 import type { RunRecord } from '../src/core/orchestrator.ts'
-import type { Finding } from '../src/core/types.ts'
+import { sortFindings } from '../src/core/orchestrator.ts'
+import type { CategoryState, Finding, Project } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import { buildReport, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
-import { allNotAssessed, makeFinding, makeReportInput } from './factories.ts'
+import { REPO_SCOPED_REASON } from '../src/run.ts'
+import {
+  allGraded,
+  allNotAssessed,
+  makeFinding,
+  makeProjectScan,
+  makeReportInput,
+} from './factories.ts'
 import { normalizeReport } from './support/report.ts'
+
+/** A workspace with no source at its root: two packages, two languages. */
+const MONOREPO = partitionProjects(
+  inventoryOf([
+    'package.json',
+    'packages/api/api/main.py',
+    'packages/api/pyproject.toml',
+    'packages/web/package.json',
+    'packages/web/src/a.ts',
+    'pnpm-workspace.yaml',
+  ]),
+)
+
+const REPO_SCOPED: CategoryState = { status: 'not-assessed', reason: REPO_SCOPED_REASON }
+
+function projectAt(path: string): Project {
+  const found = MONOREPO.find((project) => project.path === path)
+  if (found === undefined) throw new Error(`no project at ${path}`)
+  return found
+}
 
 describe('buildReport', () => {
   it('emits the top-level keys in a fixed order', () => {
@@ -19,6 +48,7 @@ describe('buildReport', () => {
       'categories',
       'metrics',
       'languages',
+      'projects',
       'tools',
       'findings',
       'warnings',
@@ -83,6 +113,7 @@ describe('buildReport', () => {
         tool: 'oxlint',
         category: 'lint',
         scope: 'js-ts',
+        project: '.',
         execution: 'ephemeral-pinned',
         provenance: 'default-config',
         version: '1.77.0',
@@ -124,7 +155,7 @@ describe('buildReport', () => {
     const [tool] = buildReport(input({ runs: [{ record: declared, raw: [] }] })).tools
     expect(tool?.provenance).toBe('default-config')
     // The declared dependency is still on the record — that is why tsc ran.
-    expect(tool?.detection).toEqual({ ...detection, configFiles: [] })
+    expect(tool?.detection).toEqual({ ...detection, configFiles: [], ownedVia: null })
   })
 
   it('falls back to detection for a runner that says nothing about its config', () => {
@@ -145,6 +176,164 @@ describe('buildReport', () => {
     })
     // Nothing outside `timings` may carry a clock reading.
     expect(normalizeReport(serializeReport(report))).not.toContain('durationMs')
+  })
+})
+
+/**
+ * The per-project half of the schema. The top-level categories/metrics/findings
+ * keep their meaning — they are the rollup — and everything here is beside them.
+ */
+describe('buildReport projects', () => {
+  const api = projectAt('packages/api')
+  const web = projectAt('packages/web')
+
+  it('always reports at least one project, with all eight category states', () => {
+    const [project, ...rest] = buildReport(input()).projects
+    expect(rest).toEqual([])
+    expect(project?.path).toBe('.')
+    expect(Object.keys(project?.categories ?? {})).toEqual([...CATEGORIES])
+  })
+
+  it('grades each project on its own, ordered by path whatever order it was given', () => {
+    const report = buildReport(
+      input({
+        // Deliberately not in path order: ordering is the report's job.
+        projects: [
+          makeProjectScan({ project: web, categories: allGraded('D') }),
+          makeProjectScan({ project: api, categories: allGraded('A') }),
+        ],
+      }),
+    )
+    expect(report.projects.map((project) => project.path)).toEqual(['packages/api', 'packages/web'])
+    expect(report.projects.map((project) => project.categories.lint)).toEqual([
+      { status: 'graded', grade: 'A' },
+      { status: 'graded', grade: 'D' },
+    ])
+    // The rollup is untouched by any of it.
+    expect(report.categories.lint).toEqual({
+      status: 'not-assessed',
+      reason: 'no tool available for this category',
+    })
+  })
+
+  it('carries a repo-scoped category through as the project’s own state', () => {
+    const [project] = buildReport(
+      input({
+        projects: [
+          makeProjectScan({
+            project: api,
+            categories: { ...allNotAssessed(), security: REPO_SCOPED },
+          }),
+        ],
+      }),
+    ).projects
+    expect(project?.categories.security).toEqual(REPO_SCOPED)
+  })
+
+  it('records each project’s manifests, languages and owned toolchain', () => {
+    const owned: RunRecord = {
+      ...record(),
+      project: 'packages/web',
+      detection: {
+        reason: 'config+dependency',
+        configFiles: ['packages/web/.oxlintrc.json', '.oxlintrc.json'],
+        ownedVia: 'packages/web/.oxlintrc.json',
+        installed: true,
+        version: '1.70.0',
+      },
+    }
+    const [project] = buildReport(
+      input({
+        projects: [makeProjectScan({ project: web })],
+        runs: [
+          { record: owned, raw: [] },
+          { record: record(), raw: [] },
+        ],
+      }),
+    ).projects
+
+    expect(project?.manifests).toEqual(['packages/web/package.json'])
+    expect(project?.languages).toEqual(['js-ts'])
+    // The root project's run is not this project's, and neither is a tool
+    // nothing detected.
+    expect(project?.toolchain).toEqual([
+      {
+        tool: 'oxlint',
+        category: 'lint',
+        reason: 'config+dependency',
+        ownedVia: 'packages/web/.oxlintrc.json',
+        configFiles: ['.oxlintrc.json', 'packages/web/.oxlintrc.json'],
+        installed: true,
+        version: '1.77.0',
+      },
+    ])
+  })
+
+  it('keeps the base scan’s runs out of a head project’s toolchain', () => {
+    const owned: RunRecord = {
+      ...record(),
+      detection: { reason: 'config', configFiles: ['.oxlintrc.json'], installed: true },
+    }
+    const [project] = buildReport(
+      input({
+        runs: [
+          { record: owned, raw: [], side: 'base' },
+          { record: owned, raw: [], side: 'head' },
+        ],
+      }),
+    ).projects
+    expect(project?.toolchain.map((tool) => tool.tool)).toEqual(['oxlint'])
+    expect(project?.toolchain[0]?.ownedVia).toBeNull()
+  })
+
+  it('attributes findings to their project without touching their identity', () => {
+    const finding = makeFinding({ file: 'packages/web/src/a.ts', project: 'packages/web' })
+    const [written] = buildReport(input({ findings: [finding] })).findings
+    expect(written?.project).toBe('packages/web')
+    expect(written?.id).toBe(finding.id)
+  })
+
+  it('records a workspace-shell root as a note rather than as a project', () => {
+    const report = buildReport(
+      input({
+        projects: [makeProjectScan({ project: api }), makeProjectScan({ project: web })],
+        rootShell: { declaredBy: ['pnpm-workspace.yaml', 'package.json'] },
+      }),
+    )
+    expect(report.rootShell).toEqual({ declaredBy: ['package.json', 'pnpm-workspace.yaml'] })
+    expect(report.projects.map((project) => project.path)).not.toContain('.')
+  })
+
+  it('has no rootShell key at all when the root is a real project', () => {
+    expect('rootShell' in buildReport(input())).toBe(false)
+  })
+
+  /**
+   * The determinism contract (spec §6) across the project dimension: the same
+   * scan described in a different order is the same bytes.
+   */
+  it('serializes a multi-project scan to the same bytes whatever order it came in', () => {
+    const findings = [
+      makeFinding({ id: 'w', file: 'packages/web/src/a.ts', project: 'packages/web' }),
+      makeFinding({ id: 'a', file: 'packages/api/api/main.py', project: 'packages/api' }),
+    ]
+    const runs = [
+      { record: { ...record(), project: 'packages/api' }, raw: [] },
+      { record: { ...record(), project: 'packages/web' }, raw: [] },
+    ]
+    const projects = [makeProjectScan({ project: api }), makeProjectScan({ project: web })]
+
+    // Findings are ordered by the orchestrator, which is what the pipeline
+    // hands over; projects and runs are ordered here.
+    const one = buildReport(input({ projects, findings: sortFindings(findings), runs }))
+    const other = buildReport(
+      input({
+        projects: projects.toReversed(),
+        findings: sortFindings(findings.toReversed()),
+        runs: runs.toReversed(),
+      }),
+    )
+    expect(serializeReport(other)).toBe(serializeReport(one))
   })
 })
 

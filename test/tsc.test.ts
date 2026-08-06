@@ -124,6 +124,7 @@ describe('tsc detection', () => {
     expect(await tscRunner.detect(context(repo, ['tsconfig.json']))).toEqual({
       reason: 'config',
       configFiles: ['tsconfig.json'],
+      ownedVia: 'tsconfig.json',
       installed: false,
     })
   })

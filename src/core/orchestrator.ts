@@ -134,7 +134,7 @@ export async function runScan(
   return {
     findings: sortFindings(attribute(resolved, repo.projects)),
     runs: resolved,
-    categories: aggregate(requested, resolved),
+    categories: aggregateCategories(requested, resolved),
     metrics: aggregateMetrics(resolved),
     warnings,
   }
@@ -735,8 +735,11 @@ async function run(start: () => Promise<ToolResult>, tool: string): Promise<Tool
  * - otherwise `error` wins over `timeout` wins over `not-available`, because the
  *   loudest unexplained failure is the one worth reporting
  * - no runner at all → `not-assessed` (that language/tool is not present here)
+ *
+ * Exported because a project's categories are the same question asked of its
+ * own records: one rule, so a per-project state and the rollup's cannot drift.
  */
-function aggregate(
+export function aggregateCategories(
   requested: readonly Category[],
   records: readonly RunRecord[],
 ): Record<Category, CategoryOutcome> {

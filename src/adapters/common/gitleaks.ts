@@ -83,8 +83,9 @@ export const gitleaksRunner: ToolRunner = {
  */
 function detectGitleaks(ctx: DetectContext): Promise<Detection | null> {
   const configFiles = GITLEAKS_CONFIG_FILES.filter((file) => ctx.files.all.includes(file))
+  const ownedVia = configFiles[0]
   return Promise.resolve(
-    configFiles.length === 0 ? null : { reason: 'config', configFiles, installed: true },
+    ownedVia === undefined ? null : { reason: 'config', configFiles, ownedVia, installed: true },
   )
 }
 

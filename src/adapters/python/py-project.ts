@@ -109,8 +109,13 @@ export async function detectPythonTool(
     return found
   })
 
-  const declared = await isDeclared(ctx, ancestry, manifests, spec.distribution)
+  const declaredIn = await declaringFile(ctx, ancestry, manifests, spec.distribution)
+  const declared = declaredIn !== undefined
   if (configFiles.length === 0 && !declared) return null
+
+  // Both chains are walked nearest-first, so the first answer is the nearest
+  // one — `configFiles` is only sorted on its way into the report.
+  const ownedVia = configFiles[0] ?? declaredIn
 
   const venv = await findVenv(ctx.repoRoot, ctx.project.path)
   const binPath =
@@ -124,6 +129,7 @@ export async function detectPythonTool(
           ? 'config'
           : 'dependency',
     configFiles: configFiles.toSorted(compare),
+    ...(ownedVia === undefined ? {} : { ownedVia }),
     installed: binPath !== undefined,
     ...(binPath === undefined ? {} : { binPath }),
   }
@@ -209,28 +215,32 @@ function ownsSection(manifest: string, sections: readonly string[]): boolean {
 }
 
 /**
- * True when the distribution is named in a `pyproject.toml` or a requirements
- * file — the project's own, or an ancestor's.
+ * The nearest file that names the distribution as a dependency — a
+ * `pyproject.toml` or a requirements file, the project's own or an ancestor's —
+ * or `undefined` when nothing declares it. The path is what
+ * {@link Detection.ownedVia} reports; that it exists at all is the dependency
+ * half of ownership.
  */
-async function isDeclared(
+async function declaringFile(
   ctx: DetectContext,
   ancestry: readonly string[],
   manifests: readonly (string | undefined)[],
   distribution: string,
-): Promise<boolean> {
+): Promise<string | undefined> {
   const wanted = normalizeDistribution(distribution)
-  if (
-    manifests.some((manifest) => manifest !== undefined && tomlDependencies(manifest).has(wanted))
-  )
-    return true
-
-  for (const file of ancestry.flatMap((directory) => requirementsFiles(ctx.files.all, directory))) {
-    // A handful of small files; reading them in order keeps the result stable.
-    // eslint-disable-next-line no-await-in-loop
-    const text = await readTextFile(join(ctx.repoRoot, file))
-    if (text !== undefined && requirementNames(text).has(wanted)) return true
+  for (const [depth, directory] of ancestry.entries()) {
+    const manifest = manifests[depth]
+    if (manifest !== undefined && tomlDependencies(manifest).has(wanted)) {
+      return repoPath(directory, PYPROJECT)
+    }
+    for (const file of requirementsFiles(ctx.files.all, directory)) {
+      // A handful of small files; reading them in order keeps the result stable.
+      // eslint-disable-next-line no-await-in-loop
+      const text = await readTextFile(join(ctx.repoRoot, file))
+      if (text !== undefined && requirementNames(text).has(wanted)) return file
+    }
   }
-  return false
+  return undefined
 }
 
 /**

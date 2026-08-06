@@ -50,11 +50,57 @@
       "lint": 2
     }
   },
+  "projects": [
+    {
+      "path": ".",
+      "manifests": [],
+      "languages": [
+        "js-ts"
+      ],
+      "categories": {
+        "security": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "types": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "dead-code": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "complexity": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "duplication": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "lint": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "format": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not selected by --only"
+        }
+      },
+      "metrics": {},
+      "toolchain": []
+    }
+  ],
   "tools": [
     {
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",
+      "project": ".",
       "side": "base",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
@@ -71,6 +117,7 @@
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",
+      "project": ".",
       "side": "head",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
@@ -92,6 +139,7 @@
       "rule": "eslint(no-unreachable)",
       "severity": "error",
       "file": "src/clean.js",
+      "project": ".",
       "range": {
         "startLine": 3,
         "startCol": 3,
@@ -109,6 +157,7 @@
       "rule": "eslint(no-dupe-keys)",
       "severity": "error",
       "file": "src/renamed.js",
+      "project": ".",
       "range": {
         "startLine": 2,
         "startCol": 12,
@@ -244,6 +293,7 @@
         "rule": "eslint(no-unreachable)",
         "severity": "error",
         "file": "src/clean.js",
+        "project": ".",
         "range": {
           "startLine": 3,
           "startCol": 3,
@@ -264,6 +314,7 @@
         "rule": "eslint(no-const-assign)",
         "severity": "error",
         "file": "src/fixed.js",
+        "project": ".",
         "range": {
           "startLine": 2,
           "startCol": 9,

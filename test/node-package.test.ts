@@ -135,6 +135,7 @@ describe('detectNodeTool across a workspace', () => {
     expect(await detectNodeTool(context(WORKSPACE, 'packages/a'), prettierSpec)).toMatchObject({
       reason: 'dependency',
       configFiles: [],
+      ownedVia: 'package.json',
     })
   })
 
@@ -144,7 +145,11 @@ describe('detectNodeTool across a workspace', () => {
     await write('packages/a/package.json', '{"name":"a"}')
     expect(
       await detectNodeTool(context([...WORKSPACE, '.prettierrc.json'], 'packages/a'), prettierSpec),
-    ).toMatchObject({ reason: 'config', configFiles: ['.prettierrc.json'] })
+    ).toMatchObject({
+      reason: 'config',
+      configFiles: ['.prettierrc.json'],
+      ownedVia: '.prettierrc.json',
+    })
   })
 
   it('is owned by an ancestor’s config block, and names that manifest, not the package’s', async () => {
@@ -215,6 +220,8 @@ describe('detectNodeTool across a workspace', () => {
     expect(await detectNodeTool(context(files, 'packages/a'), tscSpec)).toMatchObject({
       reason: 'config+dependency',
       configFiles: ['packages/a/tsconfig.json'],
+      // The package's own artifact, not the root's: nearest wins.
+      ownedVia: 'packages/a/tsconfig.json',
     })
   })
 })

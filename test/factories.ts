@@ -9,7 +9,7 @@ import type {
   ToolMetrics,
 } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
-import type { Report, ReportInput } from '../src/render/json.ts'
+import type { ProjectScan, Report, ReportInput } from '../src/render/json.ts'
 import { buildReport } from '../src/render/json.ts'
 
 /**
@@ -49,6 +49,19 @@ export function makeFindings(
   )
 }
 
+/**
+ * One project's graded result, ungraded by default — the degenerate list a
+ * single-project report carries. Override `project` for a monorepo case.
+ */
+export function makeProjectScan(overrides: Partial<ProjectScan> = {}): ProjectScan {
+  return {
+    project: makeProject(),
+    categories: allNotAssessed(),
+    metrics: noMetrics(),
+    ...overrides,
+  }
+}
+
 /** A report input where nothing was assessed; override what the test is about. */
 export function makeReportInput(overrides: Partial<ReportInput> = {}): ReportInput {
   return {
@@ -58,6 +71,7 @@ export function makeReportInput(overrides: Partial<ReportInput> = {}): ReportInp
     selected: CATEGORIES,
     categories: allNotAssessed(),
     metrics: noMetrics(),
+    projects: [makeProjectScan()],
     runs: [],
     findings: [],
     warnings: [],

@@ -1,4 +1,5 @@
 import type { DeltaResult } from '../core/delta.ts'
+import type { RootShell } from '../core/discover.ts'
 import { languageOf } from '../core/discover.ts'
 import type { RunRecord } from '../core/orchestrator.ts'
 import type {
@@ -6,6 +7,7 @@ import type {
   CategoryState,
   Finding,
   Language,
+  Project,
   RunnerScope,
   ToolMetrics,
 } from '../core/types.ts'
@@ -53,6 +55,22 @@ export interface Report {
    * came from.
    */
   readonly languages: Readonly<Partial<Record<Language, Partial<Record<Category, number>>>>>
+  /**
+   * The same questions answered per project, ordered by path and never empty.
+   *
+   * Everything above this key is the **rollup**: the whole repo, which is what
+   * a single-project repo has always been and what its grade still means. These
+   * are the packages inside it, each graded on its own files, its own tools and
+   * its own denominators — so one bad package cannot hide behind a large good
+   * one, and a reader can see which package a grade belongs to.
+   */
+  readonly projects: readonly ReportProject[]
+  /**
+   * Present when the repo root holds no source files of its own: a workspace
+   * shell has nothing to grade, so it is recorded here rather than appearing in
+   * {@link projects} as eight empty categories.
+   */
+  readonly rootShell?: ReportRootShell
   readonly tools: readonly ReportTool[]
   readonly findings: readonly Finding[]
   readonly warnings: readonly string[]
@@ -114,10 +132,58 @@ export interface ReportRepo {
   readonly commit: string | null
 }
 
+/** One project's half of the report; see {@link Report.projects}. */
+export interface ReportProject {
+  /** Identity: repo-relative posix path of the project directory, `.` at the root. */
+  readonly path: string
+  /** The `package.json`/`pyproject.toml` that make this directory a project. */
+  readonly manifests: readonly string[]
+  readonly languages: readonly Language[]
+  /** All eight states, always — the same contract the rollup keeps (spec §8). */
+  readonly categories: Readonly<Record<Category, CategoryState>>
+  readonly metrics: Readonly<Partial<Record<Category, ToolMetrics>>>
+  /** Every tool this project owns, and what made it own it. */
+  readonly toolchain: readonly ReportProjectTool[]
+}
+
+/**
+ * One owned tool, from the project's point of view: the same detection that is
+ * in {@link Report.tools}, said where a reader asks "what does *this* package
+ * use". A repo-spanning run belongs to no project and appears only in `tools`.
+ */
+export interface ReportProjectTool {
+  readonly tool: string
+  readonly category: Category
+  readonly reason: 'config' | 'dependency' | 'config+dependency'
+  /** The artifact that decided ownership; see {@link ReportDetection.ownedVia}. */
+  readonly ownedVia: string | null
+  readonly configFiles: readonly string[]
+  /** True when the tool the project declares is actually installed. */
+  readonly installed: boolean
+  /** The version that ran here, as reported by the tool itself. */
+  readonly version: string | null
+}
+
+/** The repo root as a workspace shell; see {@link Report.rootShell}. */
+export interface ReportRootShell {
+  /**
+   * Workspace declarations corroborating the classification (`workspaces`,
+   * `pnpm-workspace.yaml`, `[tool.uv.workspace]`), stable-sorted. Empty when
+   * the layout is undeclared — which changes nothing about the partition.
+   */
+  readonly declaredBy: readonly string[]
+}
+
 export interface ReportTool {
   readonly tool: string
   readonly category: Category
   readonly scope: RunnerScope
+  /**
+   * What this run was about: the project's path, or `"repo"` for a run that
+   * spanned the repo (a secrets scan, a lockfile audit, the repo-wide
+   * duplication pass). The same tool appears once per project it ran in.
+   */
+  readonly project: string
   /**
    * PR mode only: which of the two scans this record is from. Without it the
    * two runs of the same tool are indistinguishable, and "the tool errored"
@@ -143,6 +209,11 @@ export interface ReportTool {
 export interface ReportDetection {
   readonly reason: 'config' | 'dependency' | 'config+dependency'
   readonly configFiles: readonly string[]
+  /**
+   * The artifact that decided ownership, repo-relative posix — the project's
+   * own or an ancestor's. `null` when the detector reported none.
+   */
+  readonly ownedVia: string | null
   readonly installed: boolean
   readonly version: string | null
 }
@@ -161,6 +232,17 @@ export interface ResolvedRun {
   readonly side?: 'base' | 'head'
 }
 
+/**
+ * One project's graded result, as the pipeline hands it to
+ * {@link buildReport}. The project itself carries its path, manifests and
+ * languages, so nothing has to be restated here.
+ */
+export interface ProjectScan {
+  readonly project: Project
+  readonly categories: Readonly<Record<Category, CategoryState>>
+  readonly metrics: Readonly<Record<Category, ToolMetrics>>
+}
+
 export interface ReportInput {
   readonly repoPath: string
   readonly commit: string | null
@@ -173,6 +255,10 @@ export interface ReportInput {
   readonly selected: readonly Category[]
   readonly categories: Readonly<Record<Category, CategoryState>>
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
+  /** Every discovered project, graded; never empty. See {@link Report.projects}. */
+  readonly projects: readonly ProjectScan[]
+  /** The root's workspace declarations, when the root is a shell rather than a project. */
+  readonly rootShell?: RootShell
   readonly runs: readonly ResolvedRun[]
   readonly findings: readonly Finding[]
   readonly warnings: readonly string[]
@@ -195,6 +281,8 @@ export function buildReport(input: ReportInput): Report {
       categoryRank(a.record.category) - categoryRank(b.record.category) ||
       compare(a.record.tool, b.record.tool) ||
       compare(a.record.scope, b.record.scope) ||
+      // The same tool runs once per project, so the project is part of the order.
+      compare(a.record.project, b.record.project) ||
       compare(a.side ?? '', b.side ?? ''),
   )
 
@@ -208,6 +296,12 @@ export function buildReport(input: ReportInput): Report {
     categories: orderedCategories(input.categories),
     metrics: orderedMetrics(input.metrics),
     languages: countByLanguage(input.findings),
+    projects: input.projects
+      .toSorted((a, b) => compare(a.project.path, b.project.path))
+      .map((scan) => toReportProject(scan, runs)),
+    ...(input.rootShell === undefined
+      ? {}
+      : { rootShell: { declaredBy: input.rootShell.declaredBy.toSorted(compare) } }),
     tools: runs.map((run) => toReportTool(run)),
     findings: input.findings.map((finding) => orderedFinding(finding)),
     warnings: input.warnings.toSorted(compare),
@@ -225,6 +319,38 @@ export function serializeReport(report: Report): string {
   return `${JSON.stringify(report, null, 2)}\n`
 }
 
+/**
+ * One project, with the toolchain drawn from the runs that were about it.
+ *
+ * PR mode puts both scans' runs in `tools`, and the projects are head's — so a
+ * base-side run is not part of any project's toolchain, or a package would look
+ * as though it owned every tool twice.
+ */
+function toReportProject(scan: ProjectScan, runs: readonly ResolvedRun[]): ReportProject {
+  return {
+    path: scan.project.path,
+    manifests: scan.project.manifests.toSorted(compare),
+    languages: LANGUAGES.filter((language) => scan.project.languages.includes(language)),
+    categories: orderedCategories(scan.categories),
+    metrics: orderedMetrics(scan.metrics),
+    toolchain: runs.flatMap(({ record, side }) => {
+      const detection = record.detection
+      if (side === 'base' || record.project !== scan.project.path || detection === null) return []
+      return [
+        {
+          tool: record.tool,
+          category: record.category,
+          reason: detection.reason,
+          ownedVia: detection.ownedVia ?? null,
+          configFiles: detection.configFiles.toSorted(compare),
+          installed: detection.installed,
+          version: record.result.toolVersion ?? detection.version ?? null,
+        },
+      ]
+    }),
+  }
+}
+
 function toReportTool(run: ResolvedRun): ReportTool {
   const { record } = run
   const detection = record.detection
@@ -233,6 +359,7 @@ function toReportTool(run: ResolvedRun): ReportTool {
     tool: record.tool,
     category: record.category,
     scope: record.scope,
+    project: record.project,
     ...(run.side === undefined ? {} : { side: run.side }),
     execution: installed ? 'repo-installed' : 'ephemeral-pinned',
     // The runner's own answer wins when it gave one: detection can be non-null
@@ -249,6 +376,7 @@ function toReportTool(run: ResolvedRun): ReportTool {
         : {
             reason: detection.reason,
             configFiles: [...detection.configFiles].toSorted(compare),
+            ownedVia: detection.ownedVia ?? null,
             installed: detection.installed,
             version: detection.version ?? null,
           },
@@ -375,6 +503,9 @@ function orderedFinding(finding: Finding): Finding {
     rule: finding.rule,
     severity: finding.severity,
     file: finding.file,
+    // Attribution, never identity: `id` is hashed from the repo-root-relative
+    // path, so moving a project boundary around a file cannot change it.
+    ...(finding.project === undefined ? {} : { project: finding.project }),
     range: {
       startLine: finding.range.startLine,
       startCol: finding.range.startCol,

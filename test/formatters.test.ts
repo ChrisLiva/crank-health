@@ -87,6 +87,7 @@ describe('prettier detection', () => {
     expect(await prettierRunner.detect(context(repo, ['.prettierrc.json']))).toEqual({
       reason: 'config',
       configFiles: ['.prettierrc.json'],
+      ownedVia: '.prettierrc.json',
       installed: false,
     })
   })
@@ -96,6 +97,7 @@ describe('prettier detection', () => {
     expect(await prettierRunner.detect(context(repo, ['package.json']))).toEqual({
       reason: 'config',
       configFiles: ['package.json'],
+      ownedVia: 'package.json',
       installed: false,
     })
   })

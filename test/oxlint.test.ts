@@ -171,6 +171,7 @@ describe('oxlint detection', () => {
     expect(await oxlintRunner.detect(context(repo, ['.oxlintrc.json']))).toEqual({
       reason: 'config',
       configFiles: ['.oxlintrc.json'],
+      ownedVia: '.oxlintrc.json',
       installed: false,
     })
   })
@@ -180,6 +181,7 @@ describe('oxlint detection', () => {
     expect(await oxlintRunner.detect(context(repo, ['package.json']))).toEqual({
       reason: 'dependency',
       configFiles: [],
+      ownedVia: 'package.json',
       installed: false,
     })
   })
@@ -195,6 +197,7 @@ describe('oxlint detection', () => {
     expect(await oxlintRunner.detect(context(repo, ['.oxlintrc.json', 'package.json']))).toEqual({
       reason: 'config+dependency',
       configFiles: ['.oxlintrc.json'],
+      ownedVia: '.oxlintrc.json',
       installed: true,
       binPath: join(repo, 'node_modules', '.bin', 'oxlint'),
       version: '1.70.0',
