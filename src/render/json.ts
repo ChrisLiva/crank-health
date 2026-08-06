@@ -9,7 +9,7 @@ import type {
   RunnerScope,
   ToolMetrics,
 } from '../core/types.ts'
-import { CATEGORIES, categoryRank } from '../core/types.ts'
+import { CATEGORIES, LANGUAGES, categoryRank } from '../core/types.ts'
 import { VERSION } from '../version.ts'
 
 /**
@@ -322,9 +322,6 @@ function orderedMetrics(
   }
   return ordered
 }
-
-/** Languages in a fixed order, so the breakdown never depends on find order. */
-const LANGUAGES: readonly Language[] = ['js-ts', 'python']
 
 /**
  * Findings per language per category, counted from the file each finding names

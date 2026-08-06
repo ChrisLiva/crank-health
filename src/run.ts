@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
-import { countPhysicalLines, discoverFiles } from './core/discover.ts'
+import { countPhysicalLines, discoverFiles, discoverProjects } from './core/discover.ts'
 import { headCommit } from './core/git.ts'
 import { failingFilePercent, gradeCategory } from './core/grade.ts'
 import { runScan } from './core/orchestrator.ts'
@@ -123,7 +123,13 @@ export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'>
  */
 export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   const files = await discoverFiles(options.repoRoot)
-  const repo: RepoContext = { repoRoot: options.repoRoot, files, scratch: options.scratch }
+  const { projects } = await discoverProjects(options.repoRoot, files)
+  const repo: RepoContext = {
+    repoRoot: options.repoRoot,
+    files,
+    scratch: options.scratch,
+    projects,
+  }
 
   const scan = await runScan(repo, options.adapters ?? ADAPTERS, {
     ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),

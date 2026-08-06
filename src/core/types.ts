@@ -110,6 +110,12 @@ export type PendingFinding = Omit<Finding, 'id'> & {
 /** Languages with an adapter in v1. */
 export type Language = 'js-ts' | 'python'
 
+/**
+ * Canonical language order, matching the adapter order in `adapters/index.ts`.
+ * Every stable sort and every rendered list of languages uses it.
+ */
+export const LANGUAGES: readonly Language[] = ['js-ts', 'python']
+
 /** Cross-language runners (jscpd, gitleaks, …) live under this pseudo-language. */
 export type RunnerScope = Language | 'common'
 
@@ -121,6 +127,23 @@ export interface FileInventory {
   readonly byLanguage: Readonly<Record<Language, readonly string[]>>
 }
 
+/**
+ * One analyzable unit of the repo: a directory holding a `package.json` or a
+ * `pyproject.toml`, plus every source file nearer to it than to any other such
+ * directory. A single-project repo is the degenerate case — one project at `.`
+ * holding the whole inventory.
+ */
+export interface Project {
+  /** Identity: repo-relative posix path of the project directory, `.` for the root. */
+  readonly path: string
+  /** Repo-relative posix paths of the manifests in {@link path}, stable-sorted. */
+  readonly manifests: readonly string[]
+  /** Languages this project declares (by manifest) or contains (by file), in {@link LANGUAGES} order. */
+  readonly languages: readonly Language[]
+  /** The nearest-manifest slice of the scan's inventory; every source file is in exactly one. */
+  readonly files: FileInventory
+}
+
 /** Everything a detector may look at. Detection never runs a tool. */
 export interface RepoContext {
   /** Absolute path to the repo root. */
@@ -129,6 +152,8 @@ export interface RepoContext {
   readonly files: FileInventory
   /** Absolute path to a scratch dir outside the repo. */
   readonly scratch: string
+  /** The repo's projects, stable-sorted by path; never empty. */
+  readonly projects: readonly Project[]
 }
 
 /**

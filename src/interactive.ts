@@ -10,7 +10,7 @@ import { OSV_SCANNER } from './adapters/common/osv-scanner.ts'
 import type { SystemToolSpec } from './adapters/common/system-tool.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import type { CliOptions } from './args.ts'
-import { discoverFiles } from './core/discover.ts'
+import { discoverFiles, discoverProjects } from './core/discover.ts'
 import { headCommit, mergeBase, resolveCommit } from './core/git.ts'
 import type { Grade, RepoContext } from './core/types.ts'
 import { CATEGORIES, GRADES } from './core/types.ts'
@@ -140,7 +140,8 @@ export async function probeRepo(path: string): Promise<RepoProbe> {
   const files = await discoverFiles(repoRoot)
   const scratch = await mkdtemp(join(tmpdir(), 'crank-health-probe-'))
   try {
-    const repo: RepoContext = { repoRoot, files, scratch }
+    const { projects } = await discoverProjects(repoRoot, files)
+    const repo: RepoContext = { repoRoot, files, scratch, projects }
 
     const ownedTools: string[] = []
     let mutationToolOwned = false

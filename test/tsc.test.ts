@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
+import { partitionProjects } from '../src/core/discover.ts'
 import type { Detection, FileInventory, RepoContext } from '../src/core/types.ts'
 
 /** Captured raw output from the pinned tsc, run against `test/fixtures/ts-owned`. */
@@ -222,5 +223,10 @@ function context(repoRoot: string, files: string[]): RepoContext {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.ts')), python: [] },
   }
-  return { repoRoot, files: inventory, scratch: join(repoRoot, 'scratch') }
+  return {
+    repoRoot,
+    files: inventory,
+    scratch: join(repoRoot, 'scratch'),
+    projects: partitionProjects(inventory),
+  }
 }

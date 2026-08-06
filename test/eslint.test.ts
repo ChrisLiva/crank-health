@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eslintRunner, parseEslintJson, toPendingFindings } from '../src/adapters/jsts/eslint.ts'
+import { partitionProjects } from '../src/core/discover.ts'
 import type { FileInventory, RepoContext } from '../src/core/types.ts'
 
 /**
@@ -198,5 +199,10 @@ function context(repoRoot: string, files: string[]): RepoContext {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.js')), python: [] },
   }
-  return { repoRoot, files: inventory, scratch: join(repoRoot, 'scratch') }
+  return {
+    repoRoot,
+    files: inventory,
+    scratch: join(repoRoot, 'scratch'),
+    projects: partitionProjects(inventory),
+  }
 }

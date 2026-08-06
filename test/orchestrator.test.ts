@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { partitionProjects } from '../src/core/discover.ts'
 import { runScan, sortFindings } from '../src/core/orchestrator.ts'
 import type {
   Category,
   Detection,
+  FileInventory,
   Finding,
   LanguageAdapter,
   RepoContext,
@@ -14,13 +16,16 @@ import type {
 } from '../src/core/types.ts'
 import { makeFinding } from './factories.ts'
 
+const FILES: FileInventory = {
+  all: ['src/a.ts', 'src/b.py', 'README.md'],
+  byLanguage: { 'js-ts': ['src/a.ts'], python: ['src/b.py'] },
+}
+
 const REPO: RepoContext = {
   repoRoot: '/repo',
-  files: {
-    all: ['src/a.ts', 'src/b.py', 'README.md'],
-    byLanguage: { 'js-ts': ['src/a.ts'], python: ['src/b.py'] },
-  },
+  files: FILES,
   scratch: '/scratch',
+  projects: partitionProjects(FILES),
 }
 
 interface FakeRunner extends ToolRunner {

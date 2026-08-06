@@ -2,7 +2,8 @@ import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execa } from 'execa'
 import { mapLimit } from './pool.ts'
-import type { FileInventory, Language } from './types.ts'
+import type { FileInventory, Language, Project } from './types.ts'
+import { LANGUAGES } from './types.ts'
 
 /**
  * Path segments that are never scanned, even when the repo forgot to gitignore
@@ -66,15 +67,176 @@ export async function discoverFiles(repoRoot: string): Promise<FileInventory> {
   const existing = await mapLimit(candidates, FS_CONCURRENCY, (file) =>
     isRegularFile(repoRoot, file),
   )
-  const all = candidates.filter((_, index) => existing[index] === true)
+  return inventoryOf(candidates.filter((_, index) => existing[index] === true))
+}
 
+/** Repo-relative posix path of the root project — its own identity, not a prefix. */
+export const ROOT_PROJECT = '.'
+
+const PACKAGE_JSON = 'package.json'
+const PYPROJECT_TOML = 'pyproject.toml'
+const PNPM_WORKSPACE = 'pnpm-workspace.yaml'
+
+/** A manifest makes its directory a project candidate, and declares a language. */
+const MANIFEST_LANGUAGE: Readonly<Record<string, Language>> = {
+  [PACKAGE_JSON]: 'js-ts',
+  [PYPROJECT_TOML]: 'python',
+}
+
+/** `[tool.uv.workspace]`, or any table under it. */
+const UV_WORKSPACE_SECTION = /^\s*\[tool\.uv\.workspace[\].]/m
+
+/** The repo root as a workspace shell: it holds no source files of its own. */
+export interface RootShell {
+  /**
+   * Workspace declarations found at the root, repo-relative posix and
+   * stable-sorted; empty when the layout is undeclared. They corroborate the
+   * classification and nothing else — which projects exist is decided by the
+   * file partition alone, so an unlisted or unbuilt package is never dropped.
+   */
+  readonly declaredBy: readonly string[]
+}
+
+export interface ProjectDiscovery {
+  /** Stable-sorted by path, never empty. */
+  readonly projects: readonly Project[]
+  /** Present only when the root is a shell rather than a project. */
+  readonly rootShell?: RootShell
+}
+
+/**
+ * Partitions the inventory into projects, then reads the root's workspace
+ * declarations when the root turned out to be a shell.
+ *
+ * @param repoRoot absolute path to the repo root
+ * @param files the one inventory from {@link discoverFiles}
+ */
+export async function discoverProjects(
+  repoRoot: string,
+  files: FileInventory,
+): Promise<ProjectDiscovery> {
+  const projects = partitionProjects(files)
+  if (projects.some((project) => project.path === ROOT_PROJECT)) return { projects }
+  return { projects, rootShell: { declaredBy: await workspaceDeclarations(repoRoot, files) } }
+}
+
+/**
+ * The project partition, from the inventory alone: every directory holding a
+ * `package.json` or a `pyproject.toml` is a candidate (the root always is), and
+ * each file goes to its nearest ancestor candidate — so every source file
+ * belongs to exactly one candidate, and a nested package's files are the
+ * nested package's, not its parent's.
+ *
+ * A candidate that keeps no source file of its own is a *shell*, not a project:
+ * a workspace root whose packages claimed everything has nothing to grade, and
+ * eight `not-assessed` categories would say less than its absence. Both
+ * manifests in one directory make one project that owns both languages.
+ *
+ * The one exception keeps the contract that a scan always has a project: a repo
+ * with no source files anywhere is the root project, holding the root's slice.
+ */
+export function partitionProjects(files: FileInventory): readonly Project[] {
+  const manifests = manifestsByDirectory(files.all)
+  const claimed = new Map<string, string[]>([...manifests.keys()].map((dir) => [dir, []]))
+  for (const file of files.all) claimed.get(nearestCandidate(manifests, file))?.push(file)
+
+  const projects = [...manifests.keys()]
+    .toSorted(compareFiles)
+    .map((dir) => projectOf(dir, manifests.get(dir) ?? [], claimed.get(dir) ?? []))
+    .filter((project) => project.files.all.some((file) => languageOf(file) !== undefined))
+
+  return projects.length > 0
+    ? projects
+    : [projectOf(ROOT_PROJECT, manifests.get(ROOT_PROJECT) ?? [], claimed.get(ROOT_PROJECT) ?? [])]
+}
+
+/** Candidate directories → their manifests, repo-relative and stable-sorted. */
+function manifestsByDirectory(files: readonly string[]): Map<string, readonly string[]> {
+  const byDirectory = new Map<string, string[]>([[ROOT_PROJECT, []]])
+  for (const file of files) {
+    if (MANIFEST_LANGUAGE[baseName(file)] === undefined) continue
+    const directory = directoryOf(file)
+    const found = byDirectory.get(directory)
+    if (found === undefined) byDirectory.set(directory, [file])
+    else found.push(file)
+  }
+  return byDirectory
+}
+
+/** The candidate a file belongs to: the nearest one up its path, else the root. */
+function nearestCandidate(candidates: ReadonlyMap<string, unknown>, file: string): string {
+  let directory = directoryOf(file)
+  while (directory !== ROOT_PROJECT && !candidates.has(directory)) {
+    directory = directoryOf(directory)
+  }
+  return directory
+}
+
+function projectOf(path: string, manifests: readonly string[], files: readonly string[]): Project {
+  const inventory = inventoryOf(files)
+  const declared = new Set(manifests.map((manifest) => MANIFEST_LANGUAGE[baseName(manifest)]))
   return {
-    all,
+    path,
+    manifests: manifests.toSorted(compareFiles),
+    languages: LANGUAGES.filter(
+      (language) => declared.has(language) || inventory.byLanguage[language].length > 0,
+    ),
+    files: inventory,
+  }
+}
+
+/** The language subsets of a file list, computed the one way. */
+function inventoryOf(files: readonly string[]): FileInventory {
+  return {
+    all: files,
     byLanguage: {
-      'js-ts': all.filter((file) => languageOf(file) === 'js-ts'),
-      python: all.filter((file) => languageOf(file) === 'python'),
+      'js-ts': files.filter((file) => languageOf(file) === 'js-ts'),
+      python: files.filter((file) => languageOf(file) === 'python'),
     },
   }
+}
+
+/**
+ * Workspace declarations at the root: npm/yarn/bun's `workspaces` field, a
+ * `pnpm-workspace.yaml`, or `[tool.uv.workspace]`. Their globs are deliberately
+ * not read — corroboration is all they are for, so the cheapest reliable check
+ * for each is the right one.
+ */
+async function workspaceDeclarations(
+  repoRoot: string,
+  files: FileInventory,
+): Promise<readonly string[]> {
+  const found: string[] = []
+
+  const manifest = await readText(repoRoot, PACKAGE_JSON)
+  if (manifest !== undefined && hasField(manifest, 'workspaces')) found.push(PACKAGE_JSON)
+
+  if (files.all.includes(PNPM_WORKSPACE)) found.push(PNPM_WORKSPACE)
+
+  const pyproject = await readText(repoRoot, PYPROJECT_TOML)
+  if (pyproject !== undefined && UV_WORKSPACE_SECTION.test(pyproject)) found.push(PYPROJECT_TOML)
+
+  return found.toSorted(compareFiles)
+}
+
+/** Top-level key presence in a JSON document; unparseable input declares nothing. */
+function hasField(json: string, field: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(json)
+    return typeof parsed === 'object' && parsed !== null && field in parsed
+  } catch {
+    return false
+  }
+}
+
+/** The directory a repo-relative path sits in — the parent, for a directory. */
+function directoryOf(path: string): string {
+  const slash = path.lastIndexOf('/')
+  return slash <= 0 ? ROOT_PROJECT : path.slice(0, slash)
+}
+
+function baseName(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
 }
 
 /** The language a path belongs to, or `undefined` when we do not analyze it. */

@@ -8,6 +8,7 @@ import {
   prettierRunner,
   toPendingFindings,
 } from '../src/adapters/jsts/prettier.ts'
+import { partitionProjects } from '../src/core/discover.ts'
 import type { FileInventory, RepoContext } from '../src/core/types.ts'
 
 /** Captured raw output from the pinned prettier, run against `test/fixtures/js-basic`. */
@@ -113,5 +114,10 @@ function context(repoRoot: string, files: string[]): RepoContext {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.js')), python: [] },
   }
-  return { repoRoot, files: inventory, scratch: join(repoRoot, 'scratch') }
+  return {
+    repoRoot,
+    files: inventory,
+    scratch: join(repoRoot, 'scratch'),
+    projects: partitionProjects(inventory),
+  }
 }

@@ -6,11 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   countPhysicalLines,
   discoverFiles,
+  discoverProjects,
   isExcluded,
   languageOf,
+  partitionProjects,
   readSources,
 } from '../src/core/discover.ts'
-import type { FileInventory } from '../src/core/types.ts'
+import type { FileInventory, Project } from '../src/core/types.ts'
 
 /** Ignores the developer's own global git config so the fixture is hermetic. */
 const GIT_ENV = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' }
@@ -140,6 +142,280 @@ describe('languageOf', () => {
       expect(languageOf(file)).toBeUndefined()
     },
   )
+})
+
+/** The inventory shape discovery produces, from a hand-written file list. */
+function inventoryOf(files: readonly string[]): FileInventory {
+  const all = [...files].toSorted()
+  return {
+    all,
+    byLanguage: {
+      'js-ts': all.filter((file) => languageOf(file) === 'js-ts'),
+      python: all.filter((file) => languageOf(file) === 'python'),
+    },
+  }
+}
+
+function paths(projects: readonly Project[]): string[] {
+  return projects.map((project) => project.path)
+}
+
+function projectAt(projects: readonly Project[], path: string): Project {
+  const found = projects.find((project) => project.path === path)
+  if (found === undefined) throw new Error(`no project at ${path}: ${paths(projects).join(', ')}`)
+  return found
+}
+
+describe('partitionProjects', () => {
+  it('assigns every file to its nearest manifest directory', () => {
+    const projects = partitionProjects(
+      inventoryOf([
+        'package.json',
+        'README.md',
+        'src/root.ts',
+        'packages/web/package.json',
+        'packages/web/src/app.tsx',
+        'packages/api/pyproject.toml',
+        'packages/api/api/main.py',
+      ]),
+    )
+
+    expect(paths(projects)).toEqual(['.', 'packages/api', 'packages/web'])
+    expect(projectAt(projects, '.').files.all).toEqual(['README.md', 'package.json', 'src/root.ts'])
+    expect(projectAt(projects, 'packages/web').files.all).toEqual([
+      'packages/web/package.json',
+      'packages/web/src/app.tsx',
+    ])
+    expect(projectAt(projects, 'packages/api').files.byLanguage.python).toEqual([
+      'packages/api/api/main.py',
+    ])
+    expect(projectAt(projects, 'packages/api').manifests).toEqual(['packages/api/pyproject.toml'])
+  })
+
+  it('puts every source file in exactly one project', () => {
+    const files = inventoryOf([
+      'package.json',
+      'src/root.ts',
+      'packages/web/package.json',
+      'packages/web/src/app.tsx',
+      'packages/web/nested/package.json',
+      'packages/web/nested/deep.ts',
+    ])
+    const assigned = partitionProjects(files).flatMap(
+      (project) => project.files.byLanguage['js-ts'],
+    )
+
+    expect(assigned.toSorted()).toEqual(files.byLanguage['js-ts'])
+    expect(new Set(assigned).size).toBe(assigned.length)
+  })
+
+  it('gives a nested package its own files and leaves them out of the parent', () => {
+    const projects = partitionProjects(
+      inventoryOf([
+        'packages/web/package.json',
+        'packages/web/src/app.ts',
+        'packages/web/nested/package.json',
+        'packages/web/nested/deep.ts',
+      ]),
+    )
+
+    expect(paths(projects)).toEqual(['packages/web', 'packages/web/nested'])
+    expect(projectAt(projects, 'packages/web').files.all).toEqual([
+      'packages/web/package.json',
+      'packages/web/src/app.ts',
+    ])
+    expect(projectAt(projects, 'packages/web/nested').files.all).toEqual([
+      'packages/web/nested/deep.ts',
+      'packages/web/nested/package.json',
+    ])
+  })
+
+  it('drops the root when nearer manifests claim every source file', () => {
+    const projects = partitionProjects(
+      inventoryOf([
+        'package.json',
+        'README.md',
+        'packages/a/package.json',
+        'packages/a/a.js',
+        'packages/b/package.json',
+        'packages/b/b.js',
+      ]),
+    )
+
+    expect(paths(projects)).toEqual(['packages/a', 'packages/b'])
+  })
+
+  it('keeps the root as a project when source files remain beside the packages', () => {
+    const projects = partitionProjects(
+      inventoryOf([
+        'package.json',
+        'scripts/build.js',
+        'packages/a/package.json',
+        'packages/a/a.js',
+      ]),
+    )
+
+    expect(paths(projects)).toEqual(['.', 'packages/a'])
+    expect(projectAt(projects, '.').files.byLanguage['js-ts']).toEqual(['scripts/build.js'])
+  })
+
+  it('drops an intermediate manifest directory that keeps no source of its own', () => {
+    const projects = partitionProjects(
+      inventoryOf([
+        'packages/package.json',
+        'packages/a/package.json',
+        'packages/a/a.js',
+        'packages/b/pyproject.toml',
+        'packages/b/b.py',
+      ]),
+    )
+
+    expect(paths(projects)).toEqual(['packages/a', 'packages/b'])
+  })
+
+  it('makes one project with both languages from a directory holding both manifests', () => {
+    const projects = partitionProjects(
+      inventoryOf(['package.json', 'pyproject.toml', 'src/app.ts', 'src/app.py']),
+    )
+
+    expect(paths(projects)).toEqual(['.'])
+    expect(projectAt(projects, '.').manifests).toEqual(['package.json', 'pyproject.toml'])
+    expect(projectAt(projects, '.').languages).toEqual(['js-ts', 'python'])
+  })
+
+  it('reports a language the manifest declares before any file of it exists', () => {
+    const projects = partitionProjects(
+      inventoryOf(['package.json', 'pyproject.toml', 'src/app.py']),
+    )
+
+    expect(projectAt(projects, '.').languages).toEqual(['js-ts', 'python'])
+  })
+
+  it('is one root project for a repo with no manifest at all', () => {
+    const projects = partitionProjects(inventoryOf(['src/a.js', 'src/b.py']))
+
+    expect(paths(projects)).toEqual(['.'])
+    expect(projectAt(projects, '.').manifests).toEqual([])
+    expect(projectAt(projects, '.').files.all).toEqual(['src/a.js', 'src/b.py'])
+  })
+
+  it('still yields a root project when the repo has no source file anywhere', () => {
+    const projects = partitionProjects(inventoryOf(['README.md', 'packages/a/package.json']))
+
+    expect(paths(projects)).toEqual(['.'])
+    expect(projectAt(projects, '.').languages).toEqual([])
+  })
+
+  it('orders projects by path, byte-wise and stable', () => {
+    const files = inventoryOf([
+      'z/package.json',
+      'z/z.js',
+      'a/pyproject.toml',
+      'a/a.py',
+      'package.json',
+      'root.js',
+    ])
+
+    expect(paths(partitionProjects(files))).toEqual(['.', 'a', 'z'])
+    expect(paths(partitionProjects(files))).toEqual(paths(partitionProjects(files)))
+  })
+})
+
+describe('discoverProjects', () => {
+  let root: string
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'crank-projects-'))
+  })
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const shellFiles = inventoryOf([
+    'package.json',
+    'pnpm-workspace.yaml',
+    'packages/a/package.json',
+    'packages/a/a.js',
+  ])
+
+  it('records the declarations that corroborate a workspace shell', async () => {
+    await plant(root, 'package.json', '{ "workspaces": ["packages/*"] }')
+    await plant(root, 'pnpm-workspace.yaml', 'packages:\n  - packages/*\n')
+
+    const discovery = await discoverProjects(root, shellFiles)
+
+    expect(paths(discovery.projects)).toEqual(['packages/a'])
+    expect(discovery.rootShell?.declaredBy).toEqual(['package.json', 'pnpm-workspace.yaml'])
+  })
+
+  it('records a uv workspace declaration', async () => {
+    const uvRoot = await mkdtemp(join(tmpdir(), 'crank-projects-uv-'))
+    try {
+      await plant(uvRoot, 'pyproject.toml', '[tool.uv.workspace]\nmembers = ["services/*"]\n')
+      const files = inventoryOf([
+        'pyproject.toml',
+        'services/api/pyproject.toml',
+        'services/api/main.py',
+      ])
+
+      const discovery = await discoverProjects(uvRoot, files)
+
+      expect(paths(discovery.projects)).toEqual(['services/api'])
+      expect(discovery.rootShell?.declaredBy).toEqual(['pyproject.toml'])
+    } finally {
+      await rm(uvRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('reports an undeclared folder-per-service shell with no declarations', async () => {
+    const plainRoot = await mkdtemp(join(tmpdir(), 'crank-projects-plain-'))
+    try {
+      await plant(plainRoot, 'README.md', '# services\n')
+      const files = inventoryOf([
+        'README.md',
+        'services/api/pyproject.toml',
+        'services/api/main.py',
+        'services/web/package.json',
+        'services/web/app.js',
+      ])
+
+      const discovery = await discoverProjects(plainRoot, files)
+
+      expect(paths(discovery.projects)).toEqual(['services/api', 'services/web'])
+      expect(discovery.rootShell).toEqual({ declaredBy: [] })
+    } finally {
+      await rm(plainRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('has no shell to report when the root is itself a project', async () => {
+    const discovery = await discoverProjects(
+      root,
+      inventoryOf(['package.json', 'src/app.js', 'packages/a/package.json', 'packages/a/a.js']),
+    )
+
+    expect(paths(discovery.projects)).toEqual(['.', 'packages/a'])
+    expect(discovery.rootShell).toBeUndefined()
+  })
+
+  it('never lets a declaration include or exclude a project', async () => {
+    const declaredElsewhere = inventoryOf([
+      'package.json',
+      'pnpm-workspace.yaml',
+      // Not under `packages/*`, and its manifest is all it takes.
+      'tools/cli/package.json',
+      'tools/cli/cli.js',
+    ])
+
+    expect(paths((await discoverProjects(root, declaredElsewhere)).projects)).toEqual(['tools/cli'])
+  })
+
+  it('matches the pure partition on the same inventory', async () => {
+    expect(paths((await discoverProjects(root, shellFiles)).projects)).toEqual(
+      paths(partitionProjects(shellFiles)),
+    )
+  })
 })
 
 describe('isExcluded', () => {

@@ -9,6 +9,7 @@ import {
   parseSarif,
   toPendingFindings,
 } from '../src/adapters/jsts/oxlint.ts'
+import { partitionProjects } from '../src/core/discover.ts'
 import type { FileInventory, RepoContext } from '../src/core/types.ts'
 
 /**
@@ -237,5 +238,10 @@ function context(repoRoot: string, files: string[]): RepoContext {
     all: files,
     byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.js')), python: [] },
   }
-  return { repoRoot, files: inventory, scratch: join(repoRoot, 'scratch') }
+  return {
+    repoRoot,
+    files: inventory,
+    scratch: join(repoRoot, 'scratch'),
+    projects: partitionProjects(inventory),
+  }
 }

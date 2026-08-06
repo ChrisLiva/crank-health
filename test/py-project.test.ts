@@ -12,6 +12,7 @@ import {
   tomlDependencies,
   tomlSections,
 } from '../src/adapters/python/py-project.ts'
+import { partitionProjects } from '../src/core/discover.ts'
 import type { FileInventory, RepoContext } from '../src/core/types.ts'
 
 /**
@@ -204,7 +205,12 @@ describe('detectPythonTool', () => {
       all: files,
       byLanguage: { 'js-ts': [], python: files.filter((file) => file.endsWith('.py')) },
     }
-    return { repoRoot: root, files: inventory, scratch: root }
+    return {
+      repoRoot: root,
+      files: inventory,
+      scratch: root,
+      projects: partitionProjects(inventory),
+    }
   }
 
   it('is null for a repo that never mentions the tool', async () => {
