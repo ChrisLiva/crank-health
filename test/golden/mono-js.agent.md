@@ -1,8 +1,8 @@
 # Fix plan
 
-`<repo>` @ `7efc798a8272cfcfaa35d9bb77747075e07febd6` · crank-health 0.3.0 · quick profile
+`<repo>` @ `c9952e2668536835a75bd276ac900737de0573bb` · crank-health 0.3.0 · quick profile
 
-Grades: security not assessed · types not assessed · dead code A · complexity A · duplication F · lint F · format C · test quality not assessed
+Grades: security not assessed · types not assessed · dead code A · complexity A · duplication D · lint D · format B · test quality not assessed
 
 ## Ground rules
 
@@ -22,7 +22,7 @@ Grade impact: duplication · A → A
 
 - `packages/api/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11 [advisory]
 
-Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.json)
+Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.json) · [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json)
 
 Verify: `npx crank-health --only duplication --project packages/api --fail-under A`
 
@@ -34,7 +34,7 @@ Grade impact: duplication · A → A
 
 - `packages/web/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/api/src/shared.js:1-11 [advisory]
 
-Evidence: [raw/packages/web/jscpd-report.json](raw/packages/web/jscpd-report.json)
+Evidence: [raw/packages/web/jscpd-report.json](raw/packages/web/jscpd-report.json) · [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json)
 
 Verify: `npx crank-health --only duplication --project packages/web --fail-under A`
 
@@ -54,7 +54,7 @@ Verify: `npx crank-health --only lint --project packages/api --fail-under A`
 
 Project: packages/web
 
-Grade impact: lint · F → A
+Grade impact: lint · D → A
 
 - `packages/web/src/lint.js:2` `no-unused-vars` — 'unused' is assigned a value but never used.
 
@@ -76,4 +76,4 @@ Verify: `npx crank-health --only format --project packages/api --fail-under A`
 
 ---
 
-Full findings (5) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
+Full findings (11) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).

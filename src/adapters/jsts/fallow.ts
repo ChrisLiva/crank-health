@@ -97,7 +97,12 @@ function detectFallow(ctx: DetectContext): Promise<Detection | null> {
 }
 
 async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
-  const run = await invoke(ctx, FALLOW_DEAD_CODE_TOOL, ['dead-code'])
+  // The whole repo, whatever project this run is for: reachability is not a
+  // question one package can answer. An export a sibling imports is reached,
+  // and a walk that starts inside the package cannot see the sibling — it would
+  // report a used file as dead, which is the one mistake a dead-code tool must
+  // not make. The cost is a walk per project; `--project` is what bounds it.
+  const run = await invoke(ctx, FALLOW_DEAD_CODE_TOOL, ['dead-code'], 'repo')
   if (run.failure !== undefined) return run.failure
 
   let report: FallowDeadCode
@@ -113,9 +118,11 @@ async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toDeadCodeFindings(report, ctx.detection !== null, isLibrary)
-        .map((finding) => ({ ...finding, file: underProject(ctx.project.path, finding.file) }))
-        .filter((finding) => analyzed.has(finding.file)),
+      // A repo walk reports repo-relative paths already; what makes these this
+      // project's findings is the filter.
+      toDeadCodeFindings(report, ctx.detection !== null, isLibrary).filter((finding) =>
+        analyzed.has(finding.file),
+      ),
     ),
     ...(report.version === undefined ? {} : { toolVersion: report.version }),
     rawFiles: run.rawFiles,
@@ -127,17 +134,24 @@ async function runHealth(ctx: RunContext): Promise<ToolResult> {
   // off — hotspots, churn, ownership — read git history through a *relative*
   // time window (`--since 6m`), which would make the report depend on the wall
   // clock and break the determinism contract (spec §6).
-  const run = await invoke(ctx, FALLOW_HEALTH_TOOL, [
-    'health',
-    '--complexity',
-    // The denominator, file by file. `summary.functions_analyzed` counts every
-    // function fallow walked, and a project that holds another project holds
-    // that one's functions too — counted there as well, they would land in the
-    // rollup twice and give both projects a ratio neither of them has.
-    '--file-scores',
-    '--max-cognitive',
-    String(COMPLEXITY_CEILING),
-  ])
+  const run = await invoke(
+    ctx,
+    FALLOW_HEALTH_TOOL,
+    [
+      'health',
+      '--complexity',
+      // The denominator, file by file. `summary.functions_analyzed` counts every
+      // function fallow walked, and a project that holds another project holds
+      // that one's functions too — counted there as well, they would land in the
+      // rollup twice and give both projects a ratio neither of them has.
+      '--file-scores',
+      '--max-cognitive',
+      String(COMPLEXITY_CEILING),
+    ],
+    // Complexity is a property of the code in front of you, so the project's own
+    // tree is the whole question — and one walk per project beats the repo's.
+    'project',
+  )
   if (run.failure !== undefined) return run.failure
 
   let report: FallowHealth
@@ -150,14 +164,17 @@ async function runHealth(ctx: RunContext): Promise<ToolResult> {
   const analyzed = new Set(ctx.files)
   const own = (file: string): boolean => analyzed.has(underProject(ctx.project.path, file))
 
-  // A report that measured functions but scored no file leaves the ratio with a
-  // denominator nobody counted, and 0 of 0 would grade A. Say so instead.
+  // The denominator is the scored files, and fallow scores fewer files than it
+  // analyzes — a file it could not score is not a file with no functions. When
+  // it scored none of them there is no ratio to grade: 0 of 0 would be an A
+  // nobody measured, and an error would fail a gate over a measurement that was
+  // never owed. Nothing to assess is what happened, so that is what it says.
   if (report.fileScores.length === 0 && report.functionsAnalyzed > 0) {
     return {
-      state: 'error',
+      state: 'not-available',
       findings: [],
       rawFiles: run.rawFiles,
-      reason: `fallow health scored no files, so the ${report.functionsAnalyzed} functions it analyzed cannot be counted per project`,
+      reason: `fallow health scored none of the ${report.functionsAnalyzed} functions it analyzed, so this project has no complexity ratio`,
     }
   }
 
@@ -191,18 +208,31 @@ interface Invocation {
   readonly failure?: ToolResult
 }
 
-async function invoke(ctx: RunContext, tool: string, args: string[]): Promise<Invocation> {
+/**
+ * Which tree a run walks. `project` points fallow at this project's directory
+ * (`--root`), so it reports paths inside it; `repo` walks the whole repo, which
+ * is what a question about reachability needs and what reports repo-relative
+ * paths already. The two runners choose differently and say why.
+ */
+type Walk = 'project' | 'repo'
+
+async function invoke(
+  ctx: RunContext,
+  tool: string,
+  args: string[],
+  walk: Walk,
+): Promise<Invocation> {
   const command =
     ctx.detection?.installed === true && ctx.detection.binPath !== undefined
       ? repoCommand(ctx.detection.binPath, args)
       : ephemeralCommand(FALLOW_PACKAGE, args, FALLOW_BIN)
 
+  // The repo root stays the working directory either way: that is where a config
+  // the project inherits lives, and fallow resolves one from above `--root` as
+  // long as it starts there.
+  const scope = walk === 'project' ? ['--root', ctx.project.path] : []
   const execution = await execTool(
-    // `--root` is the project, so the walk is this project's tree rather than
-    // the whole repo once per project. The repo root stays the working
-    // directory: that is where a config the project inherits lives, and fallow
-    // resolves one from above `--root` as long as it starts there.
-    { ...command, args: [...command.args, ...BASE_ARGS, '--root', ctx.project.path] },
+    { ...command, args: [...command.args, ...BASE_ARGS, ...scope] },
     { cwd: ctx.repoRoot, timeoutMs: ctx.timeoutMs },
   )
 

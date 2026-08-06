@@ -3,7 +3,7 @@
   "crankHealth": "0.3.0",
   "repo": {
     "path": "<repo>",
-    "commit": "7efc798a8272cfcfaa35d9bb77747075e07febd6"
+    "commit": "c9952e2668536835a75bd276ac900737de0573bb"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -36,15 +36,15 @@
     },
     "duplication": {
       "status": "graded",
-      "grade": "F"
+      "grade": "D"
     },
     "lint": {
       "status": "graded",
-      "grade": "F"
+      "grade": "D"
     },
     "format": {
       "status": "graded",
-      "grade": "C"
+      "grade": "B"
     },
     "test-quality": {
       "status": "not-assessed",
@@ -53,18 +53,19 @@
   },
   "metrics": {
     "complexity": {
-      "functionsTotal": 11,
+      "functionsTotal": 19,
       "functionsOverCeiling": 0
     },
     "duplication": {
-      "duplicationPercent": 41.19601328903654
+      "duplicationPercent": 12.691914022517912
     },
     "format": {
-      "formattableFiles": 8
+      "formattableFiles": 10
     }
   },
   "languages": {
     "js-ts": {
+      "complexity": 6,
       "duplication": 2,
       "lint": 2,
       "format": 1
@@ -115,14 +116,14 @@
       },
       "metrics": {
         "complexity": {
-          "functionsTotal": 6,
+          "functionsTotal": 7,
           "functionsOverCeiling": 0
         },
         "duplication": {
           "duplicationPercent": 0
         },
         "format": {
-          "formattableFiles": 4
+          "formattableFiles": 5
         }
       },
       "toolchain": [
@@ -168,7 +169,7 @@
         },
         "lint": {
           "status": "graded",
-          "grade": "F"
+          "grade": "D"
         },
         "format": {
           "status": "graded",
@@ -181,14 +182,14 @@
       },
       "metrics": {
         "complexity": {
-          "functionsTotal": 5,
+          "functionsTotal": 12,
           "functionsOverCeiling": 0
         },
         "duplication": {
           "duplicationPercent": 0
         },
         "format": {
-          "formattableFiles": 4
+          "formattableFiles": 5
         }
       },
       "toolchain": [
@@ -633,6 +634,114 @@
     }
   ],
   "findings": [
+    {
+      "id": "fb627f16d3512edd",
+      "category": "complexity",
+      "tool": "fta",
+      "rule": "fta/file-score",
+      "severity": "info",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File has an FTA maintainability score of 63.2 (needs improvement), across 165 lines",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "3bbc6140dd315485",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 10,
+        "startCol": 7,
+        "endLine": 10,
+        "endCol": 7
+      },
+      "message": "Function `kindOf` has cognitive complexity 1 (cyclomatic 37); the ceiling is 15",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "f6f0b7f4eb4b580d",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 58,
+        "startCol": 7,
+        "endLine": 58,
+        "endCol": 7
+      },
+      "message": "Function `tierOf` has cognitive complexity 1 (cyclomatic 35); the ceiling is 15",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "227d08edaaffc85f",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 104,
+        "startCol": 7,
+        "endLine": 104,
+        "endCol": 7
+      },
+      "message": "Function `mapsFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "8081fac3ace57212",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 135,
+        "startCol": 7,
+        "endLine": 135,
+        "endCol": 7
+      },
+      "message": "Function `loaderFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
+    {
+      "id": "75e8ed2d0b08b070",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 171,
+        "startCol": 7,
+        "endLine": 171,
+        "endCol": 7
+      },
+      "message": "Function `isPlannable` has cognitive complexity 5 (cyclomatic 12); the ceiling is 15",
+      "provenance": "default-config",
+      "gradeScope": false
+    },
     {
       "id": "d48862f2c5567099",
       "category": "duplication",

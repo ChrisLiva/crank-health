@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `7efc798a8272cfcfaa35d9bb77747075e07febd6` · crank-health 0.3.0 · quick profile
+`<repo>` @ `c9952e2668536835a75bd276ac900737de0573bb` · crank-health 0.3.0 · quick profile
 
 ## Grades
 
@@ -9,17 +9,17 @@
 | security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 11 functions over cognitive complexity 15 (0.0%). |
-| duplication | F | 41.2% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade. |
-| lint | F | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
-| format | C | 1 of 8 checked files fail the formatter (12.5%). |
+| complexity | A | 0 of 19 functions over cognitive complexity 15 (0.0%). 6 advisory findings did not count toward the grade. |
+| duplication | D | 12.7% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade. |
+| lint | D | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
+| format | B | 1 of 10 checked files fail the formatter (10.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 ### Measurements
 
-- Complexity: 0 of 11 functions over cognitive complexity 15 (0.0%).
-- Duplication: 41.2% of tokens duplicated.
-- Format: 8 files checked by a formatter.
+- Complexity: 0 of 19 functions over cognitive complexity 15 (0.0%).
+- Duplication: 12.7% of tokens duplicated.
+- Format: 10 files checked by a formatter.
 
 ## Projects
 
@@ -36,10 +36,10 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 | security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 6 functions over cognitive complexity 15 (0.0%). |
+| complexity | A | 0 of 7 functions over cognitive complexity 15 (0.0%). |
 | duplication | A | 0.0% of tokens duplicated; the 1 clone below are the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
-| format | C | 1 of 4 checked files fail the formatter (25.0%). |
+| format | C | 1 of 5 checked files fail the formatter (20.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 | Tool | Category | Ownership | Owned via | Version |
@@ -55,10 +55,10 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 | security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 5 functions over cognitive complexity 15 (0.0%). |
+| complexity | A | 0 of 12 functions over cognitive complexity 15 (0.0%). 6 advisory findings did not count toward the grade. |
 | duplication | A | 0.0% of tokens duplicated; the 1 clone below are the evidence, not the grade. 1 advisory finding did not count toward the grade. |
-| lint | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
-| format | A | 0 of 4 checked files fail the formatter (0.0%). |
+| lint | D | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
+| format | A | 0 of 5 checked files fail the formatter (0.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 | Tool | Category | Ownership | Owned via | Version |
@@ -106,7 +106,7 @@ Evidence: [raw/packages/api/fallow-dead-code.json](raw/packages/api/fallow-dead-
 
 ## complexity — A
 
-0 of 11 functions over cognitive complexity 15 (0.0%).
+0 of 19 functions over cognitive complexity 15 (0.0%). 6 advisory findings did not count toward the grade.
 
 Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 
@@ -117,11 +117,20 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 | fta | ok | [default-config] | 3.0.0 | — |
 | fta | ok | [default-config] | 3.0.0 | — |
 
+**Advisory findings — reported, not counted toward the grade** (6)
+
+- info `packages/web/src/tokens.js` `fta/file-score` — File has an FTA maintainability score of 63.2 (needs improvement), across 165 lines (fta) [default-config] [advisory]
+- error `packages/web/src/tokens.js:10` `fallow/complexity` — Function `kindOf` has cognitive complexity 1 (cyclomatic 37); the ceiling is 15 (fallow-health) [default-config] [advisory]
+- error `packages/web/src/tokens.js:58` `fallow/complexity` — Function `tierOf` has cognitive complexity 1 (cyclomatic 35); the ceiling is 15 (fallow-health) [default-config] [advisory]
+- error `packages/web/src/tokens.js:104` `fallow/complexity` — Function `mapsFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15 (fallow-health) [default-config] [advisory]
+- error `packages/web/src/tokens.js:135` `fallow/complexity` — Function `loaderFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15 (fallow-health) [default-config] [advisory]
+- error `packages/web/src/tokens.js:171` `fallow/complexity` — Function `isPlannable` has cognitive complexity 5 (cyclomatic 12); the ceiling is 15 (fallow-health) [default-config] [advisory]
+
 Evidence: [raw/packages/api/fallow-health.json](raw/packages/api/fallow-health.json) · [raw/packages/api/fallow-health.stderr.txt](raw/packages/api/fallow-health.stderr.txt) · [raw/packages/web/fallow-health.json](raw/packages/web/fallow-health.json) · [raw/packages/web/fallow-health.stderr.txt](raw/packages/web/fallow-health.stderr.txt) · [raw/packages/api/fta.json](raw/packages/api/fta.json) · [raw/packages/web/fta.json](raw/packages/web/fta.json)
 
-## duplication — F
+## duplication — D
 
-41.2% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade.
+12.7% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade.
 
 Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 
@@ -142,7 +151,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 
 Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.json) · [raw/packages/web/jscpd-report.json](raw/packages/web/jscpd-report.json) · [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json)
 
-## lint — F
+## lint — D
 
 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2).
 
@@ -163,9 +172,9 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 
 Evidence: [raw/packages/web/eslint.json](raw/packages/web/eslint.json) · [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.json) · [raw/packages/web/oxlint.sarif.json](raw/packages/web/oxlint.sarif.json)
 
-## format — C
+## format — B
 
-1 of 8 checked files fail the formatter (12.5%).
+1 of 10 checked files fail the formatter (10.0%).
 
 Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
 

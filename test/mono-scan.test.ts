@@ -29,8 +29,38 @@ const SCAN_TIMEOUT_MS = 180_000
 /** The one place this repo's own installed toolchain lives; see the hoisted case. */
 const CRANK_NODE_MODULES = fileURLToPath(new URL('../node_modules', import.meta.url))
 
+/**
+ * The advisory complexity findings `packages/web/src/tokens.js` carries: fta's
+ * file score, then one per function fallow flags on a ceiling that is not the
+ * cognitive one. None of them is `gradeScope`, which is why the package still
+ * grades A for complexity.
+ */
+const MONO_JS_TOKENS_ADVISORY = [
+  {
+    category: 'complexity',
+    tool: 'fta',
+    rule: 'fta/file-score',
+    file: 'packages/web/src/tokens.js',
+    project: 'packages/web',
+    startLine: 1,
+    severity: 'info',
+    gradeScope: false,
+  },
+  ...[10, 58, 104, 135, 171].map((startLine) => ({
+    category: 'complexity',
+    tool: 'fallow-health',
+    rule: 'fallow/complexity',
+    file: 'packages/web/src/tokens.js',
+    project: 'packages/web',
+    startLine,
+    severity: 'error',
+    gradeScope: false,
+  })),
+] as const
+
 /** Every finding planted in `test/fixtures/mono-js` — see that fixture's README. */
 const MONO_JS_PLANTED = [
+  ...MONO_JS_TOKENS_ADVISORY,
   {
     category: 'duplication',
     tool: 'jscpd',
@@ -163,9 +193,10 @@ describe('quick scan of the mono-js fixture', () => {
   })
 
   /**
-   * Acceptance criterion 1's last half: two packages, two grades. Both fail
-   * lint on their own linter's verdict, and only `api` has a formatting failure
-   * — a blended repo grade could not have said that.
+   * Acceptance criterion 1's last half: two packages, two grades. Each fails
+   * lint on its own linter's verdict and over its own denominator — the same
+   * one error grades F in the smaller package and D in the larger — and only
+   * `api` has a formatting failure. A blended repo grade could say none of that.
    */
   it('grades each package on its own findings', () => {
     expect(categories('packages/api')).toMatchObject({
@@ -173,9 +204,46 @@ describe('quick scan of the mono-js fixture', () => {
       format: { status: 'graded', grade: 'C' },
     })
     expect(categories('packages/web')).toMatchObject({
-      lint: { status: 'graded', grade: 'F' },
+      lint: { status: 'graded', grade: 'D' },
       format: { status: 'graded', grade: 'A' },
     })
+  })
+
+  /**
+   * The advisory half of the complexity category, and the reason `web` still
+   * grades A: fta scores whole files and fallow gates on ceilings that are not
+   * the cognitive one, so both can report a file the grade does not count.
+   */
+  it('keeps the file-level complexity findings out of the grade', () => {
+    expect(categories('packages/web')?.complexity).toEqual({ status: 'graded', grade: 'A' })
+    expect(
+      scan.report.findings.filter((finding) => finding.category === 'complexity').map(shape),
+    ).toEqual(MONO_JS_TOKENS_ADVISORY.map((planted) => ({ ...planted })))
+  })
+
+  /**
+   * fta is handed a directory, so it reports inside it — `src/tokens.js` for a
+   * run in `packages/web`. Nothing else would notice if that offset were lost:
+   * fta reports no metrics, and a path no project claims is dropped, so the
+   * finding would silently disappear rather than come back wrong.
+   */
+  it('brings fta’s paths back to the repo’s terms', () => {
+    const fta = scan.report.findings.filter((finding) => finding.tool === 'fta')
+    expect(fta.map((finding) => [finding.file, finding.project])).toEqual([
+      ['packages/web/src/tokens.js', 'packages/web'],
+    ])
+    expect(record('fta', 'packages/web')?.raw).toEqual(['raw/packages/web/fta.json'])
+  })
+
+  /**
+   * Reachability is not a question one package can answer. `cross.js` is
+   * imported only by the *other* package, so a dead-code walk scoped to
+   * `packages/api` reports it as an unused file — the walk is the repo's, and
+   * this is the assertion that keeps it that way.
+   */
+  it('does not call a file dead because only the other package imports it', () => {
+    expect(scan.report.findings.filter((finding) => finding.category === 'dead-code')).toEqual([])
+    expect(categories('packages/api')?.['dead-code']).toEqual({ status: 'graded', grade: 'A' })
   })
 
   /**
@@ -190,7 +258,7 @@ describe('quick scan of the mono-js fixture', () => {
       (project) => project.metrics.complexity?.functionsTotal ?? 0,
     )
     // The packages hold different code; one number for both would be the repo's.
-    expect(totals).toEqual([6, 5])
+    expect(totals).toEqual([7, 12])
     expect(scan.report.metrics.complexity?.functionsTotal).toBe(
       totals.reduce((sum, total) => sum + total, 0),
     )
@@ -202,7 +270,7 @@ describe('quick scan of the mono-js fixture', () => {
    * the rollup's alone.
    */
   it('keeps the cross-package clone in the rollup’s duplication grade only', () => {
-    expect(scan.report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
+    expect(scan.report.categories.duplication).toEqual({ status: 'graded', grade: 'D' })
     expect(scan.report.metrics.duplication?.duplicationPercent).toBeGreaterThan(3)
     for (const project of scan.report.projects) {
       expect(project.categories.duplication).toEqual({ status: 'graded', grade: 'A' })

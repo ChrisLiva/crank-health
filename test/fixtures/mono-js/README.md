@@ -21,6 +21,14 @@ Planted, one per thing a monorepo scan has to get right:
 | lint        | `packages/api/src/const-assign.js`   | `no-const-assign`, reported by **oxlint** — the default that stood down in `web` |
 | format      | `packages/api/src/unformatted.js`    | does not match prettier's defaults; `web` has no format failure, so the two packages' format grades differ |
 | duplication | `packages/{api,web}/src/shared.js`   | byte-identical modules: a clone **between** packages, which is in neither package's own measurement and only in the rollup's |
+| complexity  | `packages/web/src/tokens.js`         | scores over fta's file threshold — and no function in it is anywhere near the **cognitive** ceiling the grade uses, so complexity stays A and every finding is advisory. It is also the file that proves fta's paths are rebased: a score reported as `src/tokens.js` has to arrive as `packages/web/src/tokens.js`, in `packages/web` |
+
+Two files exist for what must **not** be reported. `packages/api/src/cross.js`
+is imported only by `packages/web/src/index.js`, so it is reachable only from
+the other package: a dead-code walk scoped to `packages/api` calls it an unused
+file, and reachability is not a question one package can answer — the walk is
+the repo's. `packages/web/src/tokens.js` exports five lookups and
+`packages/web/src/index.js` uses all five, so nothing there is unused either.
 
 Everything else is deliberately clean. `src/index.js` is each package's entry
 point (`package.json#main`), which is what keeps the dead-code tools from

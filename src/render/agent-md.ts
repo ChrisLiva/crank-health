@@ -175,14 +175,20 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
 }
 
 /**
- * Raw evidence for a finding: the output of the run that reported it.
+ * Raw evidence for a finding: the output of the runs that could have reported it.
  *
  * The tool name alone is not the key. The same tool runs once per project, so
  * keyed by name a task in one package would link the raw file of whichever
  * package happened to be recorded last — evidence for a different config over
- * different sources. A repo-spanning run belongs to no project and is the
- * fallback: it is where a secrets scan's output is, and where a finding no
- * project claims came from.
+ * different sources.
+ *
+ * Its project's run is not the only candidate either. A repo-spanning run of the
+ * same tool covered that project's files too, and for some findings it is the
+ * only run that saw them: a clone *between* two packages is in the repo-wide
+ * duplication pass and in neither package's own, though it is attributed to the
+ * package it sits in. So both runs are the evidence, and the reader is sent to
+ * output that actually contains the finding. A finding no project claims has
+ * only the repo-spanning run.
  *
  * PR mode records both sides of the comparison under the same key, and head is
  * the one that wins: the report's runs are already ordered with `head` last, and
@@ -193,10 +199,10 @@ function rawEvidence(report: Report): (finding: Finding) => readonly string[] {
   for (const tool of report.tools) {
     byRun.set(evidenceKey(tool.tool, tool.repoWide === true ? undefined : tool.project), tool.raw)
   }
-  return (finding) =>
-    byRun.get(evidenceKey(finding.tool, finding.project)) ??
-    byRun.get(evidenceKey(finding.tool, undefined)) ??
-    []
+  return (finding) => [
+    ...(byRun.get(evidenceKey(finding.tool, finding.project)) ?? []),
+    ...(byRun.get(evidenceKey(finding.tool, undefined)) ?? []),
+  ]
 }
 
 /** A run's identity for {@link rawEvidence}: repo-spanning runs have no project. */
