@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `7efc798a8272cfcfaa35d9bb77747075e07febd6` · crank-health 0.2.1 · quick profile
+`<repo>` @ `7efc798a8272cfcfaa35d9bb77747075e07febd6` · crank-health 0.3.0 · quick profile
 
 Grades: security not assessed · types not assessed · dead code A · complexity A · duplication F · lint F · format C · test quality not assessed
 
