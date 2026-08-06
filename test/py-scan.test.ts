@@ -390,6 +390,175 @@ describe('quick scan of the py-mypy fixture (no virtualenv)', () => {
   })
 })
 
+/**
+ * The same fixture with an environment, which is the case mypy was written for.
+ * Three scans: one before the repo installs mypy, so the pinned copy runs; two
+ * after, so the repo's own binary does and the pair can be compared byte for
+ * byte. In both modes mypy grades types alone — the defaults it displaced stand
+ * down rather than report the same error a second time.
+ */
+describe('quick scan of the py-mypy fixture with a virtualenv', () => {
+  let fixture: FixtureRepo
+  let outEphemeral: string
+  let outInstalled: string
+  let outAgain: string
+  let scan1: HealthScanResult
+  let scan2: HealthScanResult
+  let scan3: HealthScanResult
+
+  // Three full Python scans plus a `uv venv` and a `uv pip install` do not fit
+  // the single-scan budget the other suites here run on.
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('py-mypy')
+    // After the commit, so the virtualenv stays untracked and out of the file
+    // partition; the fixture's own .gitignore keeps it out of `git status`.
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    outEphemeral = await mkdtemp(join(tmpdir(), 'crank-mypy-out-'))
+    outInstalled = await mkdtemp(join(tmpdir(), 'crank-mypy-out-'))
+    outAgain = await mkdtemp(join(tmpdir(), 'crank-mypy-out-'))
+
+    // An outside `--out` is what makes the raw-evidence listing assertable.
+    scan1 = await runHealthScan({ path: fixture.root, out: outEphemeral })
+
+    // …and now the repo owns a copy of its own, which is a different branch of
+    // the invocation ladder and a different report.
+    await execa(
+      'uv',
+      ['pip', 'install', '--quiet', '--python', '.venv/bin/python', 'mypy==2.3.0'],
+      {
+        cwd: fixture.root,
+      },
+    )
+    scan2 = await runHealthScan({ path: fixture.root, out: outInstalled })
+    scan3 = await runHealthScan({ path: fixture.root, out: outAgain })
+  }, 3 * SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+    await Promise.all(
+      [outEphemeral, outInstalled, outAgain].map((out) =>
+        rm(out, { recursive: true, force: true }),
+      ),
+    )
+  })
+
+  it('runs the pinned mypy against the virtualenv when the repo has not installed one', () => {
+    const byTool = new Map(parse(scan1.json).tools.map((tool) => [tool.tool, tool]))
+    expect(byTool.get('mypy')).toMatchObject({
+      state: 'ok',
+      execution: 'ephemeral-pinned',
+      version: '2.3.0',
+      provenance: 'repo-config',
+    })
+  })
+
+  /**
+   * Exactly one finding is also the no-double-report proof: pyright ran as a
+   * standby and saw the same line, and standing it down cleared its findings.
+   */
+  it('reports the planted type error once, from the repo’s own tool', () => {
+    expect(scan1.report.findings.map(shape)).toEqual([
+      {
+        category: 'types',
+        tool: 'mypy',
+        rule: 'return-value',
+        file: 'app.py',
+        startLine: 6,
+        severity: 'error',
+        gradeScope: true,
+      },
+    ])
+    // `shape()` carries no provenance, so it is asserted separately.
+    expect(scan1.report.findings.every((finding) => finding.provenance === 'repo-config')).toBe(
+      true,
+    )
+    expect(scan1.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
+  })
+
+  /**
+   * Both defaults are standbys while mypy is uninstalled — neither can be
+   * suppressed on the strength of a tool that still has to be fetched — so both
+   * are rebuilt with the fixed stood-down reason. Each keeps the state it
+   * earned: pyright ran, ty stood itself down over the virtualenv.
+   */
+  it('stands both default type checkers down, in the orchestrator’s fixed words', () => {
+    const byTool = new Map(parse(scan1.json).tools.map((tool) => [tool.tool, tool]))
+    expect(byTool.get('pyright')).toMatchObject({
+      state: 'ok',
+      reason: 'stood down: types graded by mypy',
+    })
+    expect(byTool.get('ty')).toMatchObject({
+      state: 'not-available',
+      reason: 'stood down: types graded by mypy',
+    })
+  })
+
+  it('keeps neither standby’s findings nor its metrics', () => {
+    expect(scan1.report.metrics.types).toBeUndefined()
+    expect(scan1.report.findings.some((finding) => finding.tool === 'pyright')).toBe(false)
+  })
+
+  it('keeps mypy’s raw output next to the report', async () => {
+    expect(await readdir(join(outEphemeral, 'raw', 'root'))).toContain('mypy.jsonl')
+  })
+
+  it('warns about nothing, because the repo’s own tool graded the category', () => {
+    expect(scan1.report.warnings.filter((warning) => warning.includes('mypy'))).toEqual([])
+  })
+
+  /**
+   * `version: null` is the load-bearing half. `execution` is derived from
+   * detection and would read `repo-installed` even if the runner had wrongly
+   * gone to `uvx`; `toolVersion` is set from the same flag that picks the
+   * command, so a null version witnesses the repo's own binary.
+   */
+  it('runs the repo’s own mypy once it is installed', () => {
+    const byTool = new Map(parse(scan2.json).tools.map((tool) => [tool.tool, tool]))
+    expect(byTool.get('mypy')).toMatchObject({
+      state: 'ok',
+      execution: 'repo-installed',
+      version: null,
+      provenance: 'repo-config',
+    })
+  })
+
+  /** An installed owner can be counted on, so the defaults are never planned. */
+  it('plans no default type checker at all when the owner is installed', () => {
+    const tools = parse(scan2.json).tools.map((tool) => tool.tool)
+    expect(tools).not.toContain('ty')
+    expect(tools).not.toContain('pyright')
+  })
+
+  it('reports the same single finding in either execution mode', () => {
+    expect(scan2.report.findings.map(shape)).toEqual([
+      {
+        category: 'types',
+        tool: 'mypy',
+        rule: 'return-value',
+        file: 'app.py',
+        startLine: 6,
+        severity: 'error',
+        gradeScope: true,
+      },
+    ])
+    expect(scan2.report.findings.every((finding) => finding.provenance === 'repo-config')).toBe(
+      true,
+    )
+  })
+
+  it('leaves the target repo clean, mypy’s cache included', async () => {
+    expect(await fixture.status()).toBe('')
+    expect(await readdir(fixture.root)).not.toContain('.mypy_cache')
+  })
+
+  it('produces byte-identical output when run twice on the same commit', () => {
+    expect(normalizeReport(scan3.json)).toBe(normalizeReport(scan2.json))
+    expect(scan3.report.findings.map((finding) => finding.id)).toEqual(
+      scan2.report.findings.map((finding) => finding.id),
+    )
+  })
+})
+
 describe('quick scan of a mixed JS + Python repo', () => {
   let fixture: FixtureRepo
   let result: HealthScanResult
