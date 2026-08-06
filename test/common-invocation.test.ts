@@ -23,7 +23,13 @@ import {
   osvScannerRunner,
 } from '../src/adapters/common/osv-scanner.ts'
 import { zizmorRunner } from '../src/adapters/common/zizmor.ts'
+import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
+import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
+import { csharpAdapter } from '../src/adapters/csharp/index.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
+import type { RunContext } from '../src/core/types.ts'
+import { categoryRank } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 import type { ReportTool } from '../src/render/json.ts'
 import { runHealthScan } from '../src/run.ts'
 
@@ -135,6 +141,58 @@ describe('zero footprint, in the arguments', () => {
     expect(args[args.indexOf('--exit-code') + 1]).toBe('0')
   })
 
+  /**
+   * `--verify-no-changes` is the flag dotnet format cannot be correct without:
+   * without it the run rewrites the target's files in place. `--folder` is what
+   * keeps the run source-text only (no project load, no restore — SDK 10
+   * rejects an explicit `--no-restore` beside it as redundant), and the report
+   * goes to scratch. Excludes: MSBuild output, and each nested project — whose
+   * whitespace is its own run's to measure.
+   */
+  it('builds a read-only, folder-mode dotnet format command reporting into scratch', () => {
+    const args = formatInvocationArgs(
+      join(REPO, 'src'),
+      ['bin', 'obj', 'src/nested'],
+      join(SCRATCH, 'dotnet-format'),
+    )
+
+    expect(args).toEqual([
+      'format',
+      'whitespace',
+      '/repo/src',
+      '--folder',
+      '--verify-no-changes',
+      '--exclude',
+      'bin',
+      'obj',
+      'src/nested',
+      '--report',
+      '/scratch/dotnet-format',
+    ])
+  })
+
+  /**
+   * The one builder every C# runner passes to `execTool`: `cwd`, `timeoutMs`
+   * and `env` are decided once here, not in five runner bodies.
+   */
+  it('builds every dotnet spawn’s options from the context, with the pinned env', () => {
+    const ctx: RunContext = {
+      repoRoot: REPO,
+      project: makeProject(['src/A.cs']),
+      files: ['src/A.cs'],
+      scratch: SCRATCH,
+      detection: null,
+      timeoutMs: 12_345,
+      deep: false,
+    }
+
+    expect(dotnetExecOptions(ctx, '/repo/src')).toEqual({
+      cwd: '/repo/src',
+      timeoutMs: 12_345,
+      env: dotnetEnv(),
+    })
+  })
+
   /** Spec §7's block-list names `osv-scanner fix` explicitly. */
   it('never builds a mutating osv-scanner subcommand', () => {
     const args = osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'))
@@ -220,8 +278,32 @@ describe('osv-scanner degradation', () => {
   })
 })
 
+describe('the C# adapter', () => {
+  /** `LANGUAGES` pins "canonical language order, matching the adapter order". */
+  it('joins the adapter order after python, before common', () => {
+    expect(ADAPTERS.map((adapter) => adapter.language)).toEqual([
+      'js-ts',
+      'python',
+      'csharp',
+      'common',
+    ])
+    expect(csharpAdapter.language).toBe('csharp')
+  })
+
+  /**
+   * A standing check that survives every later insertion: runners are listed in
+   * category order (spec §10's remediation priority), so a later task inserts
+   * by `CATEGORIES` index rather than appending.
+   */
+  it('lists its runners in category order', () => {
+    const categories = csharpAdapter.runners.map((runner) => runner.category)
+    expect(categories).toEqual(categories.toSorted((a, b) => categoryRank(a) - categoryRank(b)))
+    expect(categories).toContain('format')
+  })
+})
+
 describe('the common adapter', () => {
-  it('is registered, after the two language adapters', () => {
+  it('is registered, after the three language adapters', () => {
     expect(ADAPTERS.at(-1)).toBe(commonAdapter)
     expect(commonAdapter.language).toBe('common')
   })
