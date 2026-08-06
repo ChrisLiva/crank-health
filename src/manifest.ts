@@ -34,6 +34,7 @@ export const PYTHON_TOOL_MANIFEST = {
   ruff: '0.16.1',
   ty: '0.0.66',
   pyright: '1.1.411',
+  mypy: '2.3.0',
   vulture: '2.16',
   complexipy: '6.2.0',
   bandit: '1.9.4',
