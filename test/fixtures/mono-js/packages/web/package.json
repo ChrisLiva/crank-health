@@ -1,0 +1,10 @@
+{
+  "name": "@mono-js/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "devDependencies": {
+    "eslint": "10.8.0"
+  }
+}

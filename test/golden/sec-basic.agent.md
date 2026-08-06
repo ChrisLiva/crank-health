@@ -20,7 +20,7 @@ Grade impact: security · D → A
 
 - `src/config.py:13` `B602` — subprocess call with shell=True identified, security issue. (high severity, high confidence)
 
-Evidence: [raw/bandit.json](raw/bandit.json)
+Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 
 Verify: `npx crank-health --only security --fail-under A`
 
@@ -30,7 +30,7 @@ Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:2` `dangerous-triggers` — Use of fundamentally insecure workflow trigger — pull_request_target is almost always used insecurely (high severity, medium confidence)
 
-Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
+Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
 Verify: `npx crank-health --only security --fail-under A`
 
@@ -40,7 +40,7 @@ Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:8` `artipacked` — Credential persistence through GitHub Actions artifacts — does not set persist-credentials: false (medium severity, low confidence)
 
-Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
+Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
 Verify: `npx crank-health --only security --fail-under A`
 
@@ -50,7 +50,7 @@ Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:5` `excessive-permissions` — Overly broad permissions — default permissions used due to no permissions: block (medium severity, medium confidence)
 
-Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
+Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
 Verify: `npx crank-health --only security --fail-under A`
 
@@ -60,7 +60,7 @@ Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:8` `unpinned-uses` — Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence)
 
-Evidence: [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
+Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
 Verify: `npx crank-health --only security --fail-under A`
 
@@ -70,7 +70,7 @@ Grade impact: security · D → A
 
 - `src/config.py:3` `B404` — Consider possible security implications associated with the subprocess module. (low severity, high confidence) [advisory]
 
-Evidence: [raw/bandit.json](raw/bandit.json)
+Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 
 Verify: `npx crank-health --only security --fail-under A`
 
@@ -81,7 +81,7 @@ Grade impact: duplication · F → A
 - `src/handler.js:5` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/report.js:1-11 [advisory]
 - `src/report.js:1` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/handler.js:5-15 [advisory]
 
-Evidence: [raw/jscpd-report.json](raw/jscpd-report.json)
+Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 Verify: `npx crank-health --only duplication --fail-under A`
 
@@ -91,7 +91,7 @@ Grade impact: lint · F → A
 
 - `src/handler.js:2` `eslint(no-eval)` — eval can be harmful.
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
@@ -9,7 +9,7 @@ import { runPrScan } from '../src/run-pr.ts'
 import type { HistoryRepo } from './support/history.ts'
 import { createHistoryRepo, paddedFile } from './support/history.ts'
 import { CLEAN, CONST_ASSIGN, GOLDEN_HISTORY } from './support/pr-fixture.ts'
-import { normalizePrMarkdown, normalizePrReport } from './support/report.ts'
+import { expectGolden, normalizePrMarkdown, normalizePrReport } from './support/report.ts'
 
 /**
  * `--pr` end to end, on scripted histories (spec acceptance criterion 3).
@@ -369,25 +369,23 @@ describe('the PR goldens', () => {
   })
 
   it('matches the golden normalized report.json', async () => {
-    expect(normalizePrReport(result.json)).toBe(await golden('pr-lint.report.json'))
+    await expectGolden('pr-lint.report.json', normalizePrReport(result.json))
   })
 
   it('matches the golden report.md', async () => {
-    expect(normalizePrMarkdown(result.markdown, result.report.repo.path)).toBe(
-      await golden('pr-lint.report.md'),
+    await expectGolden(
+      'pr-lint.report.md',
+      normalizePrMarkdown(result.markdown, result.report.repo.path),
     )
   })
 
   it('matches the golden agent.md', async () => {
-    expect(normalizePrMarkdown(result.agentMarkdown, result.report.repo.path)).toBe(
-      await golden('pr-lint.agent.md'),
+    await expectGolden(
+      'pr-lint.agent.md',
+      normalizePrMarkdown(result.agentMarkdown, result.report.repo.path),
     )
   })
 })
-
-async function golden(name: string): Promise<string> {
-  return readFile(new URL(`./golden/${name}`, import.meta.url), 'utf8')
-}
 
 /**
  * The repo root as git reports it. `git worktree list` prints resolved paths,

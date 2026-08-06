@@ -71,11 +71,70 @@
       "format": 1
     }
   },
+  "projects": [
+    {
+      "path": ".",
+      "manifests": [
+        "package.json"
+      ],
+      "languages": [
+        "js-ts"
+      ],
+      "categories": {
+        "security": {
+          "status": "not-assessed",
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+        },
+        "types": {
+          "status": "not-assessed",
+          "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
+        },
+        "dead-code": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "complexity": {
+          "status": "graded",
+          "grade": "D"
+        },
+        "duplication": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "lint": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "format": {
+          "status": "graded",
+          "grade": "C"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        }
+      },
+      "metrics": {
+        "complexity": {
+          "functionsTotal": 9,
+          "functionsOverCeiling": 1
+        },
+        "duplication": {
+          "duplicationPercent": 0
+        },
+        "format": {
+          "formattableFiles": 9
+        }
+      },
+      "toolchain": []
+    }
+  ],
   "tools": [
     {
       "tool": "bandit",
       "category": "security",
       "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -89,6 +148,8 @@
       "tool": "gitleaks",
       "category": "security",
       "scope": "common",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -102,6 +163,7 @@
       "tool": "opengrep",
       "category": "security",
       "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -115,6 +177,8 @@
       "tool": "osv-scanner",
       "category": "security",
       "scope": "common",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -128,6 +192,8 @@
       "tool": "zizmor",
       "category": "security",
       "scope": "common",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -141,6 +207,7 @@
       "tool": "tsc",
       "category": "types",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -154,6 +221,7 @@
       "tool": "fallow-dead-code",
       "category": "dead-code",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.14.0",
@@ -162,14 +230,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/fallow-dead-code.json",
-        "raw/fallow-dead-code.stderr.txt"
+        "raw/root/fallow-dead-code.json",
+        "raw/root/fallow-dead-code.stderr.txt"
       ]
     },
     {
       "tool": "knip",
       "category": "dead-code",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "6.31.0",
@@ -178,13 +247,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/knip.json"
+        "raw/root/knip.json"
       ]
     },
     {
       "tool": "fallow-health",
       "category": "complexity",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.14.0",
@@ -193,14 +263,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/fallow-health.json",
-        "raw/fallow-health.stderr.txt"
+        "raw/root/fallow-health.json",
+        "raw/root/fallow-health.stderr.txt"
       ]
     },
     {
       "tool": "fta",
       "category": "complexity",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.0.0",
@@ -209,13 +280,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/fta.json"
+        "raw/root/fta.json"
       ]
     },
     {
       "tool": "jscpd",
       "category": "duplication",
       "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "5.0.14",
@@ -224,13 +296,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/jscpd-report.json"
+        "raw/root/jscpd-report.json"
       ]
     },
     {
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "1.77.0",
@@ -239,13 +312,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/oxlint.sarif.json"
+        "raw/root/oxlint.sarif.json"
       ]
     },
     {
       "tool": "prettier",
       "category": "format",
       "scope": "js-ts",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.9.6",
@@ -254,7 +328,7 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/prettier.txt"
+        "raw/root/prettier.txt"
       ]
     }
   ],
@@ -266,6 +340,7 @@
       "rule": "fallow/unused-export",
       "severity": "warning",
       "file": "src/clean.js",
+      "project": ".",
       "range": {
         "startLine": 5,
         "startCol": 16,
@@ -283,6 +358,7 @@
       "rule": "knip/unused-exports",
       "severity": "warning",
       "file": "src/clean.js",
+      "project": ".",
       "range": {
         "startLine": 5,
         "startCol": 17,
@@ -300,6 +376,7 @@
       "rule": "fallow/complexity",
       "severity": "error",
       "file": "src/complex.js",
+      "project": ".",
       "range": {
         "startLine": 1,
         "startCol": 7,
@@ -317,6 +394,7 @@
       "rule": "oxc(no-accumulating-spread)",
       "severity": "warning",
       "file": "src/accumulate.js",
+      "project": ".",
       "range": {
         "startLine": 2,
         "startCol": 7,
@@ -334,6 +412,7 @@
       "rule": "eslint(no-const-assign)",
       "severity": "error",
       "file": "src/const-assign.js",
+      "project": ".",
       "range": {
         "startLine": 2,
         "startCol": 9,
@@ -351,6 +430,7 @@
       "rule": "eslint(no-dupe-keys)",
       "severity": "error",
       "file": "src/dupe-keys.js",
+      "project": ".",
       "range": {
         "startLine": 2,
         "startCol": 3,
@@ -368,6 +448,7 @@
       "rule": "eslint(no-unreachable)",
       "severity": "error",
       "file": "src/unreachable.js",
+      "project": ".",
       "range": {
         "startLine": 6,
         "startCol": 3,
@@ -385,6 +466,7 @@
       "rule": "prettier/format",
       "severity": "warning",
       "file": "src/unformatted.js",
+      "project": ".",
       "range": {
         "startLine": 1,
         "startCol": 1,

@@ -11,7 +11,7 @@ import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import type { HistoryRepo } from './support/history.ts'
 import { createHistoryRepo } from './support/history.ts'
-import { normalizeMarkdown, normalizeReport } from './support/report.ts'
+import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
 /**
@@ -23,10 +23,6 @@ import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
  * proven here is what the binary does. Each fixture is scanned once and the
  * assertions share the result; these runs fetch real pinned tools.
  */
-
-const GOLDEN = fileURLToPath(new URL('./golden/js-basic.report.json', import.meta.url))
-const GOLDEN_MD = fileURLToPath(new URL('./golden/js-basic.report.md', import.meta.url))
-const GOLDEN_AGENT = fileURLToPath(new URL('./golden/js-basic.agent.md', import.meta.url))
 
 /** Roomy: the first run of a suite may be fetching tools from the npm cache. */
 const SCAN_TIMEOUT_MS = 180_000
@@ -216,7 +212,7 @@ describe('quick scan of the js-basic fixture', () => {
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
-    expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
+    await expectGolden('js-basic.report.json', normalizeReport(json))
   })
 
   /** Spec §9: one run, four artifacts — and the bytes on disk are the bytes it returned. */
@@ -229,11 +225,13 @@ describe('quick scan of the js-basic fixture', () => {
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden report.md and agent.md', async () => {
-    expect(normalizeMarkdown(scan.markdown, scan.report.repo.path)).toBe(
-      await readFile(GOLDEN_MD, 'utf8'),
+    await expectGolden(
+      'js-basic.report.md',
+      normalizeMarkdown(scan.markdown, scan.report.repo.path),
     )
-    expect(normalizeMarkdown(scan.agentMarkdown, scan.report.repo.path)).toBe(
-      await readFile(GOLDEN_AGENT, 'utf8'),
+    await expectGolden(
+      'js-basic.agent.md',
+      normalizeMarkdown(scan.agentMarkdown, scan.report.repo.path),
     )
   })
 
@@ -925,9 +923,14 @@ describe('--project scoping and what a project is measured over', () => {
 
   it('tells the root project the same nested projects, scoped or not', async () => {
     expect(await nestedFor(['.'])).toEqual([['packages/web']])
-    // The unscoped run adds the package's own pass and the repo-wide one; the
-    // root's own list is the same list.
-    expect(await nestedFor()).toEqual([['packages/web'], [], []])
+
+    // The unscoped run adds the package's own pass and the repo-wide one, which
+    // the pool may finish in any order — so this is about which lists were
+    // handed out, not about when. The root's own list is the same list.
+    const unscoped = await nestedFor()
+    expect(unscoped).toHaveLength(3)
+    expect(unscoped).toContainEqual(['packages/web'])
+    expect(unscoped.filter((nested) => nested.length === 0)).toHaveLength(2)
   })
 })
 

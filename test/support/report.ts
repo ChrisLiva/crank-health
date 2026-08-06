@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import { expect } from 'vitest'
 import type { Report } from '../../src/render/json.ts'
 import { TIMINGS_MARKER } from '../../src/render/report-md.ts'
 
@@ -51,6 +53,33 @@ export function normalizeMarkdown(markdown: string, repoPath: string): string {
   return `${body.replaceAll(repoPath, '<repo>').trimEnd()}\n`
 }
 
+/**
+ * Re-capture mode: `scripts/capture-goldens.sh` sets this, and only that script
+ * should — it is the one place that guarantees the sanitized `PATH` the goldens
+ * are recorded against, and a golden captured on a machine with a release-binary
+ * scanner installed would record a toolchain no other machine has.
+ */
+const CAPTURING = process.env['CRANK_CAPTURE_GOLDENS'] === '1'
+
+/**
+ * One golden artifact: the checked-in bytes are the assertion, except under
+ * {@link CAPTURING}, where this run's bytes become the new golden.
+ *
+ * Every golden comparison goes through here so that re-capturing is exactly the
+ * suite that checks them, run with one variable set — a separate capture path
+ * could record something the tests never assert.
+ *
+ * @param name file name under `test/golden/`, e.g. `js-basic.report.json`
+ */
+export async function expectGolden(name: string, actual: string): Promise<void> {
+  const path = fileURLToPath(new URL(`../golden/${name}`, import.meta.url))
+  if (CAPTURING) {
+    await writeFile(path, actual, 'utf8')
+    return
+  }
+  expect(actual).toBe(await readFile(path, 'utf8'))
+}
+
 /** Timings a real run would vary; see {@link normalizeReport}. */
 const FIXED_TIMINGS = {
   generatedAt: '2024-01-01T00:00:00.000Z',
@@ -69,7 +98,5 @@ const FIXED_TIMINGS = {
 export async function readGoldenReport(name: string): Promise<Report> {
   const url = new URL(`../golden/${name}.report.json`, import.meta.url)
   const golden = JSON.parse(await readFile(url, 'utf8')) as Report
-  // Goldens captured before `projects` existed describe one project — the whole
-  // repo — which is what the renderers make of a list this short either way.
-  return { ...golden, projects: golden.projects ?? [], timings: FIXED_TIMINGS }
+  return { ...golden, timings: FIXED_TIMINGS }
 }

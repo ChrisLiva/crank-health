@@ -1,14 +1,13 @@
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join, relative } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Category, Finding, LanguageAdapter } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
-import { normalizeMarkdown, normalizeReport } from './support/report.ts'
+import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS, installedSystemTools } from './support/system-tools.ts'
 
 /**
@@ -21,10 +20,6 @@ import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS, installedSystemTools } from './support/
  * findings those tools would produce are covered from captured bytes in
  * `common-parse.test.ts`, which runs everywhere.
  */
-
-const GOLDEN = fileURLToPath(new URL('./golden/sec-basic.report.json', import.meta.url))
-const GOLDEN_MD = fileURLToPath(new URL('./golden/sec-basic.report.md', import.meta.url))
-const GOLDEN_AGENT = fileURLToPath(new URL('./golden/sec-basic.agent.md', import.meta.url))
 
 /** The fake AWS key planted in `src/config.py`; see that fixture's README. */
 const PLANTED_SECRET = 'AKIAZ7QK4TGVN2XR6WPD'
@@ -294,15 +289,17 @@ describe('quick scan of the sec-basic fixture', () => {
    * actual promise (§6).
    */
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
-    expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
+    await expectGolden('sec-basic.report.json', normalizeReport(json))
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden report.md and agent.md', async () => {
-    expect(normalizeMarkdown(scan.markdown, scan.report.repo.path)).toBe(
-      await readFile(GOLDEN_MD, 'utf8'),
+    await expectGolden(
+      'sec-basic.report.md',
+      normalizeMarkdown(scan.markdown, scan.report.repo.path),
     )
-    expect(normalizeMarkdown(scan.agentMarkdown, scan.report.repo.path)).toBe(
-      await readFile(GOLDEN_AGENT, 'utf8'),
+    await expectGolden(
+      'sec-basic.agent.md',
+      normalizeMarkdown(scan.agentMarkdown, scan.report.repo.path),
     )
   })
 

@@ -1,0 +1,731 @@
+{
+  "schemaVersion": 1,
+  "crankHealth": "0.2.1",
+  "repo": {
+    "path": "<repo>",
+    "commit": "7efc798a8272cfcfaa35d9bb77747075e07febd6"
+  },
+  "profile": "quick",
+  "mode": "whole-repo",
+  "selected": [
+    "security",
+    "types",
+    "dead-code",
+    "complexity",
+    "duplication",
+    "lint",
+    "format",
+    "test-quality"
+  ],
+  "categories": {
+    "security": {
+      "status": "not-assessed",
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
+    },
+    "types": {
+      "status": "not-assessed",
+      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category; no tsconfig.json and no TypeScript sources — nothing owns the types category"
+    },
+    "dead-code": {
+      "status": "graded",
+      "grade": "A"
+    },
+    "complexity": {
+      "status": "graded",
+      "grade": "A"
+    },
+    "duplication": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "lint": {
+      "status": "graded",
+      "grade": "F"
+    },
+    "format": {
+      "status": "graded",
+      "grade": "C"
+    },
+    "test-quality": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    }
+  },
+  "metrics": {
+    "complexity": {
+      "functionsTotal": 22,
+      "functionsOverCeiling": 0
+    },
+    "duplication": {
+      "duplicationPercent": 41.19601328903654
+    },
+    "format": {
+      "formattableFiles": 8
+    }
+  },
+  "languages": {
+    "js-ts": {
+      "duplication": 2,
+      "lint": 2,
+      "format": 1
+    }
+  },
+  "projects": [
+    {
+      "path": "packages/api",
+      "manifests": [
+        "packages/api/package.json"
+      ],
+      "languages": [
+        "js-ts"
+      ],
+      "categories": {
+        "security": {
+          "status": "not-assessed",
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+        },
+        "types": {
+          "status": "not-assessed",
+          "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
+        },
+        "dead-code": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "complexity": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "duplication": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "lint": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "format": {
+          "status": "graded",
+          "grade": "C"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        }
+      },
+      "metrics": {
+        "complexity": {
+          "functionsTotal": 11,
+          "functionsOverCeiling": 0
+        },
+        "duplication": {
+          "duplicationPercent": 0
+        },
+        "format": {
+          "formattableFiles": 4
+        }
+      },
+      "toolchain": [
+        {
+          "tool": "prettier",
+          "category": "format",
+          "reason": "dependency",
+          "ownedVia": "package.json",
+          "configFiles": [],
+          "installed": false,
+          "version": "3.9.6"
+        }
+      ]
+    },
+    {
+      "path": "packages/web",
+      "manifests": [
+        "packages/web/package.json"
+      ],
+      "languages": [
+        "js-ts"
+      ],
+      "categories": {
+        "security": {
+          "status": "not-assessed",
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+        },
+        "types": {
+          "status": "not-assessed",
+          "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
+        },
+        "dead-code": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "complexity": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "duplication": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "lint": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "format": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        }
+      },
+      "metrics": {
+        "complexity": {
+          "functionsTotal": 11,
+          "functionsOverCeiling": 0
+        },
+        "duplication": {
+          "duplicationPercent": 0
+        },
+        "format": {
+          "formattableFiles": 4
+        }
+      },
+      "toolchain": [
+        {
+          "tool": "eslint",
+          "category": "lint",
+          "reason": "config+dependency",
+          "ownedVia": "packages/web/eslint.config.js",
+          "configFiles": [
+            "packages/web/eslint.config.js"
+          ],
+          "installed": false,
+          "version": "10.8.0"
+        },
+        {
+          "tool": "prettier",
+          "category": "format",
+          "reason": "dependency",
+          "ownedVia": "package.json",
+          "configFiles": [],
+          "installed": false,
+          "version": "3.9.6"
+        }
+      ]
+    }
+  ],
+  "rootShell": {
+    "declaredBy": [
+      "package.json"
+    ]
+  },
+  "tools": [
+    {
+      "tool": "bandit",
+      "category": "security",
+      "scope": "common",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.9.4",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no Python files in this repo, so bandit assessed nothing",
+      "raw": []
+    },
+    {
+      "tool": "bandit",
+      "category": "security",
+      "scope": "common",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.9.4",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no Python files in this repo, so bandit assessed nothing",
+      "raw": []
+    },
+    {
+      "tool": "gitleaks",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "8.30.1",
+      "detection": null,
+      "state": "not-available",
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "opengrep",
+      "category": "security",
+      "scope": "common",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.26.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "opengrep",
+      "category": "security",
+      "scope": "common",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.26.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "osv-scanner",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "2.4.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "zizmor",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.29.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no GitHub Actions workflows or composite actions, so zizmor assessed nothing",
+      "raw": []
+    },
+    {
+      "tool": "tsc",
+      "category": "types",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "7.0.2",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category",
+      "raw": []
+    },
+    {
+      "tool": "tsc",
+      "category": "types",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "7.0.2",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category",
+      "raw": []
+    },
+    {
+      "tool": "fallow-dead-code",
+      "category": "dead-code",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.14.0",
+      "pinned": "3.14.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/fallow-dead-code.json",
+        "raw/packages/api/fallow-dead-code.stderr.txt"
+      ]
+    },
+    {
+      "tool": "fallow-dead-code",
+      "category": "dead-code",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.14.0",
+      "pinned": "3.14.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/fallow-dead-code.json",
+        "raw/packages/web/fallow-dead-code.stderr.txt"
+      ]
+    },
+    {
+      "tool": "knip",
+      "category": "dead-code",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "6.31.0",
+      "pinned": "6.31.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/knip.json"
+      ]
+    },
+    {
+      "tool": "knip",
+      "category": "dead-code",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "6.31.0",
+      "pinned": "6.31.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/knip.json"
+      ]
+    },
+    {
+      "tool": "fallow-health",
+      "category": "complexity",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.14.0",
+      "pinned": "3.14.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/fallow-health.json",
+        "raw/packages/api/fallow-health.stderr.txt"
+      ]
+    },
+    {
+      "tool": "fallow-health",
+      "category": "complexity",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.14.0",
+      "pinned": "3.14.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/fallow-health.json",
+        "raw/packages/web/fallow-health.stderr.txt"
+      ]
+    },
+    {
+      "tool": "fta",
+      "category": "complexity",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.0.0",
+      "pinned": "3.0.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/fta.json"
+      ]
+    },
+    {
+      "tool": "fta",
+      "category": "complexity",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "3.0.0",
+      "pinned": "3.0.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/fta.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/repo/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "eslint",
+      "category": "lint",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "repo-config",
+      "version": "10.8.0",
+      "pinned": "10.8.0",
+      "detection": {
+        "reason": "config+dependency",
+        "configFiles": [
+          "packages/web/eslint.config.js"
+        ],
+        "ownedVia": "packages/web/eslint.config.js",
+        "installed": false,
+        "version": null
+      },
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/eslint.json"
+      ]
+    },
+    {
+      "tool": "oxlint",
+      "category": "lint",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "1.77.0",
+      "pinned": "1.77.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/oxlint.sarif.json"
+      ]
+    },
+    {
+      "tool": "oxlint",
+      "category": "lint",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "1.77.0",
+      "pinned": "1.77.0",
+      "detection": null,
+      "state": "ok",
+      "reason": "stood down: lint graded by eslint",
+      "raw": [
+        "raw/packages/web/oxlint.sarif.json"
+      ]
+    },
+    {
+      "tool": "prettier",
+      "category": "format",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "repo-config",
+      "version": "3.9.6",
+      "pinned": "3.9.6",
+      "detection": {
+        "reason": "dependency",
+        "configFiles": [],
+        "ownedVia": "package.json",
+        "installed": false,
+        "version": null
+      },
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/api/prettier.txt"
+      ]
+    },
+    {
+      "tool": "prettier",
+      "category": "format",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "repo-config",
+      "version": "3.9.6",
+      "pinned": "3.9.6",
+      "detection": {
+        "reason": "dependency",
+        "configFiles": [],
+        "ownedVia": "package.json",
+        "installed": false,
+        "version": null
+      },
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/packages/web/prettier.txt"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "d48862f2c5567099",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "packages/api/src/shared.js",
+      "project": "packages/api",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 11,
+        "endCol": 1
+      },
+      "message": "11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11",
+      "provenance": "default-config",
+      "gradeScope": false,
+      "fixHint": "Extract the duplicated block into a shared function or module"
+    },
+    {
+      "id": "593386efe99fac36",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "packages/web/src/shared.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 11,
+        "endCol": 1
+      },
+      "message": "11 lines (124 tokens) duplicated from packages/api/src/shared.js:1-11",
+      "provenance": "default-config",
+      "gradeScope": false,
+      "fixHint": "Extract the duplicated block into a shared function or module"
+    },
+    {
+      "id": "48f54624182f5988",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-const-assign)",
+      "severity": "error",
+      "file": "packages/api/src/const-assign.js",
+      "project": "packages/api",
+      "range": {
+        "startLine": 2,
+        "startCol": 9,
+        "endLine": 2,
+        "endCol": 14
+      },
+      "message": "Unexpected re-assignment of `const` variable limit.",
+      "provenance": "default-config",
+      "gradeScope": true
+    },
+    {
+      "id": "a79f08a03a6a226f",
+      "category": "lint",
+      "tool": "eslint",
+      "rule": "no-unused-vars",
+      "severity": "error",
+      "file": "packages/web/src/lint.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 2,
+        "startCol": 9,
+        "endLine": 2,
+        "endCol": 15
+      },
+      "message": "'unused' is assigned a value but never used.",
+      "provenance": "repo-config",
+      "gradeScope": true
+    },
+    {
+      "id": "3cc8658704f67b30",
+      "category": "format",
+      "tool": "prettier",
+      "rule": "prettier/format",
+      "severity": "warning",
+      "file": "packages/api/src/unformatted.js",
+      "project": "packages/api",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File does not match the repo’s prettier configuration",
+      "provenance": "repo-config",
+      "gradeScope": true,
+      "fixHint": "npx prettier --write <file>"
+    }
+  ],
+  "warnings": []
+}

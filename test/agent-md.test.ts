@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../src/args.ts'
 import type { Category, CategoryState, Finding } from '../src/core/types.ts'
@@ -6,7 +5,7 @@ import { CATEGORIES, categoryRank } from '../src/core/types.ts'
 import type { RunRecord } from '../src/core/orchestrator.ts'
 import type { AgentTask } from '../src/render/agent-md.ts'
 import { MAX_TASKS, buildAgentTasks, renderAgentMarkdown } from '../src/render/agent-md.ts'
-import type { Report, ReportInput } from '../src/render/json.ts'
+import type { Report, ReportInput, ResolvedRun } from '../src/render/json.ts'
 import {
   allGraded,
   makeFinding,
@@ -15,7 +14,7 @@ import {
   makeReport,
   projectAt,
 } from './factories.ts'
-import { normalizeMarkdown, readGoldenReport } from './support/report.ts'
+import { expectGolden, normalizeMarkdown, readGoldenReport } from './support/report.ts'
 
 /**
  * `agent.md` is a contract (spec §10), not a document: an agent reads the task
@@ -24,14 +23,12 @@ import { normalizeMarkdown, readGoldenReport } from './support/report.ts'
  * renderer spells out — and the goldens cover the spelling.
  */
 
-const FIXTURES = ['js-basic', 'py-basic', 'sec-basic'] as const
+const FIXTURES = ['js-basic', 'mono-js', 'mono-mixed', 'py-basic', 'sec-basic'] as const
 
 describe('agent.md goldens', () => {
   it.each(FIXTURES)('matches the golden agent.md for %s', async (name) => {
     const markdown = normalizeMarkdown(renderAgentMarkdown(await readGoldenReport(name)), '<repo>')
-    expect(markdown).toBe(
-      await readFile(new URL(`./golden/${name}.agent.md`, import.meta.url), 'utf8'),
-    )
+    await expectGolden(`${name}.agent.md`, markdown)
   })
 
   it('renders byte-identical output from the same report', async () => {
@@ -292,30 +289,66 @@ describe('each task', () => {
   it('links the raw evidence of the tools that reported its findings', () => {
     const report = makeReport({
       categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
-      findings: [makeFinding({ id: 'a' })],
+      findings: [makeFinding({ id: 'a', project: '.' })],
+      runs: [lintRun('.', ['raw/root/oxlint.sarif.json'])],
+    })
+    expect(buildAgentTasks(report)[0]?.evidence).toEqual(['raw/root/oxlint.sarif.json'])
+    expect(renderAgentMarkdown(report)).toContain(
+      'Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)',
+    )
+  })
+
+  /**
+   * The same tool ran in both packages, so its name does not identify a run. An
+   * agent sent to `packages/web`'s raw output to explain a finding in
+   * `packages/api` would be reading a different config's verdict on different
+   * files — and the two runs' raw files are nested apart precisely so that
+   * cannot happen.
+   */
+  it('links each project’s own raw output, not a sibling’s', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+      projects: [
+        makeProjectScan({ project: projectAt('packages/api'), categories: allGraded('F') }),
+        makeProjectScan({ project: projectAt('packages/web'), categories: allGraded('F') }),
+      ],
+      findings: [
+        makeFinding({ id: 'a', file: 'packages/api/api/main.py', project: 'packages/api' }),
+        makeFinding({ id: 'w', file: 'packages/web/src/a.ts', project: 'packages/web' }),
+      ],
       runs: [
-        {
-          record: {
-            tool: 'oxlint',
-            category: 'lint',
-            scope: 'js-ts',
-            project: '.',
-            repoWide: false,
-            rollupOnly: false,
-            pinnedVersion: '1.77.0',
-            detection: null,
-            result: { state: 'ok', findings: [], rawFiles: [] },
-            durationMs: 1,
-            standby: false,
-          },
-          raw: ['raw/oxlint.sarif.json'],
-        },
+        lintRun('packages/api', ['raw/packages_api/oxlint.sarif.json']),
+        lintRun('packages/web', ['raw/packages_web/oxlint.sarif.json']),
       ],
     })
-    expect(buildAgentTasks(report)[0]?.evidence).toEqual(['raw/oxlint.sarif.json'])
-    expect(renderAgentMarkdown(report)).toContain(
-      'Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)',
-    )
+    expect(buildAgentTasks(report).map((task) => [task.project, task.evidence])).toEqual([
+      ['packages/api', ['raw/packages_api/oxlint.sarif.json']],
+      ['packages/web', ['raw/packages_web/oxlint.sarif.json']],
+    ])
+  })
+
+  /**
+   * A repo-spanning run has no project to match, and its findings are attributed
+   * to whichever package they landed in — so the repo-wide record is the
+   * fallback, or a secret would be reported with no evidence behind it.
+   */
+  it('falls back to a repo-spanning run’s evidence', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), security: { status: 'graded', grade: 'F' } },
+      findings: [
+        makeFinding({
+          id: 's',
+          category: 'security',
+          tool: 'gitleaks',
+          rule: 'generic-api-key',
+          severity: 'critical',
+          file: 'packages/web/.env',
+          project: 'packages/web',
+        }),
+      ],
+      runs: [{ record: spanningRecord('gitleaks', 'security'), raw: ['raw/repo/gitleaks.json'] }],
+    })
+    expect(buildAgentTasks(report)[0]?.evidence).toEqual(['raw/repo/gitleaks.json'])
   })
 
   it('lists small tasks finding by finding, and labels the advisory ones', () => {
@@ -660,6 +693,20 @@ describe('tasks against per-project grades', () => {
     ])
   })
 })
+
+/** One project's own lint run, with the raw output it left behind. */
+function lintRun(project: string, raw: readonly string[]): ResolvedRun {
+  return {
+    record: {
+      ...spanningRecord('oxlint', 'lint'),
+      scope: 'js-ts',
+      project,
+      repoWide: false,
+      pinnedVersion: '1.77.0',
+    },
+    raw,
+  }
+}
 
 /** A run that spanned the repo, as `report.tools` records one. */
 function spanningRecord(tool: string, category: Category): RunRecord {

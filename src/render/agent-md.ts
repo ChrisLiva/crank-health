@@ -146,7 +146,7 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
  */
 export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined): AgentTask[] {
   const source = delta ?? report.delta
-  const rawByTool = new Map(report.tools.map((tool) => [tool.tool, tool.raw]))
+  const evidenceOf = rawEvidence(report)
   const findings: readonly Finding[] = source === undefined ? report.findings : source.newFindings
   const touched = new Set(
     source === undefined
@@ -171,7 +171,37 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
         compare(a.key, b.key) ||
         compare(a.project ?? '', b.project ?? ''),
     )
-    .map((theme, index) => toTask(theme, index + 1, report, rawByTool, touched))
+    .map((theme, index) => toTask(theme, index + 1, report, evidenceOf, touched))
+}
+
+/**
+ * Raw evidence for a finding: the output of the run that reported it.
+ *
+ * The tool name alone is not the key. The same tool runs once per project, so
+ * keyed by name a task in one package would link the raw file of whichever
+ * package happened to be recorded last — evidence for a different config over
+ * different sources. A repo-spanning run belongs to no project and is the
+ * fallback: it is where a secrets scan's output is, and where a finding no
+ * project claims came from.
+ *
+ * PR mode records both sides of the comparison under the same key, and head is
+ * the one that wins: the report's runs are already ordered with `head` last, and
+ * the tasks are made of head's findings.
+ */
+function rawEvidence(report: Report): (finding: Finding) => readonly string[] {
+  const byRun = new Map<string, readonly string[]>()
+  for (const tool of report.tools) {
+    byRun.set(evidenceKey(tool.tool, tool.repoWide === true ? undefined : tool.project), tool.raw)
+  }
+  return (finding) =>
+    byRun.get(evidenceKey(finding.tool, finding.project)) ??
+    byRun.get(evidenceKey(finding.tool, undefined)) ??
+    []
+}
+
+/** A run's identity for {@link rawEvidence}: repo-spanning runs have no project. */
+function evidenceKey(tool: string, project: string | undefined): string {
+  return JSON.stringify([project ?? null, tool])
 }
 
 /**
@@ -239,7 +269,7 @@ function toTask(
   theme: Theme,
   ordinal: number,
   report: Report,
-  rawByTool: ReadonlyMap<string, readonly string[]>,
+  evidenceOf: (finding: Finding) => readonly string[],
   touched: ReadonlySet<string>,
 ): AgentTask {
   // The grade a task is about is its project's, where the project has one of its
@@ -250,9 +280,9 @@ function toTask(
   const graded = gradedProject(report, theme)
   const state = (graded?.categories ?? report.categories)[theme.category]
   const current = state.status === 'graded' ? state.grade : stateLabel(state)
-  const evidence = [
-    ...new Set(theme.findings.flatMap((finding) => rawByTool.get(finding.tool) ?? [])),
-  ].toSorted(compare)
+  const evidence = [...new Set(theme.findings.flatMap((finding) => evidenceOf(finding)))].toSorted(
+    compare,
+  )
   return {
     id: `T${ordinal}`,
     category: theme.category,

@@ -72,11 +72,70 @@
       "format": 1
     }
   },
+  "projects": [
+    {
+      "path": ".",
+      "manifests": [
+        "pyproject.toml"
+      ],
+      "languages": [
+        "python"
+      ],
+      "categories": {
+        "security": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "types": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "dead-code": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "complexity": {
+          "status": "graded",
+          "grade": "D"
+        },
+        "duplication": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "lint": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "format": {
+          "status": "graded",
+          "grade": "C"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        }
+      },
+      "metrics": {
+        "complexity": {
+          "functionsTotal": 7,
+          "functionsOverCeiling": 1
+        },
+        "duplication": {
+          "duplicationPercent": 0
+        },
+        "format": {
+          "formattableFiles": 6
+        }
+      },
+      "toolchain": []
+    }
+  ],
   "tools": [
     {
       "tool": "bandit",
       "category": "security",
       "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "1.9.4",
@@ -85,13 +144,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/bandit.json"
+        "raw/root/bandit.json"
       ]
     },
     {
       "tool": "gitleaks",
       "category": "security",
       "scope": "common",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -105,6 +166,7 @@
       "tool": "opengrep",
       "category": "security",
       "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -118,6 +180,8 @@
       "tool": "osv-scanner",
       "category": "security",
       "scope": "common",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -131,6 +195,8 @@
       "tool": "zizmor",
       "category": "security",
       "scope": "common",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -144,6 +210,7 @@
       "tool": "pyright",
       "category": "types",
       "scope": "python",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -157,6 +224,7 @@
       "tool": "ty",
       "category": "types",
       "scope": "python",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "0.0.66",
@@ -165,13 +233,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/ty.gitlab.json"
+        "raw/root/ty.gitlab.json"
       ]
     },
     {
       "tool": "vulture",
       "category": "dead-code",
       "scope": "python",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "2.16",
@@ -180,13 +249,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/vulture.txt"
+        "raw/root/vulture.txt"
       ]
     },
     {
       "tool": "complexipy",
       "category": "complexity",
       "scope": "python",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "6.2.0",
@@ -195,14 +265,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/complexipy.json",
-        "raw/complexipy.sarif.json"
+        "raw/root/complexipy.json",
+        "raw/root/complexipy.sarif.json"
       ]
     },
     {
       "tool": "jscpd",
       "category": "duplication",
       "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "5.0.14",
@@ -211,13 +282,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/jscpd-report.json"
+        "raw/root/jscpd-report.json"
       ]
     },
     {
       "tool": "ruff-lint",
       "category": "lint",
       "scope": "python",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "0.16.1",
@@ -226,13 +298,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/ruff-lint.json"
+        "raw/root/ruff-lint.json"
       ]
     },
     {
       "tool": "ruff-format",
       "category": "format",
       "scope": "python",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "0.16.1",
@@ -241,7 +314,7 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/ruff-format.json"
+        "raw/root/ruff-format.json"
       ]
     }
   ],
@@ -253,6 +326,7 @@
       "rule": "unresolved-reference",
       "severity": "error",
       "file": "undefined_name.py",
+      "project": ".",
       "range": {
         "startLine": 2,
         "startCol": 23,
@@ -270,6 +344,7 @@
       "rule": "vulture/unused-import",
       "severity": "warning",
       "file": "dead.py",
+      "project": ".",
       "range": {
         "startLine": 1,
         "startCol": 1,
@@ -287,6 +362,7 @@
       "rule": "vulture/unused-function",
       "severity": "info",
       "file": "dead.py",
+      "project": ".",
       "range": {
         "startLine": 8,
         "startCol": 1,
@@ -304,6 +380,7 @@
       "rule": "complexipy/cognitive-complexity",
       "severity": "warning",
       "file": "complex.py",
+      "project": ".",
       "range": {
         "startLine": 1,
         "startCol": 1,
@@ -321,6 +398,7 @@
       "rule": "F401",
       "severity": "warning",
       "file": "dead.py",
+      "project": ".",
       "range": {
         "startLine": 1,
         "startCol": 8,
@@ -339,6 +417,7 @@
       "rule": "F821",
       "severity": "error",
       "file": "undefined_name.py",
+      "project": ".",
       "range": {
         "startLine": 2,
         "startCol": 23,
@@ -357,6 +436,7 @@
       "rule": "ruff/format",
       "severity": "warning",
       "file": "unformatted.py",
+      "project": ".",
       "range": {
         "startLine": 1,
         "startCol": 1,

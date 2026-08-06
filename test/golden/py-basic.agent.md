@@ -20,7 +20,7 @@ Grade impact: types · F → A
 
 - `undefined_name.py:2` `unresolved-reference` — Name `missing_name` used when not defined
 
-Evidence: [raw/ty.gitlab.json](raw/ty.gitlab.json)
+Evidence: [raw/root/ty.gitlab.json](raw/root/ty.gitlab.json)
 
 Verify: `npx crank-health --only types --fail-under A`
 
@@ -30,7 +30,7 @@ Grade impact: dead code · F → A
 
 - `dead.py` `vulture/unused-import` — Unused import `os` (90% confidence)
 
-Evidence: [raw/vulture.txt](raw/vulture.txt)
+Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
 
 Verify: `npx crank-health --only dead-code --fail-under A`
 
@@ -40,7 +40,7 @@ Grade impact: dead code · F → A
 
 - `dead.py:8` `vulture/unused-function` — Unused function `never_called` (60% confidence) [advisory]
 
-Evidence: [raw/vulture.txt](raw/vulture.txt)
+Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
 
 Verify: `npx crank-health --only dead-code --fail-under A`
 
@@ -50,7 +50,7 @@ Grade impact: complexity · D → A
 
 - `complex.py:1` `complexipy/cognitive-complexity` — Function 'classify' has a cognitive complexity of 38, which exceeds the maximum allowed complexity of 15.
 
-Evidence: [raw/complexipy.json](raw/complexipy.json) · [raw/complexipy.sarif.json](raw/complexipy.sarif.json)
+Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/complexipy.sarif.json](raw/root/complexipy.sarif.json)
 
 Verify: `npx crank-health --only complexity --fail-under A`
 
@@ -60,7 +60,7 @@ Grade impact: lint · F → A
 
 - `undefined_name.py:2` `F821` — Undefined name `missing_name`
 
-Evidence: [raw/ruff-lint.json](raw/ruff-lint.json)
+Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
@@ -70,7 +70,7 @@ Grade impact: lint · F → A
 
 - `dead.py:1` `F401` — `os` imported but unused
 
-Evidence: [raw/ruff-lint.json](raw/ruff-lint.json)
+Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
@@ -80,7 +80,7 @@ Grade impact: format · C → A
 
 - `unformatted.py` `ruff/format` — File does not match ruff’s default formatting
 
-Evidence: [raw/ruff-format.json](raw/ruff-format.json)
+Evidence: [raw/root/ruff-format.json](raw/root/ruff-format.json)
 
 Verify: `npx crank-health --only format --fail-under A`
 

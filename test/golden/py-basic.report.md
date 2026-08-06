@@ -35,7 +35,7 @@ Graded on absolute counts, never normalized: any critical → F, any error → D
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
-Evidence: [raw/bandit.json](raw/bandit.json)
+Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 
 ## types — F
 
@@ -54,7 +54,7 @@ Graded on weighted findings per KLOC: A ≤0, B ≤1, C ≤5, D ≤15, else F.
 
 - error `undefined_name.py:2` `unresolved-reference` — Name `missing_name` used when not defined (ty) [default-config]
 
-Evidence: [raw/ty.gitlab.json](raw/ty.gitlab.json)
+Evidence: [raw/root/ty.gitlab.json](raw/root/ty.gitlab.json)
 
 ## dead code — F
 
@@ -76,7 +76,7 @@ Graded on weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F.
 
 - info `dead.py:8` `vulture/unused-function` — Unused function `never_called` (60% confidence) (vulture) [default-config] [advisory]
 
-Evidence: [raw/vulture.txt](raw/vulture.txt)
+Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
 
 ## complexity — D
 
@@ -94,7 +94,7 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 
 - warning `complex.py:1` `complexipy/cognitive-complexity` — Function 'classify' has a cognitive complexity of 38, which exceeds the maximum allowed complexity of 15. (complexipy) [default-config]
 
-Evidence: [raw/complexipy.json](raw/complexipy.json) · [raw/complexipy.sarif.json](raw/complexipy.sarif.json)
+Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/complexipy.sarif.json](raw/root/complexipy.sarif.json)
 
 ## duplication — A
 
@@ -106,7 +106,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
-Evidence: [raw/jscpd-report.json](raw/jscpd-report.json)
+Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 ## lint — F
 
@@ -127,7 +127,7 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 - error `undefined_name.py:2` `F821` — Undefined name `missing_name` (ruff-lint) [default-config]
   - fix: see https://docs.astral.sh/ruff/rules/undefined-name
 
-Evidence: [raw/ruff-lint.json](raw/ruff-lint.json)
+Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 ## format — C
 
@@ -146,7 +146,7 @@ Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
 - warning `unformatted.py` `ruff/format` — File does not match ruff’s default formatting (ruff-format) [default-config]
   - fix: uvx ruff format <file>
 
-Evidence: [raw/ruff-format.json](raw/ruff-format.json)
+Evidence: [raw/root/ruff-format.json](raw/root/ruff-format.json)
 
 ## test quality — not assessed
 

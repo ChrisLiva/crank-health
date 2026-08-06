@@ -1,7 +1,6 @@
-import { mkdtemp, readFile, readdir, realpath, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, readdir, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Finding } from '../src/core/types.ts'
@@ -9,7 +8,7 @@ import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
-import { normalizeReport } from './support/report.ts'
+import { expectGolden, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
 /**
@@ -22,8 +21,6 @@ import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
  * fetch the real pinned tools through `uvx`, so a machine without `uv` will see
  * these categories degrade rather than pass silently.
  */
-
-const GOLDEN = fileURLToPath(new URL('./golden/py-basic.report.json', import.meta.url))
 
 /** Roomy: the first run of a suite may be fetching tools into the uv cache. */
 const SCAN_TIMEOUT_MS = 180_000
@@ -206,7 +203,7 @@ describe('quick scan of the py-basic fixture', () => {
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
-    expect(normalizeReport(json)).toBe(await readFile(GOLDEN, 'utf8'))
+    await expectGolden('py-basic.report.json', normalizeReport(json))
   })
 
   it(

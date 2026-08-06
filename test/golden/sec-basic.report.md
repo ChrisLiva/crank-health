@@ -65,7 +65,7 @@ Graded on absolute counts, never normalized: any critical → F, any error → D
 - info `src/config.py:3` `B404` — Consider possible security implications associated with the subprocess module. (low severity, high confidence) (bandit) [default-config] [advisory]
   - fix: see https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess
 
-Evidence: [raw/bandit.json](raw/bandit.json) · [raw/zizmor.json](raw/zizmor.json) · [raw/zizmor.stderr.txt](raw/zizmor.stderr.txt)
+Evidence: [raw/root/bandit.json](raw/root/bandit.json) · [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
 ## types — A
 
@@ -79,7 +79,7 @@ Graded on weighted findings per KLOC: A ≤0, B ≤1, C ≤5, D ≤15, else F.
 | tsc | not available | [default-config] | — (pinned 7.0.2) | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | ty | ok | [default-config] | 0.0.66 | — |
 
-Evidence: [raw/ty.gitlab.json](raw/ty.gitlab.json)
+Evidence: [raw/root/ty.gitlab.json](raw/root/ty.gitlab.json)
 
 ## dead code — A
 
@@ -93,7 +93,7 @@ Graded on weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F.
 | knip | ok | [default-config] | 6.31.0 | — |
 | vulture | ok | [default-config] | 2.16 | — |
 
-Evidence: [raw/fallow-dead-code.json](raw/fallow-dead-code.json) · [raw/fallow-dead-code.stderr.txt](raw/fallow-dead-code.stderr.txt) · [raw/knip.json](raw/knip.json) · [raw/vulture.txt](raw/vulture.txt)
+Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json) · [raw/root/vulture.txt](raw/root/vulture.txt)
 
 ## complexity — A
 
@@ -112,7 +112,7 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 - info `src/handler.js:5` `fallow/complexity` — Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15 (fallow-health) [default-config] [advisory]
 - info `src/report.js:1` `fallow/complexity` — Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15 (fallow-health) [default-config] [advisory]
 
-Evidence: [raw/complexipy.json](raw/complexipy.json) · [raw/complexipy.sarif.json](raw/complexipy.sarif.json) · [raw/fallow-health.json](raw/fallow-health.json) · [raw/fallow-health.stderr.txt](raw/fallow-health.stderr.txt) · [raw/fta.json](raw/fta.json)
+Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/complexipy.sarif.json](raw/root/complexipy.sarif.json) · [raw/root/fallow-health.json](raw/root/fallow-health.json) · [raw/root/fallow-health.stderr.txt](raw/root/fallow-health.stderr.txt) · [raw/root/fta.json](raw/root/fta.json)
 
 ## duplication — F
 
@@ -133,7 +133,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 - warning `src/report.js:1` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/handler.js:5-15 (jscpd) [default-config] [advisory]
   - fix: Extract the duplicated block into a shared function or module
 
-Evidence: [raw/jscpd-report.json](raw/jscpd-report.json)
+Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 ## lint — F
 
@@ -152,7 +152,7 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 
 - error `src/handler.js:2` `eslint(no-eval)` — eval can be harmful. (oxlint) [default-config]
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json) · [raw/ruff-lint.json](raw/ruff-lint.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json) · [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 ## format — A
 
@@ -165,7 +165,7 @@ Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
 | prettier | ok | [default-config] | 3.9.6 | — |
 | ruff-format | ok | [default-config] | 0.16.1 | — |
 
-Evidence: [raw/prettier.txt](raw/prettier.txt) · [raw/ruff-format.json](raw/ruff-format.json)
+Evidence: [raw/root/prettier.txt](raw/root/prettier.txt) · [raw/root/ruff-format.json](raw/root/ruff-format.json)
 
 ## test quality — not assessed
 

@@ -59,7 +59,7 @@ Graded on weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F.
 - warning `src/clean.js:5` `fallow/unused-export` — Export `subtract` is never used (fallow-dead-code) [default-config]
 - warning `src/clean.js:5` `knip/unused-exports` — Export `subtract` is never used (knip) [default-config]
 
-Evidence: [raw/fallow-dead-code.json](raw/fallow-dead-code.json) · [raw/fallow-dead-code.stderr.txt](raw/fallow-dead-code.stderr.txt) · [raw/knip.json](raw/knip.json)
+Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json)
 
 ## complexity — D
 
@@ -78,7 +78,7 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 
 - error `src/complex.js:1` `fallow/complexity` — Function `classify` has cognitive complexity 29 (cyclomatic 18); the ceiling is 15 (fallow-health) [default-config]
 
-Evidence: [raw/fallow-health.json](raw/fallow-health.json) · [raw/fallow-health.stderr.txt](raw/fallow-health.stderr.txt) · [raw/fta.json](raw/fta.json)
+Evidence: [raw/root/fallow-health.json](raw/root/fallow-health.json) · [raw/root/fallow-health.stderr.txt](raw/root/fallow-health.stderr.txt) · [raw/root/fta.json](raw/root/fta.json)
 
 ## duplication — A
 
@@ -90,7 +90,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
-Evidence: [raw/jscpd-report.json](raw/jscpd-report.json)
+Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 ## lint — F
 
@@ -114,7 +114,7 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 
 - warning `src/accumulate.js:2` `oxc(no-accumulating-spread)` — Do not spread accumulators in loops (oxlint) [default-config] [advisory]
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 ## format — C
 
@@ -133,7 +133,7 @@ Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
 - warning `src/unformatted.js` `prettier/format` — File does not match prettier’s default formatting (prettier) [default-config]
   - fix: npx prettier --write <file>
 
-Evidence: [raw/prettier.txt](raw/prettier.txt)
+Evidence: [raw/root/prettier.txt](raw/root/prettier.txt)
 
 ## test quality — not assessed
 

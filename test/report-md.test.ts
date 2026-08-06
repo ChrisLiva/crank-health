@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import type { CategoryState } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
@@ -14,7 +13,7 @@ import {
   makeReport,
   projectAt,
 } from './factories.ts'
-import { normalizeMarkdown, readGoldenReport } from './support/report.ts'
+import { expectGolden, normalizeMarkdown, readGoldenReport } from './support/report.ts'
 
 /**
  * `report.md` (spec §9). The renderer is a pure function of a `Report`, so the
@@ -24,11 +23,7 @@ import { normalizeMarkdown, readGoldenReport } from './support/report.ts'
  * exactly what this renders is asserted in the fixture scans.
  */
 
-const FIXTURES = ['js-basic', 'py-basic', 'sec-basic'] as const
-
-async function goldenMarkdown(name: string): Promise<string> {
-  return readFile(new URL(`./golden/${name}.report.md`, import.meta.url), 'utf8')
-}
+const FIXTURES = ['js-basic', 'mono-js', 'mono-mixed', 'py-basic', 'sec-basic'] as const
 
 /** The golden form: the timings trailer cut, the repo path already `<repo>`. */
 async function render(name: string): Promise<string> {
@@ -49,7 +44,7 @@ function projectBlock(markdown: string, heading: string): string {
 
 describe('renderReportMarkdown', () => {
   it.each(FIXTURES)('matches the golden report.md for %s', async (name) => {
-    expect(await render(name)).toBe(await goldenMarkdown(name))
+    await expectGolden(`${name}.report.md`, await render(name))
   })
 
   it('renders byte-identical output from the same report', async () => {
@@ -144,7 +139,9 @@ describe('renderReportMarkdown', () => {
   })
 
   it('links the raw evidence with run-directory-relative paths', async () => {
-    expect(await render('js-basic')).toContain('[raw/oxlint.sarif.json](raw/oxlint.sarif.json)')
+    expect(await render('js-basic')).toContain(
+      '[raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)',
+    )
   })
 
   it('keeps a tool’s free-text reason from breaking the tool table', () => {
@@ -356,8 +353,9 @@ describe('renderReportMarkdown projects', () => {
       toolchain: [],
     }
     expect(renderReportMarkdown({ ...golden, projects: [one] })).toBe(renderReportMarkdown(golden))
-    expect(normalizeMarkdown(renderReportMarkdown({ ...golden, projects: [one] }), '<repo>')).toBe(
-      await goldenMarkdown('js-basic'),
+    await expectGolden(
+      'js-basic.report.md',
+      normalizeMarkdown(renderReportMarkdown({ ...golden, projects: [one] }), '<repo>'),
     )
   })
 })

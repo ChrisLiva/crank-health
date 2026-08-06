@@ -3,7 +3,7 @@
   "crankHealth": "0.2.1",
   "repo": {
     "path": "<repo>",
-    "commit": "1cb090abdb6af232c7f51dac1b38b5ec22c2e25f"
+    "commit": "3048f450a6c1c828d5fd777d2b188c80877db803"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -20,11 +20,11 @@
   "categories": {
     "security": {
       "status": "graded",
-      "grade": "D"
+      "grade": "A"
     },
     "types": {
       "status": "graded",
-      "grade": "A"
+      "grade": "F"
     },
     "dead-code": {
       "status": "graded",
@@ -36,7 +36,7 @@
     },
     "duplication": {
       "status": "graded",
-      "grade": "F"
+      "grade": "A"
     },
     "lint": {
       "status": "graded",
@@ -53,44 +53,42 @@
   },
   "metrics": {
     "complexity": {
-      "functionsTotal": 5,
+      "functionsTotal": 3,
       "functionsOverCeiling": 0
     },
     "duplication": {
-      "duplicationPercent": 47.03389830508475
+      "duplicationPercent": 0
     },
     "format": {
-      "formattableFiles": 5
+      "formattableFiles": 4
     }
   },
   "languages": {
     "js-ts": {
-      "complexity": 2,
-      "duplication": 2,
       "lint": 1
     },
     "python": {
-      "security": 2
+      "types": 1,
+      "lint": 1
     }
   },
   "projects": [
     {
-      "path": ".",
+      "path": "services/api",
       "manifests": [
-        "package.json"
+        "services/api/pyproject.toml"
       ],
       "languages": [
-        "js-ts",
         "python"
       ],
       "categories": {
         "security": {
           "status": "graded",
-          "grade": "D"
+          "grade": "A"
         },
         "types": {
           "status": "graded",
-          "grade": "A"
+          "grade": "F"
         },
         "dead-code": {
           "status": "graded",
@@ -102,7 +100,7 @@
         },
         "duplication": {
           "status": "graded",
-          "grade": "F"
+          "grade": "A"
         },
         "lint": {
           "status": "graded",
@@ -119,25 +117,84 @@
       },
       "metrics": {
         "complexity": {
-          "functionsTotal": 5,
+          "functionsTotal": 2,
           "functionsOverCeiling": 0
         },
         "duplication": {
-          "duplicationPercent": 47.03389830508475
+          "duplicationPercent": 0
         },
         "format": {
-          "formattableFiles": 5
+          "formattableFiles": 2
+        }
+      },
+      "toolchain": []
+    },
+    {
+      "path": "services/web",
+      "manifests": [
+        "services/web/package.json"
+      ],
+      "languages": [
+        "js-ts"
+      ],
+      "categories": {
+        "security": {
+          "status": "not-assessed",
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+        },
+        "types": {
+          "status": "not-assessed",
+          "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
+        },
+        "dead-code": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "complexity": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "duplication": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "lint": {
+          "status": "graded",
+          "grade": "F"
+        },
+        "format": {
+          "status": "graded",
+          "grade": "A"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        }
+      },
+      "metrics": {
+        "complexity": {
+          "functionsTotal": 1,
+          "functionsOverCeiling": 0
+        },
+        "duplication": {
+          "duplicationPercent": 0
+        },
+        "format": {
+          "formattableFiles": 2
         }
       },
       "toolchain": []
     }
   ],
+  "rootShell": {
+    "declaredBy": []
+  },
   "tools": [
     {
       "tool": "bandit",
       "category": "security",
       "scope": "common",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "1.9.4",
@@ -146,8 +203,22 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/bandit.json"
+        "raw/services/api/bandit.json"
       ]
+    },
+    {
+      "tool": "bandit",
+      "category": "security",
+      "scope": "common",
+      "project": "services/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.9.4",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no Python files in this repo, so bandit assessed nothing",
+      "raw": []
     },
     {
       "tool": "gitleaks",
@@ -168,7 +239,21 @@
       "tool": "opengrep",
       "category": "security",
       "scope": "common",
-      "project": ".",
+      "project": "services/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.26.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "opengrep",
+      "category": "security",
+      "scope": "common",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -201,21 +286,18 @@
       "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "1.29.0",
+      "version": null,
       "pinned": "1.29.0",
       "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": [
-        "raw/repo/zizmor.json",
-        "raw/repo/zizmor.stderr.txt"
-      ]
+      "state": "not-available",
+      "reason": "no GitHub Actions workflows or composite actions, so zizmor assessed nothing",
+      "raw": []
     },
     {
       "tool": "pyright",
       "category": "types",
       "scope": "python",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -229,7 +311,7 @@
       "tool": "tsc",
       "category": "types",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -243,7 +325,7 @@
       "tool": "ty",
       "category": "types",
       "scope": "python",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "0.0.66",
@@ -252,14 +334,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/ty.gitlab.json"
+        "raw/services/api/ty.gitlab.json"
       ]
     },
     {
       "tool": "fallow-dead-code",
       "category": "dead-code",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.14.0",
@@ -268,31 +350,32 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/fallow-dead-code.json",
-        "raw/root/fallow-dead-code.stderr.txt"
+        "raw/services/web/fallow-dead-code.json",
+        "raw/services/web/fallow-dead-code.stderr.txt"
       ]
     },
     {
       "tool": "knip",
       "category": "dead-code",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "6.31.0",
+      "version": null,
       "pinned": "6.31.0",
       "detection": null,
-      "state": "ok",
-      "reason": null,
+      "state": "error",
+      "reason": "could not parse knip output: Unexpected token 'R', \"\nRun `knip \"... is not valid JSON",
       "raw": [
-        "raw/root/knip.json"
+        "raw/services/web/knip.json",
+        "raw/services/web/knip.stderr.txt"
       ]
     },
     {
       "tool": "vulture",
       "category": "dead-code",
       "scope": "python",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "2.16",
@@ -301,14 +384,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/vulture.txt"
+        "raw/services/api/vulture.txt"
       ]
     },
     {
       "tool": "complexipy",
       "category": "complexity",
       "scope": "python",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "6.2.0",
@@ -317,15 +400,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/complexipy.json",
-        "raw/root/complexipy.sarif.json"
+        "raw/services/api/complexipy.json",
+        "raw/services/api/complexipy.sarif.json"
       ]
     },
     {
       "tool": "fallow-health",
       "category": "complexity",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.14.0",
@@ -334,15 +417,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/fallow-health.json",
-        "raw/root/fallow-health.stderr.txt"
+        "raw/services/web/fallow-health.json",
+        "raw/services/web/fallow-health.stderr.txt"
       ]
     },
     {
       "tool": "fta",
       "category": "complexity",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.0.0",
@@ -351,14 +434,15 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/fta.json"
+        "raw/services/web/fta.json"
       ]
     },
     {
       "tool": "jscpd",
       "category": "duplication",
       "scope": "common",
-      "project": ".",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "5.0.14",
@@ -367,14 +451,46 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/jscpd-report.json"
+        "raw/repo/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": "services/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/services/api/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": "services/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/services/web/jscpd-report.json"
       ]
     },
     {
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "1.77.0",
@@ -383,14 +499,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/oxlint.sarif.json"
+        "raw/services/web/oxlint.sarif.json"
       ]
     },
     {
       "tool": "ruff-lint",
       "category": "lint",
       "scope": "python",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "0.16.1",
@@ -399,14 +515,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/ruff-lint.json"
+        "raw/services/api/ruff-lint.json"
       ]
     },
     {
       "tool": "prettier",
       "category": "format",
       "scope": "js-ts",
-      "project": ".",
+      "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "3.9.6",
@@ -415,14 +531,14 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/prettier.txt"
+        "raw/services/web/prettier.txt"
       ]
     },
     {
       "tool": "ruff-format",
       "category": "format",
       "scope": "python",
-      "project": ".",
+      "project": "services/api",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": "0.16.1",
@@ -431,214 +547,63 @@
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/root/ruff-format.json"
+        "raw/services/api/ruff-format.json"
       ]
     }
   ],
   "findings": [
     {
-      "id": "ddcf1cc8f8861c2e",
-      "category": "security",
-      "tool": "zizmor",
-      "rule": "dangerous-triggers",
+      "id": "583a56acd40665f9",
+      "category": "types",
+      "tool": "ty",
+      "rule": "unresolved-reference",
       "severity": "error",
-      "file": ".github/workflows/ci.yml",
-      "project": ".",
+      "file": "services/api/greet.py",
+      "project": "services/api",
       "range": {
         "startLine": 2,
-        "startCol": 1,
-        "endLine": 3,
-        "endCol": 23
+        "startCol": 23,
+        "endLine": 2,
+        "endCol": 35
       },
-      "message": "Use of fundamentally insecure workflow trigger — pull_request_target is almost always used insecurely (high severity, medium confidence)",
+      "message": "Name `missing_name` used when not defined",
       "provenance": "default-config",
-      "gradeScope": true,
-      "fixHint": "see https://docs.zizmor.sh/audits/#dangerous-triggers"
+      "gradeScope": true
     },
     {
-      "id": "7cdf78dbce1787a4",
-      "category": "security",
-      "tool": "zizmor",
-      "rule": "excessive-permissions",
-      "severity": "warning",
-      "file": ".github/workflows/ci.yml",
-      "project": ".",
-      "range": {
-        "startLine": 5,
-        "startCol": 3,
-        "endLine": 12,
-        "endCol": 1
-      },
-      "message": "Overly broad permissions — default permissions used due to no permissions: block (medium severity, medium confidence)",
-      "provenance": "default-config",
-      "gradeScope": true,
-      "fixHint": "see https://docs.zizmor.sh/audits/#excessive-permissions"
-    },
-    {
-      "id": "5f7e4c17a696413a",
-      "category": "security",
-      "tool": "zizmor",
-      "rule": "artipacked",
-      "severity": "warning",
-      "file": ".github/workflows/ci.yml",
-      "project": ".",
-      "range": {
-        "startLine": 8,
-        "startCol": 9,
-        "endLine": 10,
-        "endCol": 57
-      },
-      "message": "Credential persistence through GitHub Actions artifacts — does not set persist-credentials: false (medium severity, low confidence)",
-      "provenance": "default-config",
-      "gradeScope": true,
-      "fixHint": "see https://docs.zizmor.sh/audits/#artipacked"
-    },
-    {
-      "id": "963be61c2e2585e1",
-      "category": "security",
-      "tool": "zizmor",
-      "rule": "unpinned-uses",
-      "severity": "warning",
-      "file": ".github/workflows/ci.yml",
-      "project": ".",
-      "range": {
-        "startLine": 8,
-        "startCol": 15,
-        "endLine": 8,
-        "endCol": 34
-      },
-      "message": "Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence)",
-      "provenance": "default-config",
-      "gradeScope": true,
-      "fixHint": "see https://docs.zizmor.sh/audits/#unpinned-uses"
-    },
-    {
-      "id": "13559debab826f4d",
-      "category": "security",
-      "tool": "bandit",
-      "rule": "B404",
-      "severity": "info",
-      "file": "src/config.py",
-      "project": ".",
-      "range": {
-        "startLine": 3,
-        "startCol": 1,
-        "endLine": 3,
-        "endCol": 18
-      },
-      "message": "Consider possible security implications associated with the subprocess module. (low severity, high confidence)",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "see https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess"
-    },
-    {
-      "id": "2dda43453c99d548",
-      "category": "security",
-      "tool": "bandit",
-      "rule": "B602",
+      "id": "07af5e4f619dc8dd",
+      "category": "lint",
+      "tool": "ruff-lint",
+      "rule": "F821",
       "severity": "error",
-      "file": "src/config.py",
-      "project": ".",
+      "file": "services/api/greet.py",
+      "project": "services/api",
       "range": {
-        "startLine": 13,
-        "startCol": 12,
-        "endLine": 13,
-        "endCol": 71
+        "startLine": 2,
+        "startCol": 23,
+        "endLine": 2,
+        "endCol": 35
       },
-      "message": "subprocess call with shell=True identified, security issue. (high severity, high confidence)",
+      "message": "Undefined name `missing_name`",
       "provenance": "default-config",
       "gradeScope": true,
-      "fixHint": "see https://bandit.readthedocs.io/en/1.9.4/plugins/b602_subprocess_popen_with_shell_equals_true.html"
+      "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
     },
     {
-      "id": "63fe04c8cfe6dfd3",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "info",
-      "file": "src/handler.js",
-      "project": ".",
-      "range": {
-        "startLine": 5,
-        "startCol": 7,
-        "endLine": 5,
-        "endCol": 7
-      },
-      "message": "Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "1a049eddda02e343",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "info",
-      "file": "src/report.js",
-      "project": ".",
-      "range": {
-        "startLine": 1,
-        "startCol": 7,
-        "endLine": 1,
-        "endCol": 7
-      },
-      "message": "Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "f648d0bedc2bbfc0",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "src/handler.js",
-      "project": ".",
-      "range": {
-        "startLine": 5,
-        "startCol": 1,
-        "endLine": 15,
-        "endCol": 1
-      },
-      "message": "11 lines (111 tokens) duplicated from src/report.js:1-11",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
-      "id": "da0c099f432c5152",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "src/report.js",
-      "project": ".",
-      "range": {
-        "startLine": 1,
-        "startCol": 1,
-        "endLine": 11,
-        "endCol": 1
-      },
-      "message": "11 lines (111 tokens) duplicated from src/handler.js:5-15",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
-      "id": "d75f17f00a64cade",
+      "id": "f0760aef25a91e41",
       "category": "lint",
       "tool": "oxlint",
-      "rule": "eslint(no-eval)",
+      "rule": "eslint(no-dupe-keys)",
       "severity": "error",
-      "file": "src/handler.js",
-      "project": ".",
+      "file": "services/web/src/dupe-keys.js",
+      "project": "services/web",
       "range": {
         "startLine": 2,
-        "startCol": 10,
+        "startCol": 3,
         "endLine": 2,
-        "endCol": 14
+        "endCol": 7
       },
-      "message": "eval can be harmful.",
+      "message": "Duplicate key 'home'",
       "provenance": "default-config",
       "gradeScope": true
     }

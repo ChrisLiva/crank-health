@@ -21,7 +21,7 @@ Grade impact: dead code · F → A
 - `src/clean.js:5` `fallow/unused-export` — Export `subtract` is never used
 - `src/clean.js:5` `knip/unused-exports` — Export `subtract` is never used
 
-Evidence: [raw/fallow-dead-code.json](raw/fallow-dead-code.json) · [raw/fallow-dead-code.stderr.txt](raw/fallow-dead-code.stderr.txt) · [raw/knip.json](raw/knip.json)
+Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json)
 
 Verify: `npx crank-health --only dead-code --fail-under A`
 
@@ -31,7 +31,7 @@ Grade impact: complexity · D → A
 
 - `src/complex.js:1` `fallow/complexity` — Function `classify` has cognitive complexity 29 (cyclomatic 18); the ceiling is 15
 
-Evidence: [raw/fallow-health.json](raw/fallow-health.json) · [raw/fallow-health.stderr.txt](raw/fallow-health.stderr.txt)
+Evidence: [raw/root/fallow-health.json](raw/root/fallow-health.json) · [raw/root/fallow-health.stderr.txt](raw/root/fallow-health.stderr.txt)
 
 Verify: `npx crank-health --only complexity --fail-under A`
 
@@ -41,7 +41,7 @@ Grade impact: lint · F → A
 
 - `src/const-assign.js:2` `eslint(no-const-assign)` — Unexpected re-assignment of `const` variable limit.
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
@@ -51,7 +51,7 @@ Grade impact: lint · F → A
 
 - `src/dupe-keys.js:2` `eslint(no-dupe-keys)` — Duplicate key 'home'
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
@@ -61,7 +61,7 @@ Grade impact: lint · F → A
 
 - `src/unreachable.js:6` `eslint(no-unreachable)` — Unreachable code.
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
@@ -71,7 +71,7 @@ Grade impact: lint · F → A
 
 - `src/accumulate.js:2` `oxc(no-accumulating-spread)` — Do not spread accumulators in loops [advisory]
 
-Evidence: [raw/oxlint.sarif.json](raw/oxlint.sarif.json)
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
@@ -81,7 +81,7 @@ Grade impact: format · C → A
 
 - `src/unformatted.js` `prettier/format` — File does not match prettier’s default formatting
 
-Evidence: [raw/prettier.txt](raw/prettier.txt)
+Evidence: [raw/root/prettier.txt](raw/root/prettier.txt)
 
 Verify: `npx crank-health --only format --fail-under A`
 
