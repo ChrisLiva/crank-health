@@ -1,4 +1,3 @@
-import { ROOT_PROJECT } from '../core/discover.ts'
 import { SEVERITY_WEIGHTS } from '../core/grade.ts'
 import type { Category, Finding, Grade } from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
@@ -11,7 +10,7 @@ import {
   projectLabel,
   stateLabel,
 } from './display.ts'
-import type { Report, ReportDelta } from './json.ts'
+import type { Report, ReportDelta, ReportProject } from './json.ts'
 
 /**
  * `agent.md` — the task list a coding agent works from (spec §10).
@@ -59,8 +58,11 @@ export interface AgentTask {
    * The project this task's work is in, `.` at the repo root. A theme never
    * spans two projects: the same rule broken in two packages is two sittings,
    * under two configs, and an agent has to be told which package it is in.
+   *
+   * Absent for findings no project claims — an infra file under a workspace
+   * shell — where naming one would send the agent to the wrong package.
    */
-  readonly project: string
+  readonly project?: string
   /**
    * PR mode only: at least one of this task's findings sits on a line the
    * change touched (spec §4's directly-actionable). Always `false` for a
@@ -152,14 +154,12 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
       : source.newFindings.filter((finding) => finding.touchedLine).map((finding) => finding.id),
   )
 
-  const ordered = CATEGORIES.filter(
-    (category) => source !== undefined || needsWork(report, category),
-  ).flatMap((category) =>
+  const ordered = CATEGORIES.flatMap((category) =>
     themesOf(
       category,
       findings.filter((finding) => finding.category === category),
     ),
-  )
+  ).filter((theme) => source !== undefined || needsWork(report, theme))
 
   return ordered
     .toSorted(
@@ -169,14 +169,43 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
         severityWeight(b.findings) - severityWeight(a.findings) ||
         b.findings.length - a.findings.length ||
         compare(a.key, b.key) ||
-        compare(a.project, b.project),
+        compare(a.project ?? '', b.project ?? ''),
     )
     .map((theme, index) => toTask(theme, index + 1, report, rawByTool, touched))
 }
 
-function needsWork(report: Report, category: Category): boolean {
-  const state = report.categories[category]
-  return state.status === 'graded' && state.grade !== TARGET_GRADE
+/**
+ * Whether a theme is work: its category is graded worse than A **in its own
+ * project**, or in the rollup.
+ *
+ * Both, because `--fail-under` gates both. A package graded F inside a repo the
+ * rollup grades A is CI red with nothing in this file to do about it — the
+ * failure this rule exists for — and a rollup dragged below A by findings spread
+ * thinly over packages that each grade A is the same failure from the other end.
+ * A single-project repo has only the rollup, and reads exactly as it always has.
+ */
+function needsWork(report: Report, theme: Theme): boolean {
+  const own = namedProject(report, theme.project)?.categories[theme.category]
+  return [report.categories[theme.category], own].some(
+    (state) => state?.status === 'graded' && state.grade !== TARGET_GRADE,
+  )
+}
+
+/**
+ * The project a task names, when the report has projects to tell apart and this
+ * is one of them. A single-project report answers about the whole repo and says
+ * so in its header, so nothing there is named, scoped or graded per project —
+ * which is what keeps its output byte-identical to the one-project era.
+ */
+function namedProject(report: Report, path: string | undefined): ReportProject | undefined {
+  if (path === undefined || report.projects.length < 2) return undefined
+  return report.projects.find((project) => project.path === path)
+}
+
+/** The same project, only when it holds a grade of its own in this category. */
+function gradedProject(report: Report, theme: Theme): ReportProject | undefined {
+  const named = namedProject(report, theme.project)
+  return named?.categories[theme.category].status === 'graded' ? named : undefined
 }
 
 function isDirect(theme: Theme, touched: ReadonlySet<string>): boolean {
@@ -190,7 +219,13 @@ function toTask(
   rawByTool: ReadonlyMap<string, readonly string[]>,
   touched: ReadonlySet<string>,
 ): AgentTask {
-  const state = report.categories[theme.category]
+  // The grade a task is about is its project's, where the project has one of its
+  // own: a package's F is what its agent has to move, and the rollup's letter
+  // next to `Project: packages/api` would be a grade nobody can act on. Where
+  // the project's own state is `not-assessed(repo-scoped)` the answer really is
+  // the repo's, so the rollup's grade — and a repo-wide check — is the honest one.
+  const graded = gradedProject(report, theme)
+  const state = (graded?.categories ?? report.categories)[theme.category]
   const current = state.status === 'graded' ? state.grade : stateLabel(state)
   const evidence = [
     ...new Set(theme.findings.flatMap((finding) => rawByTool.get(finding.tool) ?? [])),
@@ -198,13 +233,13 @@ function toTask(
   return {
     id: `T${ordinal}`,
     category: theme.category,
-    project: theme.project,
+    ...(theme.project === undefined ? {} : { project: theme.project }),
     directlyActionable: isDirect(theme, touched),
     title: theme.title,
     gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
     findings: theme.findings,
     evidence,
-    verify: verifyArgv(theme.category),
+    verify: verifyArgv(theme.category, graded?.path),
   }
 }
 
@@ -213,9 +248,19 @@ function toTask(
  * (spec §5) — a quick run reports it `not assessed`, and `--fail-under A`
  * counts a not-assessed category as a failure, so the command without `--deep`
  * could never pass however well the agent did its work.
+ *
+ * @param project the task's project, when it names one: the check has to be able
+ * to pass on the work the task asked for, and a repo-wide `--fail-under A` would
+ * fail on the next package over.
  */
-function verifyArgv(category: Category): string[] {
-  const argv = ['--only', category, '--fail-under', TARGET_GRADE]
+function verifyArgv(category: Category, project?: string): string[] {
+  const argv = [
+    '--only',
+    category,
+    ...(project === undefined ? [] : ['--project', project]),
+    '--fail-under',
+    TARGET_GRADE,
+  ]
   return category === 'test-quality' ? [...argv, '--deep'] : argv
 }
 
@@ -224,7 +269,7 @@ function verifyArgv(category: Category): string[] {
 interface Theme {
   readonly category: Category
   /** The project every finding in it belongs to; see {@link AgentTask.project}. */
-  readonly project: string
+  readonly project: string | undefined
   /** Stable tiebreaker, and the reason two findings ended up together. */
   readonly key: string
   readonly title: string
@@ -236,12 +281,16 @@ interface Theme {
  * that makes two of its findings the same piece of work: a rule, a kind of dead
  * code, or — where the whole category is one mechanical sweep — nothing at all.
  * Always within one project: in a single-project repo that is every finding, so
- * the grouping is the one it has always been.
+ * the grouping is the one it has always been, and the findings no project claims
+ * group together as their own unnamed theme.
  */
 function themesOf(category: Category, findings: readonly Finding[]): Theme[] {
-  const groups = new Map<string, { project: string; key: string; findings: Finding[] }>()
+  const groups = new Map<
+    string,
+    { project: string | undefined; key: string; findings: Finding[] }
+  >()
   for (const finding of findings) {
-    const project = finding.project ?? ROOT_PROJECT
+    const project = finding.project
     const key = themeKey(finding)
     // Keyed on both, so no project path can be read as part of a theme key.
     const id = JSON.stringify([project, key])
@@ -412,13 +461,16 @@ const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
  * package it is working in has to guess from the file paths.
  *
  * A single-project repo has one answer and states it in the header already, so
- * `named` is false there and the task reads exactly as it always has.
+ * `named` is false there and the task reads exactly as it always has. So does a
+ * task whose findings belong to no project: the files are in the list under it,
+ * and a package name it does not live in would be worse than none.
  */
 function renderTask(task: AgentTask, named: boolean): string {
+  const project = named ? task.project : undefined
   const lines = [
     `### ${task.id} — ${task.title}${task.directlyActionable ? ` ${TOUCHED_TAG}` : ''}`,
     '',
-    ...(named ? [`Project: ${projectLabel(task.project)}`, ''] : []),
+    ...(project === undefined ? [] : [`Project: ${projectLabel(project)}`, '']),
     `Grade impact: ${task.gradeImpact}`,
     '',
     ...findingBlock(task.findings),

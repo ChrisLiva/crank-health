@@ -241,6 +241,17 @@ export interface RunContext {
    * one project at the root.
    */
   readonly project: Project
+  /**
+   * The projects nested inside {@link project}, repo-relative posix — the ones
+   * whose files are theirs and not this run's.
+   *
+   * {@link files} already excludes them, so a runner given a file list can
+   * ignore this. It is for the runners that are handed a *directory* instead
+   * (jscpd), whose whole-tree measurement would otherwise take a nested
+   * package's code — and a clone between two packages — for this project's own.
+   * Empty for a repo-spanning run, which is meant to see everything.
+   */
+  readonly nestedProjects?: readonly string[]
   /** Repo-relative posix paths, pre-filtered for this runner's language. */
   readonly files: readonly string[]
   /**

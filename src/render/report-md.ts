@@ -331,19 +331,35 @@ function measurements(report: Report): string[] {
  *
  * A single-project repo *is* the rollup — the section would restate the grades
  * above it word for word — so it is rendered only where there is more than one
- * project.
+ * project, or where the root turned out to be a workspace shell: a one-package
+ * workspace has a fact about its root that belongs nowhere else.
  */
 function projectsSection(report: Report): string[] {
-  if (report.projects.length < 2) return []
+  if (report.projects.length < 2 && report.rootShell === undefined) return []
   const blocks = [
     '## Projects',
     `${plural(report.projects.length, 'project')}, each graded on its own files, its own toolchain ` +
-      'and its own denominators; the grades above are the repo as a whole. A category marked ' +
+      `and its own denominators; the grades above are ${rollupCoverage(report)}. A category marked ` +
       '`repo-scoped` is one a repo-spanning scan answered — secrets, dependency audits, workflow ' +
       'checks — so it is graded once, above, and not per project.',
   ]
   if (report.rootShell !== undefined) blocks.push(rootShellNote(report.rootShell))
   return [...blocks, ...report.projects.flatMap((project) => projectBlock(report, project))]
+}
+
+/**
+ * What the rollup is a rollup *of*. Under `--project` it is the selection and
+ * not the repo — the tree outside it was never graded, and a report that said
+ * "the repo as a whole" over a scoped run would be claiming a number nobody
+ * computed. Repo-spanning scans still span the repo either way; that is what
+ * their own rows say.
+ */
+function rollupCoverage(report: Report): string {
+  const scoped = report.scopedTo
+  if (scoped === undefined) return 'the repo as a whole'
+  return `the ${plural(scoped.length, 'project')} this run was scoped to (${scoped
+    .map((path) => `\`${projectLabel(path)}\``)
+    .join(', ')})`
 }
 
 function projectBlock(report: Report, project: ReportProject): string[] {

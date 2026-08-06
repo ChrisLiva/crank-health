@@ -299,6 +299,38 @@ describe('computeDelta over projects', () => {
     ])
   })
 
+  /**
+   * The same move, with the finding fixed on the way. The resolved finding is
+   * reported at its head path, so it has to count under the project that path is
+   * in — crediting the package the file left would show a fix in a package this
+   * change did not touch.
+   */
+  it('credits a finding fixed in a moved file to the project it moved to', () => {
+    const before = identified({
+      file: 'packages/api/moved.ts',
+      project: 'packages/api',
+      anchor: 'debugger',
+    })
+
+    const delta = computeDelta(
+      input({
+        baseFindings: [before],
+        headFindings: [],
+        renames: new Map([['packages/api/moved.ts', 'packages/web/moved.ts']]),
+        baseProjects: [project('packages/api', graded('F')), project('packages/web', graded('A'))],
+        headProjects: [project('packages/api', graded('A')), project('packages/web', graded('A'))],
+      }),
+    )
+
+    expect(delta.resolvedFindings.map((finding) => [finding.file, finding.project])).toEqual([
+      ['packages/web/moved.ts', 'packages/web'],
+    ])
+    expect(delta.projects.map((entry) => [entry.path, entry.resolvedFindings])).toEqual([
+      ['packages/api', 0],
+      ['packages/web', 1],
+    ])
+  })
+
   it('labels a project only head has as added, with its findings new', () => {
     const planted = identified({
       file: 'packages/new/a.ts',
@@ -380,6 +412,29 @@ describe('remapRenames', () => {
   it('cannot re-hash a finding that carries no identity material', () => {
     const bare = makeFinding({ file: 'src/a.js' })
     expect(remapRenames([bare], new Map([['src/a.js', 'src/b.js']]))).toEqual([bare])
+  })
+
+  it('re-attributes a remapped finding to the project of its new path', () => {
+    const finding = identified({ file: 'packages/api/a.ts', project: 'packages/api' })
+    const [remapped] = remapRenames(
+      [finding],
+      new Map([['packages/api/a.ts', 'packages/web/a.ts']]),
+      (file) => (file.startsWith('packages/web/') ? 'packages/web' : undefined),
+    )
+
+    expect(remapped?.file).toBe('packages/web/a.ts')
+    expect(remapped?.project).toBe('packages/web')
+  })
+
+  it('drops the attribution when the new path is in no project', () => {
+    const finding = identified({ file: 'packages/api/a.ts', project: 'packages/api' })
+    const [remapped] = remapRenames(
+      [finding],
+      new Map([['packages/api/a.ts', 'tools/a.ts']]),
+      () => undefined,
+    )
+
+    expect(remapped).not.toHaveProperty('project')
   })
 })
 

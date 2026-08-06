@@ -765,7 +765,9 @@ describe('quick scan of crank-health itself', () => {
         // crank-health's own root project. `test/fixtures/` holds manifests of
         // its own, so crank-health scanning itself is a multi-project scan, and
         // a fixture that owns Biome contributes a lint tool record too.
-        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')).toMatchObject({
+        expect(
+          result.report.tools.find((tool) => tool.tool === 'oxlint' && tool.project === '.'),
+        ).toMatchObject({
           tool: 'oxlint',
           execution: 'repo-installed',
           provenance: 'repo-config',

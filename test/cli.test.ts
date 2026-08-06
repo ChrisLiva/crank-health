@@ -273,6 +273,7 @@ const MONO_GATE: HistorySpec = {
 
 /** The keys these tests read back out of `report.json`. */
 interface GateReport {
+  readonly scopedTo?: readonly string[]
   readonly categories: Record<string, { status: string; grade?: string }>
   readonly projects: {
     path: string
@@ -328,6 +329,8 @@ describe(
 
       const scoped = await report()
       expect(scoped.projects.map((project) => project.path)).toEqual(['packages/big'])
+      // …and the report records what the rollup above it was computed over.
+      expect(scoped.scopedTo).toEqual(['packages/big'])
       // The rollup is what was scanned: `small`'s finding is not in it.
       expect(scoped.categories['lint']).toEqual({ status: 'graded', grade: 'A' })
       // …and a repo-spanning runner still spans the repo under scoping

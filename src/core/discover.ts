@@ -174,15 +174,22 @@ export function repoDetectContext(repoRoot: string, files: FileInventory): Detec
  * claimed — the `.env` a secrets scan flagged, a workflow file, a lockfile — so
  * a repo-scoped finding is attributed where a reader would look for it.
  *
- * A path under no project at all (a repo whose root is a workspace shell) is the
- * repo's own, {@link ROOT_PROJECT}.
+ * `undefined` for a path no project claims and no project is above: a repo whose
+ * root is a workspace shell has no project at `.`, and attributing an infra
+ * file to one that is not in the list would invent a project a reader then goes
+ * looking for.
+ *
+ * @param projects the projects in play — every discovered one, or a `--project`
+ * selection.
  */
-export function nearestProjectMap(projects: readonly Project[]): (file: string) => string {
+export function nearestProjectMap(
+  projects: readonly { readonly path: string }[],
+): (file: string) => string | undefined {
   const paths = new Set(projects.map((project) => project.path))
   return (file) => {
     let directory = directoryOf(file)
     while (directory !== ROOT_PROJECT && !paths.has(directory)) directory = directoryOf(directory)
-    return directory
+    return paths.has(directory) ? directory : undefined
   }
 }
 

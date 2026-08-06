@@ -82,6 +82,24 @@ describe('zero footprint, in the arguments', () => {
     }
   })
 
+  /**
+   * jscpd is handed a directory, so a project holding packages of its own would
+   * measure their code — and the clones between them — as its duplication. That
+   * measurement is the repo-wide pass's, and only the rollup grades on it.
+   */
+  it('leaves a parent project’s nested projects to the nested projects', () => {
+    const ignoreOf = (nested: readonly string[]) => {
+      const args = jscpdArgs(REPO, SCRATCH, nested)
+      return args[args.indexOf('--ignore') + 1] ?? ''
+    }
+
+    const ignore = ignoreOf(['packages/api', 'packages/web'])
+    expect(ignore).toContain('**/packages/api/**')
+    expect(ignore).toContain('**/packages/web/**')
+    // …and the repo-wide pass, which passes none, still sees every package.
+    expect(ignoreOf([])).not.toContain('packages')
+  })
+
   it('writes gitleaks’ report into the scratch dir, redacted', () => {
     const args = gitleaksArgs(REPO, join(SCRATCH, 'gitleaks.json'))
     expect(args[0]).toBe('dir')

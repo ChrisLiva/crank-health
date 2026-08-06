@@ -39,6 +39,16 @@ export interface Report {
   readonly mode: 'whole-repo' | 'pr'
   /** The categories this run was asked to assess (`--only`, or all of them). */
   readonly selected: readonly Category[]
+  /**
+   * The `--project` selection this run was scoped to, stable-sorted; absent
+   * when every discovered project was scanned.
+   *
+   * Everything above {@link projects} is the rollup, and under scoping the
+   * rollup is computed over the selection rather than over the whole repo — so
+   * without this field nothing in the report says which. Additive: a reader that
+   * does not know the key sees the report it always saw.
+   */
+  readonly scopedTo?: readonly string[]
   /** All eight states, always — including the ones nothing assessed (spec §8). */
   readonly categories: Readonly<Record<Category, CategoryState>>
   /**
@@ -271,6 +281,8 @@ export interface ReportInput {
    */
   readonly delta?: PrDelta
   readonly selected: readonly Category[]
+  /** The `--project` selection, when there was one; see {@link Report.scopedTo}. */
+  readonly scopedTo?: readonly string[]
   readonly categories: Readonly<Record<Category, CategoryState>>
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
   /** Every discovered project, graded; never empty. See {@link Report.projects}. */
@@ -311,6 +323,7 @@ export function buildReport(input: ReportInput): Report {
     profile: input.profile,
     mode: input.delta === undefined ? 'whole-repo' : 'pr',
     selected: CATEGORIES.filter((category) => input.selected.includes(category)),
+    ...(input.scopedTo === undefined ? {} : { scopedTo: input.scopedTo.toSorted(compare) }),
     categories: orderedCategories(input.categories),
     metrics: orderedMetrics(input.metrics),
     languages: countByLanguage(input.findings),

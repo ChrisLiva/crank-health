@@ -142,6 +142,7 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
         profile: options.deep === true ? 'deep' : 'quick',
         delta: { ...delta, baseRef: options.base, mergeBase: base },
         selected: headScan.selected,
+        ...(options.projects === undefined ? {} : { scopedTo: options.projects }),
         categories: headScan.categories,
         metrics: headScan.scan.metrics,
         // Head's, like every other grade in the report: the delta says what moved.

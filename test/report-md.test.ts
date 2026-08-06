@@ -156,6 +156,7 @@ describe('renderReportMarkdown', () => {
             category: 'lint',
             scope: 'js-ts',
             project: '.',
+            repoWide: false,
             rollupOnly: false,
             pinnedVersion: '1.77.0',
             detection: null,
@@ -229,6 +230,7 @@ describe('renderReportMarkdown projects', () => {
           category: 'lint',
           scope: 'js-ts',
           project: 'packages/web',
+          repoWide: false,
           rollupOnly: false,
           pinnedVersion: '1.77.0',
           detection: {
@@ -295,6 +297,45 @@ describe('renderReportMarkdown projects', () => {
   it('records the workspace-shell root as a note rather than as a project', () => {
     expect(markdown).toContain('The repo root is a workspace shell (declared by package.json')
     expect(markdown).not.toContain('### repo root')
+  })
+
+  /**
+   * A workspace with one package in it still has a root a reader would otherwise
+   * take for the project they are looking at.
+   */
+  it('still explains the shell root in a one-package workspace', () => {
+    const single = renderReportMarkdown(
+      makeReport({
+        projects: [makeProjectScan({ project: projectAt('packages/web') })],
+        rootShell: { declaredBy: ['pnpm-workspace.yaml'] },
+      }),
+    )
+    expect(single).toContain('The repo root is a workspace shell (declared by pnpm-workspace.yaml)')
+  })
+
+  it('says the grades are the repo as a whole when nothing scoped the run', () => {
+    expect(markdown).toContain('the grades above are the repo as a whole')
+  })
+
+  /**
+   * Under `--project` the rollup is computed over the selection, so the sentence
+   * that calls it the repo would be describing a number this run never took.
+   */
+  it('says which projects the grades cover when the run was scoped', () => {
+    const scoped = renderReportMarkdown(
+      makeReport({
+        scopedTo: ['packages/web', 'packages/api'],
+        projects: [
+          makeProjectScan({ project: projectAt('packages/web') }),
+          makeProjectScan({ project: projectAt('packages/api') }),
+        ],
+      }),
+    )
+    expect(scoped).toContain(
+      'the grades above are the 2 projects this run was scoped to ' +
+        '(`packages/api`, `packages/web`)',
+    )
+    expect(scoped).not.toContain('the repo as a whole')
   })
 
   it('leaves a single-project report exactly as it was', async () => {

@@ -299,6 +299,7 @@ describe('each task', () => {
             category: 'lint',
             scope: 'js-ts',
             project: '.',
+            repoWide: false,
             rollupOnly: false,
             pinnedVersion: '1.77.0',
             detection: null,
@@ -442,5 +443,120 @@ describe('tasks in a monorepo', () => {
     })
     expect(single.projects).toHaveLength(1)
     expect(renderAgentMarkdown(single)).not.toContain('Project:')
+  })
+
+  /**
+   * A finding in an infra file under a workspace shell belongs to no project.
+   * "Project: repo root" would name a project that is not in `projects[]` and
+   * send the agent to a package the finding is not in.
+   */
+  it('names no project for a finding no project claims', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), security: { status: 'graded', grade: 'F' } },
+      projects: [
+        makeProjectScan({ project: projectAt('packages/web') }),
+        makeProjectScan({ project: projectAt('packages/api') }),
+      ],
+      findings: [
+        makeFinding({
+          id: 'ci',
+          category: 'security',
+          tool: 'zizmor',
+          rule: 'unpinned-uses',
+          file: '.github/workflows/ci.yml',
+        }),
+      ],
+    })
+
+    expect(buildAgentTasks(report).map((task) => task.project)).toEqual([undefined])
+    expect(renderAgentMarkdown(report)).not.toContain('Project:')
+  })
+})
+
+/** The rollup is fine; one small package is not. */
+function skewed(): Report {
+  return makeReport({
+    categories: { ...allGraded(), lint: { status: 'graded', grade: 'A' } },
+    projects: [
+      makeProjectScan({
+        project: projectAt('packages/api'),
+        categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+      }),
+      makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+    ],
+    findings: [
+      makeFinding({ id: 'api', file: 'packages/api/api/main.py', project: 'packages/api' }),
+    ],
+  })
+}
+
+/**
+ * The rollup is one grade among several, and `--fail-under` gates all of them.
+ * A file that selected, graded and verified off the rollup alone would say
+ * "nothing to do" while CI is red naming a package.
+ */
+describe('tasks against per-project grades', () => {
+  it('makes a task for a package graded below A under a rollup graded A', () => {
+    expect(buildAgentTasks(skewed()).map((task) => [task.project, task.category])).toEqual([
+      ['packages/api', 'lint'],
+    ])
+  })
+
+  it('states that package’s own grade as the impact, not the rollup’s', () => {
+    expect(buildAgentTasks(skewed())[0]?.gradeImpact).toBe('lint · F → A')
+  })
+
+  it('verifies against the package, so fixing it is enough to pass', () => {
+    const task = buildAgentTasks(skewed())[0]
+    expect(task?.verify).toEqual([
+      '--only',
+      'lint',
+      '--project',
+      'packages/api',
+      '--fail-under',
+      'A',
+    ])
+
+    const options = parseCliArgs(task?.verify ?? [])
+    expect(options.projects).toEqual(['packages/api'])
+    expect(options.only).toEqual(['lint'])
+    expect(options.failUnder).toBe('A')
+  })
+
+  /**
+   * `not-assessed(repo-scoped)` means the repo holds this project's answer, so
+   * the grade to move is the rollup's — and a `--project` check that can never
+   * fail would be no check at all.
+   */
+  it('falls back to the rollup where the project has no grade of its own', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), security: { status: 'graded', grade: 'F' } },
+      projects: [
+        makeProjectScan({
+          project: projectAt('packages/api'),
+          categories: {
+            ...allGraded(),
+            security: { status: 'not-assessed', reason: 'repo-scoped' },
+          },
+        }),
+        makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+      ],
+      findings: [
+        makeFinding({
+          id: 'secret',
+          category: 'security',
+          tool: 'gitleaks',
+          rule: 'generic-api-key',
+          severity: 'critical',
+          file: 'packages/api/.env',
+          project: 'packages/api',
+        }),
+      ],
+    })
+
+    const task = buildAgentTasks(report)[0]
+    expect(task?.project).toBe('packages/api')
+    expect(task?.gradeImpact).toBe('security · F → A')
+    expect(task?.verify).not.toContain('--project')
   })
 })

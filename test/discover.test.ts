@@ -9,6 +9,7 @@ import {
   discoverProjects,
   isExcluded,
   languageOf,
+  nearestProjectMap,
   partitionProjects,
   readSources,
 } from '../src/core/discover.ts'
@@ -306,18 +307,20 @@ describe('partitionProjects', () => {
     expect(projectAt(projects, '.').languages).toEqual([])
   })
 
-  it('orders projects by path, byte-wise and stable', () => {
-    const files = inventoryOf([
+  it('orders projects by path, byte-wise and whatever order the files came in', () => {
+    const listed = [
       'z/package.json',
       'z/z.js',
       'a/pyproject.toml',
       'a/a.py',
       'package.json',
       'root.js',
-    ])
+    ]
 
-    expect(paths(partitionProjects(files))).toEqual(['.', 'a', 'z'])
-    expect(paths(partitionProjects(files))).toEqual(paths(partitionProjects(files)))
+    expect(paths(partitionProjects(inventoryOf(listed)))).toEqual(['.', 'a', 'z'])
+    // A different inventory order is the same partition: the sort is the
+    // report's, not the file listing's.
+    expect(paths(partitionProjects(inventoryOf(listed.toReversed())))).toEqual(['.', 'a', 'z'])
   })
 })
 
@@ -411,10 +414,50 @@ describe('discoverProjects', () => {
     expect(paths((await discoverProjects(root, declaredElsewhere)).projects)).toEqual(['tools/cli'])
   })
 
-  it('matches the pure partition on the same inventory', async () => {
-    expect(paths((await discoverProjects(root, shellFiles)).projects)).toEqual(
-      paths(partitionProjects(shellFiles)),
+  it('reports the same projects the pure partition does', async () => {
+    const discovered = paths((await discoverProjects(root, shellFiles)).projects)
+
+    expect(discovered).toEqual(['packages/a'])
+    expect(discovered).toEqual(paths(partitionProjects(shellFiles)))
+  })
+})
+
+/**
+ * Which project a path belongs to, for the findings no project's own run
+ * produced: a repo-spanning scan reports across the whole tree at once.
+ */
+describe('nearestProjectMap', () => {
+  const projects = partitionProjects(
+    inventoryOf([
+      'package.json',
+      'packages/web/package.json',
+      'packages/web/src/a.ts',
+      'src/root.ts',
+    ]),
+  )
+
+  it('attributes a path to the nearest project above it', () => {
+    const projectOf = nearestProjectMap(projects)
+
+    expect(projectOf('packages/web/src/a.ts')).toBe('packages/web')
+    expect(projectOf('packages/web/README.md')).toBe('packages/web')
+    // No nearer project claims it, and the root is one here.
+    expect(projectOf('infra/deploy.yaml')).toBe('.')
+  })
+
+  /**
+   * A workspace shell is not a project, so a path outside every package belongs
+   * to none — and saying `.` would name a project that is not in the list.
+   */
+  it('attributes nothing to a root that is not a project', () => {
+    const shell = partitionProjects(
+      inventoryOf(['package.json', 'packages/web/package.json', 'packages/web/src/a.ts']),
     )
+    const projectOf = nearestProjectMap(shell)
+
+    expect(projectOf('packages/web/src/a.ts')).toBe('packages/web')
+    expect(projectOf('.github/workflows/ci.yml')).toBeUndefined()
+    expect(projectOf('README.md')).toBeUndefined()
   })
 })
 

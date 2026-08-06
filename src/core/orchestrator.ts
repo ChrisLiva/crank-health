@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { nearestProjectMap, repoProject } from './discover.ts'
+import { ROOT_PROJECT, nearestProjectMap, repoProject } from './discover.ts'
 import { rawPrefix } from './output.ts'
 import { mapLimit } from './pool.ts'
 import type {
@@ -59,6 +59,15 @@ export interface RunRecord {
    * {@link REPO_SCOPE} for a run that spanned the repo.
    */
   readonly project: string
+  /**
+   * True when this run spanned the repo rather than analyzing one project — a
+   * {@link ToolRunner.repoScoped} runner's single job, or a repo-wide pass.
+   *
+   * {@link project} cannot answer this on its own: {@link REPO_SCOPE} is a
+   * string a repo may also have a package directory called, and taking one for
+   * the other would file two runs' evidence under one name.
+   */
+  readonly repoWide: boolean
   /**
    * True for the repo-wide pass of a {@link ToolRunner.repoWidePass} runner —
    * the one that measures what no single project can see (a clone *between* two
@@ -153,6 +162,10 @@ export async function runScan(
  * identity (identity is path-based and the path did not change). One finding
  * with one id is what the report needs, so the first run to report it keeps it —
  * job order is fixed, so which one that is never varies.
+ *
+ * A path no project in this scan claims carries no attribution at all: the field
+ * is optional, and a finding labelled with a project that is not in `projects[]`
+ * would send a reader looking for a package this run never graded.
  */
 function attribute(records: readonly RunRecord[], projects: readonly Project[]): Finding[] {
   const projectOf = nearestProjectMap(projects)
@@ -162,7 +175,9 @@ function attribute(records: readonly RunRecord[], projects: readonly Project[]):
     for (const finding of record.result.findings) {
       if (seen.has(finding.id)) continue
       seen.add(finding.id)
-      findings.push({ ...finding, project: projectOf(finding.file) })
+      const { project: _reported, ...rest } = finding
+      const project = projectOf(finding.file)
+      findings.push({ ...rest, ...(project === undefined ? {} : { project }) })
     }
   }
   return findings
@@ -174,12 +189,14 @@ function attribute(records: readonly RunRecord[], projects: readonly Project[]):
  *
  * - **counts** (`functionsTotal`, `functionsOverCeiling`, `formattableFiles`)
  *   are counts of *things in the repo*, and each tool only counts the things it
- *   was given. Two tools in the same language are looking at the same files, so
- *   the larger measurement wins; two tools in different languages are looking at
- *   disjoint files, so their measurements add. Hence: maximum within a language,
- *   sum across languages — which is what keeps a mixed JS+Python repo from
- *   grading its formatting against the file count of whichever language happens
- *   to be bigger.
+ *   was given. Two tools in the same language **in the same project** are looking
+ *   at the same files, so the larger measurement wins; two tools in different
+ *   languages, or in different projects, are looking at disjoint files, so their
+ *   measurements add. Hence: maximum within a language within a project, summed
+ *   across projects and languages — which is what keeps a mixed JS+Python repo
+ *   from grading its formatting against the file count of whichever language
+ *   happens to be bigger, and what makes the rollup of three packages the whole
+ *   repo rather than the largest package in it.
  * - **percentages** (`duplicationPercent`, `lineCoveragePercent`) take the
  *   maximum: they are already whole-codebase figures, summing them would be
  *   meaningless, and the maximum is independent of the order tools finished in.
@@ -196,13 +213,13 @@ export function aggregateMetrics(records: readonly RunRecord[]): Record<Category
     const reported = records.filter(
       (record) => record.category === category && record.result.state === 'ok',
     )
-    const detected = combine(reported, 'mutantsDetected', countAcrossScopes)
-    const undetected = combine(reported, 'mutantsUndetected', countAcrossScopes)
+    const detected = combine(reported, 'mutantsDetected', countAcrossUnits)
+    const undetected = combine(reported, 'mutantsUndetected', countAcrossUnits)
 
     merged[category] = {
-      ...combine(reported, 'functionsTotal', countAcrossScopes),
-      ...combine(reported, 'functionsOverCeiling', countAcrossScopes),
-      ...combine(reported, 'formattableFiles', countAcrossScopes),
+      ...combine(reported, 'functionsTotal', countAcrossUnits),
+      ...combine(reported, 'functionsOverCeiling', countAcrossUnits),
+      ...combine(reported, 'formattableFiles', countAcrossUnits),
       ...combine(reported, 'duplicationPercent', highest),
       ...combinedMutationScore(reported, detected, undetected),
       ...detected,
@@ -236,9 +253,12 @@ function combinedMutationScore(
   return { mutationScore: ((detected.mutantsDetected ?? 0) / total) * 100 }
 }
 
-/** One tool's measurement of one field, tagged with the language it measured. */
+/** One tool's measurement of one field, tagged with what it measured. */
 interface ScopedValue {
+  /** The language the measuring runner speaks. */
   readonly scope: RunnerScope
+  /** The project it measured, or {@link REPO_SCOPE} for a repo-spanning run. */
+  readonly project: string
   readonly value: number
 }
 
@@ -259,18 +279,27 @@ function combine(
   const rollup = measured.filter((record) => record.rollupOnly)
   const values = (rollup.length > 0 ? rollup : measured).map(
     (record) =>
-      ({ scope: record.scope, value: record.result.metrics?.[field] ?? 0 }) satisfies ScopedValue,
+      ({
+        scope: record.scope,
+        project: record.project,
+        value: record.result.metrics?.[field] ?? 0,
+      }) satisfies ScopedValue,
   )
   return values.length === 0 ? {} : { [field]: fold(values) }
 }
 
-/** Maximum within each language, summed across them. See {@link aggregateMetrics}. */
-function countAcrossScopes(values: readonly ScopedValue[]): number {
-  const perScope = new Map<RunnerScope, number>()
-  for (const { scope, value } of values) {
-    perScope.set(scope, Math.max(perScope.get(scope) ?? Number.NEGATIVE_INFINITY, value))
+/**
+ * Maximum within one language in one project, summed across every such unit.
+ * See {@link aggregateMetrics}; a single-project repo has one unit per language,
+ * which is the rule it has always been graded under.
+ */
+function countAcrossUnits(values: readonly ScopedValue[]): number {
+  const perUnit = new Map<string, number>()
+  for (const { scope, project, value } of values) {
+    const unit = `${scope} ${project}`
+    perUnit.set(unit, Math.max(perUnit.get(unit) ?? Number.NEGATIVE_INFINITY, value))
   }
-  return [...perScope.values()].reduce((total, value) => total + value, 0)
+  return [...perUnit.values()].reduce((total, value) => total + value, 0)
 }
 
 function highest(values: readonly ScopedValue[]): number {
@@ -652,7 +681,7 @@ async function execute(
   const startedAt = Date.now()
   const timeoutMs = job.runner.deepOnly === true ? budgets.deep : budgets.normal
   const project = attributionOf(job)
-  const scratch = join(repo.scratch, ...rawPrefix(project).split('/'))
+  const scratch = join(repo.scratch, ...rawPrefix(project, job.repoWide).split('/'))
   await mkdir(scratch, { recursive: true })
 
   const result = await withTimeout(
@@ -660,6 +689,7 @@ async function execute(
       job.runner.run({
         repoRoot: repo.repoRoot,
         project: job.project,
+        nestedProjects: nestedProjectsOf(repo, job),
         files: job.files,
         scratch,
         detection: job.detection,
@@ -675,6 +705,7 @@ async function execute(
     category: job.runner.category,
     scope: job.scope,
     project,
+    repoWide: job.repoWide,
     rollupOnly: job.rollupOnly,
     pinnedVersion: job.runner.pinnedVersion,
     detection: job.detection,
@@ -682,6 +713,20 @@ async function execute(
     durationMs: Date.now() - startedAt,
     standby: job.standby,
   }
+}
+
+/**
+ * The projects nested inside this job's, in `RepoContext.projects` order — what
+ * a runner handed a *directory* rather than a file list has to leave to them
+ * (see `RunContext.nestedProjects`). A repo-spanning job gets none: measuring
+ * what the per-project passes cannot see is the whole reason it exists.
+ */
+function nestedProjectsOf(repo: RepoContext, job: Job): readonly string[] {
+  if (job.repoWide) return []
+  const prefix = job.project.path === ROOT_PROJECT ? '' : `${job.project.path}/`
+  return repo.projects
+    .filter((project) => project.path !== job.project.path && project.path.startsWith(prefix))
+    .map((project) => project.path)
 }
 
 /**

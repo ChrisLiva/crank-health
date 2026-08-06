@@ -29,7 +29,7 @@ import type {
   RepoContext,
   ToolMetrics,
 } from './core/types.ts'
-import { CATEGORIES, REPO_SCOPE, toCategoryState } from './core/types.ts'
+import { CATEGORIES, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
 import type { ProjectScan, Report, ResolvedRun } from './render/json.ts'
 import { buildReport, serializeReport } from './render/json.ts'
@@ -119,6 +119,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
         commit,
         profile: options.deep === true ? 'deep' : 'quick',
         selected: tree.selected,
+        ...(options.projects === undefined ? {} : { scopedTo: options.projects }),
         categories: tree.categories,
         metrics: tree.scan.metrics,
         projects: tree.projects,
@@ -219,7 +220,7 @@ export async function adoptRawFiles(
 ): Promise<ResolvedRun[]> {
   const runs: ResolvedRun[] = []
   for (const record of scan.runs) {
-    const prefix = rawPrefix(record.project)
+    const prefix = rawPrefix(record.project, record.repoWide)
     // Sequential: raw files must land in the run directory before the scratch
     // dir is destroyed, and there are only a handful of them.
     // eslint-disable-next-line no-await-in-loop
@@ -418,11 +419,13 @@ export async function gradeProjects(
   deep: boolean,
 ): Promise<ProjectScan[]> {
   const own = scan.runs.filter((record) => !record.rollupOnly)
-  const spanning = own.filter((record) => record.project === REPO_SCOPE)
+  const spanning = own.filter((record) => record.repoWide)
 
   const scans: ProjectScan[] = []
   for (const project of repo.projects) {
-    const records = own.filter((record) => record.project === project.path)
+    // `repoWide` and not the path: a package directory called `repo/` has the
+    // same `project` string a repo-spanning run does.
+    const records = own.filter((record) => !record.repoWide && record.project === project.path)
     const metrics = aggregateMetrics(records)
     const scope: GradedScope = {
       files: project.files,
@@ -442,14 +445,29 @@ export async function gradeProjects(
   return scans
 }
 
-/** Categories the repo answered and the project did not; see {@link REPO_SCOPED_REASON}. */
+/**
+ * Categories the repo answered and the project did not; see
+ * {@link REPO_SCOPED_REASON}.
+ *
+ * "Did not" means *graded*, not *ran*. The common adapter plans a per-project
+ * SAST pass everywhere, so a project always has security records — and if the
+ * only thing they say is that the scanner is not on this machine's PATH, the
+ * project has no security answer of its own and the repo-spanning scan is where
+ * its answer is. Keying on the presence of a record instead would make this
+ * branch unreachable and fail such a project for a category the repo graded.
+ *
+ * The repo's side has to have graded it too. A repo-spanning run that errored or
+ * was not available answered nothing, and stamping projects `repo-scoped` on the
+ * strength of it would exempt them from `--fail-under` on a security scan that
+ * never ran — the failure states must stay visible where they happened.
+ */
 function withRepoScoped(
   outcomes: Record<Category, CategoryOutcome>,
   records: readonly RunRecord[],
   spanning: readonly RunRecord[],
 ): Record<Category, CategoryOutcome> {
-  const assessedHere = new Set(records.map((record) => record.category))
-  const assessedForRepo = new Set(spanning.map((record) => record.category))
+  const assessedHere = gradedCategories(records)
+  const assessedForRepo = gradedCategories(spanning)
 
   const adjusted = {} as Record<Category, CategoryOutcome>
   for (const category of CATEGORIES) {
@@ -459,6 +477,13 @@ function withRepoScoped(
         : outcomes[category]
   }
   return adjusted
+}
+
+/** The categories these runs actually produced a measurement for. */
+function gradedCategories(records: readonly RunRecord[]): Set<Category> {
+  return new Set(
+    records.filter((record) => record.result.state === 'ok').map((record) => record.category),
+  )
 }
 
 /**

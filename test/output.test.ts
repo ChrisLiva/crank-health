@@ -15,8 +15,57 @@ import { execa } from 'execa'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CliUsageError } from '../src/args.ts'
 import { writeScratchRaw } from '../src/core/exec.ts'
-import { DEFAULT_OUTPUT_DIRNAME, RUN_DIRNAME_PATTERN, createOutputDir } from '../src/core/output.ts'
+import {
+  DEFAULT_OUTPUT_DIRNAME,
+  REPO_RAW_DIRNAME,
+  ROOT_RAW_DIRNAME,
+  RUN_DIRNAME_PATTERN,
+  createOutputDir,
+  rawPrefix,
+} from '../src/core/output.ts'
+import { REPO_SCOPE } from '../src/core/types.ts'
 import { createRunDirectory, resolveRepoRoot } from '../src/run.ts'
+
+/** A project path, as every per-project run is filed. */
+function projectPrefix(path: string): string {
+  return rawPrefix(path, false)
+}
+
+/**
+ * The `raw/` nesting is what keeps two runs of the same tool apart, so it has
+ * one job: never hand two different things the same directory. The reserved
+ * names are the interesting case — a repo is perfectly entitled to a package
+ * called `root/`.
+ */
+describe('rawPrefix', () => {
+  it('gives the reserved meanings their reserved directories', () => {
+    expect(rawPrefix(REPO_SCOPE, true)).toBe(REPO_RAW_DIRNAME)
+    expect(projectPrefix('.')).toBe(ROOT_RAW_DIRNAME)
+  })
+
+  it('keeps an ordinary project at its own path', () => {
+    expect(projectPrefix('packages/api')).toBe('packages/api')
+    expect(projectPrefix('rooted')).toBe('rooted')
+    expect(projectPrefix('packages/root')).toBe('packages/root')
+  })
+
+  it('never collides a real project with a reserved directory', () => {
+    const paths = ['.', 'root', 'repo', 'root_', 'repo_', 'root/nested', 'repo/nested']
+    const prefixes = [rawPrefix(REPO_SCOPE, true), ...paths.map((path) => projectPrefix(path))]
+
+    expect(new Set(prefixes).size).toBe(prefixes.length)
+    // …and the escape is the documented one, not merely some unique string.
+    expect(paths.map((path) => projectPrefix(path))).toEqual([
+      ROOT_RAW_DIRNAME,
+      'root_',
+      'repo_',
+      'root__',
+      'repo__',
+      'root_/nested',
+      'repo_/nested',
+    ])
+  })
+})
 
 describe('createOutputDir', () => {
   let repo: string

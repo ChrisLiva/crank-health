@@ -7,6 +7,7 @@ import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
 import type { RunRecord } from '../src/core/orchestrator.ts'
 import { runScan, sortFindings } from '../src/core/orchestrator.ts'
 import { rawPrefix } from '../src/core/output.ts'
+import { REPO_SCOPE } from '../src/core/types.ts'
 import type {
   Category,
   DetectContext,
@@ -284,6 +285,58 @@ describe('runScan repo-wide duplication pass', () => {
     expect(result.metrics.duplication).toEqual({ duplicationPercent: 5 })
   })
 
+  /**
+   * Scoping narrows the project dimension and nothing else: two packages
+   * selected out of three still have a "between" to measure, and the rollup is
+   * where that measurement belongs.
+   */
+  it('still runs the repo-wide pass when more than one project is scanned', async () => {
+    const scoped: RepoContext = {
+      ...MONO,
+      projects: MONO.projects.filter((project) => project.path !== '.'),
+    }
+
+    const result = await runScan(scoped, [commonAdapter([jscpd(5, {})])])
+
+    expect(result.runs.map((run) => [run.project, run.rollupOnly])).toEqual([
+      ['packages/api', false],
+      ['packages/web', false],
+      ['repo', true],
+    ])
+  })
+
+  /**
+   * A parent project holding packages of its own must not measure their code as
+   * its duplication — nor the clones between them, which belong to the rollup
+   * alone. The file list already excludes them; a runner handed a *directory*
+   * needs telling.
+   */
+  it('tells each per-project run which projects are nested inside it', async () => {
+    const runner: ToolRunner = {
+      ...fakeRunner('jscpd', 'duplication', async () => ok()),
+      repoWidePass: true,
+    }
+
+    await runScan(MONO, [commonAdapter([runner])])
+
+    // Sorted: the pool decides which run starts first, and nothing here is about
+    // that. The repo-wide pass is the one handed the whole inventory.
+    const nesting = (runner as FakeRunner).calls
+      .map((call) => {
+        const unit = call.files.length === MONO_FILES.all.length ? 'repo-wide' : call.project.path
+        return `${unit} → [${(call.nestedProjects ?? []).join(' ')}]`
+      })
+      .toSorted()
+
+    expect(nesting).toEqual([
+      '. → [packages/api packages/web]',
+      'packages/api → []',
+      'packages/web → []',
+      // The repo-wide pass is the one that is supposed to see everything.
+      'repo-wide → []',
+    ])
+  })
+
   it('adds no second pass to a single-project repo', async () => {
     const runner: ToolRunner = {
       ...fakeRunner('jscpd', 'duplication', async () => ({
@@ -354,9 +407,43 @@ describe('runScan finding attribution', () => {
       'in-web': 'packages/web',
       'in-api': 'packages/api',
       'at-root': '.',
-      // Under no project at all: the repo's own, so a reader still sees it.
+      // Under no project at all, but the root is a project here, so it is its.
       unclaimed: '.',
     })
+  })
+
+  /**
+   * With a workspace shell at the root there is no project at `.`, and a
+   * workflow file belongs to none of the packages. Stamping it `.` would put a
+   * task under a project that is not in `projects[]` at all.
+   */
+  it('leaves a finding no project claims unattributed', async () => {
+    const files = inventoryOf([
+      '.github/workflows/ci.yml',
+      'package.json',
+      'packages/web/package.json',
+      'packages/web/src/app.ts',
+    ])
+    const gitleaks: ToolRunner = {
+      ...fakeRunner('gitleaks', 'security', async () =>
+        ok([
+          makeFinding({ id: 'in-web', category: 'security', file: 'packages/web/src/app.ts' }),
+          makeFinding({ id: 'in-ci', category: 'security', file: '.github/workflows/ci.yml' }),
+        ]),
+      ),
+      repoScoped: true,
+    }
+
+    const result = await runScan(
+      { repoRoot: '/repo', files, scratch: SCRATCH, projects: partitionProjects(files) },
+      [commonAdapter([gitleaks])],
+    )
+
+    expect(result.findings.map((finding) => [finding.id, finding.project])).toEqual([
+      ['in-ci', undefined],
+      ['in-web', 'packages/web'],
+    ])
+    expect(result.findings.find((finding) => finding.id === 'in-ci')).not.toHaveProperty('project')
   })
 })
 
@@ -375,9 +462,8 @@ describe('runScan raw staging', () => {
       commonAdapter([gitleaks]),
     ])
 
-    const prefixes = result.runs.map((run) => rawPrefix(run.project))
+    const prefixes = result.runs.map((run) => rawPrefix(run.project, run.repoWide))
     expect(prefixes).toEqual(['root', 'packages/web', 'packages/api', 'repo'])
-    expect(new Set(prefixes).size).toBe(prefixes.length)
     expect(prefixes.some((prefix) => prefix.includes('\\'))).toBe(false)
 
     const scratches = [...oxlint.calls, ...ruff.calls, ...(gitleaks as FakeRunner).calls]
@@ -387,6 +473,102 @@ describe('runScan raw staging', () => {
       prefixes.map((prefix) => join(SCRATCH, ...prefix.split('/'))).toSorted(),
     )
     expect(await Promise.all(scratches.map(isDirectory))).toEqual(scratches.map(() => true))
+  })
+
+  /**
+   * The reserved `raw/root` and `raw/repo` are names a repo may already use for
+   * a package. Two runs staging into one directory is evidence one of them
+   * loses — and a report a tool reads back out of the wrong file.
+   */
+  it('keeps a project called root or repo out of the reserved directories', async () => {
+    const files = inventoryOf([
+      'package.json',
+      'repo/package.json',
+      'repo/src/b.ts',
+      'root/package.json',
+      'root/src/a.ts',
+      'src/root.ts',
+    ])
+    const oxlint = fakeRunner('oxlint', 'lint', async () => ok())
+    const gitleaks: ToolRunner = {
+      ...fakeRunner('gitleaks', 'security', async () => ok()),
+      repoScoped: true,
+    }
+
+    const result = await runScan(
+      { repoRoot: '/repo', files, scratch: SCRATCH, projects: partitionProjects(files) },
+      [languageAdapter('js-ts', [oxlint]), commonAdapter([gitleaks])],
+    )
+
+    // Three of these four `project` strings are project paths and one is the
+    // repo scope — and two of them are spelled the same.
+    expect(result.runs.map((run) => [run.project, run.repoWide])).toEqual([
+      ['.', false],
+      ['repo', false],
+      ['root', false],
+      [REPO_SCOPE, true],
+    ])
+
+    const scratches = [...oxlint.calls, ...(gitleaks as FakeRunner).calls]
+      .map((call) => call.scratch)
+      .toSorted()
+    expect(new Set(scratches).size).toBe(scratches.length)
+    expect(scratches).toEqual(
+      [
+        join(SCRATCH, 'root'), // the root project
+        join(SCRATCH, 'root_'), // the package called `root/`
+        join(SCRATCH, 'repo_'), // the package called `repo/`
+        join(SCRATCH, 'repo'), // the repo-spanning run
+      ].toSorted(),
+    )
+  })
+})
+
+/**
+ * The rollup's numbers are the whole repo's. Every runner only counts what it
+ * was handed, so the merge is what turns per-project measurements back into one
+ * — and a rule that took the largest project's count would grade three packages
+ * against the size of one.
+ */
+describe('runScan rollup metrics', () => {
+  const formatter = (tool: string, files: number): ToolRunner =>
+    fakeRunner(tool, 'format', async () => ({ ...ok(), metrics: { formattableFiles: files } }))
+
+  it('sums each project’s count into the rollup', async () => {
+    const result = await runScan(MONO, [
+      languageAdapter('js-ts', [formatter('prettier', 1)]),
+      languageAdapter('python', [formatter('ruff-format', 1)]),
+    ])
+
+    // Two JS projects and one Python project, one file each — not `1`.
+    expect(result.metrics.format).toEqual({ formattableFiles: 3 })
+  })
+
+  it('still takes the larger of two tools measuring the same project’s files', async () => {
+    const result = await runScan(REPO, [
+      adapter('js-ts', [formatter('prettier', 5), formatter('biome', 3)]),
+    ])
+
+    expect(result.metrics.format).toEqual({ formattableFiles: 5 })
+  })
+
+  it('sums the mutation counts and re-derives the score over all of them', async () => {
+    const stryker = (detected: number, undetected: number): ToolRunner =>
+      fakeRunner('stryker', 'test-quality', async (ctx) => ({
+        ...ok(),
+        metrics:
+          ctx.project.path === 'packages/web'
+            ? { mutantsDetected: detected, mutantsUndetected: undetected, mutationScore: 90 }
+            : { mutantsDetected: 1, mutantsUndetected: 9, mutationScore: 10 },
+      }))
+
+    const result = await runScan(MONO, [languageAdapter('js-ts', [stryker(9, 1)])])
+
+    expect(result.metrics['test-quality']).toEqual({
+      mutationScore: 50,
+      mutantsDetected: 10,
+      mutantsUndetected: 10,
+    })
   })
 })
 

@@ -81,7 +81,13 @@ describe('gradeProjects', () => {
     expect(categories('packages/web').security).toEqual({ status: 'graded', grade: 'F' })
   })
 
-  it('says repo-scoped where only a repo-spanning run assessed the category', () => {
+  /**
+   * `packages/api` *has* a security record — the per-project SAST pass is
+   * planned in every project — and all it says is that the scanner is missing.
+   * Having run is not having answered, so the project's security answer is the
+   * repo's, and `--fail-under` must not fail the package for it.
+   */
+  it('says repo-scoped where the project’s own runs assessed nothing', () => {
     expect(categories('packages/api').security).toEqual({
       status: 'not-assessed',
       reason: REPO_SCOPED_REASON,
@@ -92,11 +98,22 @@ describe('gradeProjects', () => {
    * The repo-wide duplication pass measures clones *between* packages, which is
    * in neither package's own measurement. Only the rollup grades on it.
    */
-  it('keeps the repo-wide rollup pass out of every project’s measurement', () => {
-    for (const project of graded) {
-      expect(project.metrics.duplication.duplicationPercent).toBe(1)
-      expect(project.categories.duplication).toEqual({ status: 'graded', grade: 'A' })
-    }
+  it('keeps the repo-wide rollup pass out of a project’s measurement', () => {
+    const web = graded.find((project) => project.project.path === 'packages/web')
+    expect(web?.metrics.duplication.duplicationPercent).toBe(1)
+    expect(web?.categories.duplication).toEqual({ status: 'graded', grade: 'A' })
+  })
+
+  /**
+   * …and out of the repo-scoped substitution. The repo-wide pass answers about
+   * the rollup, not about a package whose own measurement failed: that package
+   * keeps its own reason, and the gate still sees the failure.
+   */
+  it('never lets the rollup pass stand in for a project’s failed run', () => {
+    expect(categories('packages/api').duplication).toEqual({
+      status: 'not-assessed',
+      reason: 'jscpd found nothing to measure',
+    })
   })
 
   it('gives each project the quick profile’s reason for test quality', () => {
@@ -113,6 +130,32 @@ describe('gradeProjects', () => {
   }
 })
 
+/**
+ * `repo-scoped` says the repo holds this project's answer. A repo-spanning run
+ * that errored or never ran holds nothing — stamping the projects with it would
+ * exempt them from `--fail-under` on the strength of a security scan that did
+ * not happen, which is the one direction this must never fail in.
+ */
+describe('gradeProjects when the repo-spanning run failed too', () => {
+  it('leaves each project the reason its own runs gave', async () => {
+    const scanned = scan()
+    const graded = await gradeProjects(
+      repo(),
+      {
+        ...scanned,
+        runs: scanned.runs.map((run) =>
+          run.tool === 'gitleaks' ? degraded(run, 'gitleaks is not on PATH') : run,
+        ),
+      },
+      CATEGORIES,
+      false,
+    )
+
+    const api = graded.find((project) => project.project.path === 'packages/api')
+    expect(api?.categories.security).toEqual({ status: 'not-assessed', reason: NO_SCANNER })
+  })
+})
+
 function repo(): RepoContext {
   return {
     repoRoot,
@@ -121,6 +164,9 @@ function repo(): RepoContext {
     projects: PROJECTS,
   }
 }
+
+/** What a runner that could not answer here reports; see {@link degraded}. */
+const NO_SCANNER = 'opengrep is not on PATH'
 
 /** A scan of the tree: two linters, one secrets scan, and three jscpd passes. */
 function scan(): ScanResult {
@@ -151,9 +197,12 @@ function scan(): ScanResult {
       record('oxlint', 'lint', 'packages/web'),
       record('ruff', 'lint', 'packages/api'),
       record('opengrep', 'security', 'packages/web'),
+      // The per-project SAST pass is planned everywhere, so `packages/api` has a
+      // security record — it just says nothing, because the scanner is missing.
+      degraded(record('opengrep', 'security', 'packages/api'), NO_SCANNER),
       record('gitleaks', 'security', REPO_SCOPE),
       record('jscpd', 'duplication', 'packages/web', { duplicationPercent: 1 }),
-      record('jscpd', 'duplication', 'packages/api', { duplicationPercent: 1 }),
+      degraded(record('jscpd', 'duplication', 'packages/api'), 'jscpd found nothing to measure'),
       {
         ...record('jscpd', 'duplication', REPO_SCOPE, { duplicationPercent: 40 }),
         rollupOnly: true,
@@ -183,6 +232,7 @@ function record(
     category,
     scope: 'common',
     project,
+    repoWide: project === REPO_SCOPE,
     rollupOnly: false,
     pinnedVersion: '1.0.0',
     detection: null,
@@ -195,4 +245,9 @@ function record(
     durationMs: 1,
     standby: false,
   }
+}
+
+/** The same record, from a tool that could not run here. */
+function degraded(base: RunRecord, reason: string): RunRecord {
+  return { ...base, result: { state: 'not-available', findings: [], rawFiles: [], reason } }
 }

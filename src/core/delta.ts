@@ -1,3 +1,4 @@
+import { nearestProjectMap } from './discover.ts'
 import { fingerprint } from './fingerprint.ts'
 import { sortFindings } from './orchestrator.ts'
 import type { Category, CategoryState, Finding } from './types.ts'
@@ -122,7 +123,13 @@ export const PROJECT_REMOVED_REASON = 'project removed by this change'
 
 /** Computes the delta. See the module note for what makes it more than a diff. */
 export function computeDelta(input: DeltaInput): DeltaResult {
-  const base = remapRenames(input.baseFindings, input.renames)
+  // Head's partition decides the attribution, because a remapped finding is the
+  // base one restated at its head path — and that path may be in another project.
+  const base = remapRenames(
+    input.baseFindings,
+    input.renames,
+    nearestProjectMap(input.headProjects),
+  )
   const baseIds = new Set(base.map((finding) => finding.id))
   const headIds = new Set(input.headFindings.map((finding) => finding.id))
 
@@ -216,21 +223,32 @@ function compare(a: string, b: string): number {
  * identity, and the base scan's line numbers are the honest record of where the
  * finding was when it was seen.
  *
+ * Its **project** moves with it: `git mv`-ing a file from one package to another
+ * is one finding that changed hands, and leaving the base attribution on it
+ * would count a resolved finding against the package it left — the very churn
+ * the re-hash exists to prevent, one level up.
+ *
  * A finding with no {@link Finding.identity} (hand-constructed; the core always
  * attaches one) cannot be re-hashed, so it is left at its base path. It will
  * read as resolved, with its head twin new — the conservative failure, and one
  * that overstates churn rather than hiding a regression.
+ *
+ * @param projectOf head's attribution rule; omitted, base attribution stands.
  */
 export function remapRenames(
   findings: readonly Finding[],
   renames: ReadonlyMap<string, string>,
+  projectOf?: (file: string) => string | undefined,
 ): Finding[] {
   if (renames.size === 0) return [...findings]
   return findings.map((finding) => {
     const renamed = renames.get(finding.file)
     if (renamed === undefined || finding.identity === undefined) return finding
+    const { project: _base, ...rest } = finding
+    const project = projectOf === undefined ? finding.project : projectOf(renamed)
     return {
-      ...finding,
+      ...rest,
+      ...(project === undefined ? {} : { project }),
       file: renamed,
       id: fingerprint(
         finding.category,

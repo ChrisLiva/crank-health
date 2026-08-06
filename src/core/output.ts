@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { ROOT_PROJECT } from './discover.ts'
-import { REPO_SCOPE } from './types.ts'
 
 /** Output dir when `--out` is not given (spec §9). */
 export const DEFAULT_OUTPUT_DIRNAME = '.codebase-health'
@@ -14,17 +13,38 @@ export const REPO_RAW_DIRNAME = 'repo'
 export const ROOT_RAW_DIRNAME = 'root'
 
 /**
+ * A first path segment the reserved names would collide with: `root` and `repo`
+ * themselves, and the escapes of them ({@link rawPrefix}).
+ */
+const RESERVED_SEGMENT = /^(?:root|repo)_*$/
+
+/**
  * The `raw/` subdirectory one run's evidence belongs in: the project's own
  * repo-relative posix path, with two reserved names — `repo/` for a run that
  * answered about the repo and `root/` for the root project. The nesting is what
  * keeps the same tool's output in two projects apart, since every runner names
  * its raw files after itself.
  *
- * @param project a project path, or {@link REPO_SCOPE}
+ * A repo may of course contain a package directory called `root/` or `repo/`,
+ * and it must not land in the reserved one — two runs writing the same file is
+ * evidence one of them silently loses, and a tool that reads its report back out
+ * of the run directory would read the other's (jscpd runs both per project and
+ * once over the repo, under one file name). Such a first segment therefore gains
+ * a trailing `_`, and so does one that already ends in `_`s: `root` → `root_`,
+ * `root_` → `root__`. Doubling is what keeps the escape injective, so no two
+ * projects can ever be handed the same directory.
+ *
+ * @param project a project path, or {@link import('./types.ts').REPO_SCOPE}
+ * @param repoWide whether this run spanned the repo. Not derivable from
+ * `project`: `REPO_SCOPE` is `repo`, which is also a directory name a
+ * package may have, and only the caller knows which of the two it holds.
  */
-export function rawPrefix(project: string): string {
-  if (project === REPO_SCOPE) return REPO_RAW_DIRNAME
-  return project === ROOT_PROJECT ? ROOT_RAW_DIRNAME : project
+export function rawPrefix(project: string, repoWide: boolean): string {
+  if (repoWide) return REPO_RAW_DIRNAME
+  if (project === ROOT_PROJECT) return ROOT_RAW_DIRNAME
+  const segments = project.split('/')
+  const first = segments[0] ?? project
+  return RESERVED_SEGMENT.test(first) ? [`${first}_`, ...segments.slice(1)].join('/') : project
 }
 
 /** What a default run directory is named: local date plus a 4-hex run id. */

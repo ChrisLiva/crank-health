@@ -126,6 +126,7 @@ describe('buildReport', () => {
       category: 'types',
       scope: 'js-ts',
       project: '.',
+      repoWide: false,
       rollupOnly: false,
       pinnedVersion: '7.0.2',
       detection,
@@ -291,6 +292,23 @@ describe('buildReport projects', () => {
   })
 
   /**
+   * Under `--project` the rollup covers the selection rather than the repo, and
+   * nothing else in the report says so — a reader (or a renderer) would take the
+   * top-level grades for the whole tree's.
+   */
+  it('records the --project selection the rollup was computed over', () => {
+    const scoped = buildReport(input({ scopedTo: ['packages/web', 'packages/api'] }))
+    expect(scoped.scopedTo).toEqual(['packages/api', 'packages/web'])
+    expect(Object.keys(scoped).indexOf('scopedTo')).toBe(
+      Object.keys(scoped).indexOf('selected') + 1,
+    )
+  })
+
+  it('has no scopedTo key at all when every project was scanned', () => {
+    expect('scopedTo' in buildReport(input())).toBe(false)
+  })
+
+  /**
    * The determinism contract (spec §6) across the project dimension: the same
    * scan described in a different order is the same bytes.
    */
@@ -448,6 +466,27 @@ describe('renderTerminal projects', () => {
     const single = buildReport(input({ projects: [makeProjectScan({ categories: allGraded() })] }))
     expect(renderTerminal(single, paths, { color: false })).not.toContain('Projects')
   })
+
+  /**
+   * …unless its root is a shell. One package in a workspace is still not the
+   * repo root, and the note is the only place that says so.
+   */
+  it('still says the root is a shell when the workspace holds one package', () => {
+    const onePackage = buildReport(
+      input({
+        projects: [
+          makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+        ],
+        rootShell: { declaredBy: ['pnpm-workspace.yaml'] },
+      }),
+    )
+    const rendered = renderTerminal(onePackage, paths, { color: false })
+
+    expect(rendered).toContain(
+      'The repo root is a workspace shell (declared by pnpm-workspace.yaml)',
+    )
+    expect(rendered).toContain('  packages/web')
+  })
 })
 
 const input = makeReportInput
@@ -458,6 +497,7 @@ function record(): RunRecord {
     category: 'lint',
     scope: 'js-ts',
     project: '.',
+    repoWide: false,
     rollupOnly: false,
     pinnedVersion: '1.77.0',
     detection: null,

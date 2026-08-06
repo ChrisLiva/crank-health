@@ -166,10 +166,13 @@ function projectMovement(project: ReportProjectMovement, color: Colors): string 
  * a report. `report.md` carries every project's eight states in full.
  *
  * A single-project repo is the whole repo, and repeating the grades above it
- * would say nothing: the block is only rendered where there is more than one.
+ * would say nothing: the block is only rendered where there is more than one —
+ * or where the root is a workspace shell, which a one-package workspace has to
+ * be told about too, since its one project is not the repo root a reader
+ * assumes.
  */
 function projectLines(report: Report, color: Colors): string[] {
-  if (report.projects.length < 2) return []
+  if (report.projects.length < 2 && report.rootShell === undefined) return []
   const lines = [color.bold('Projects')]
   if (report.rootShell !== undefined) lines.push(color.dim(`  ${rootShellNote(report.rootShell)}`))
 

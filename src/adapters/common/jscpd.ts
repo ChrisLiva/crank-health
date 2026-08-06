@@ -36,10 +36,11 @@ import {
  * double-counted into a grade the percentage already decided.
  *
  * **Once per project, plus once over the repo** (`ToolRunner.repoWidePass`).
- * Each project's percentage is measured over that project's directory alone, so
- * it grades what that project duplicated; a clone *between* two packages is in
- * neither of those measurements, which is what the repo-wide pass is for — its
- * percentage is the rollup's.
+ * Each project's percentage is measured over that project's directory alone,
+ * minus the projects nested inside it ({@link invocationArgs}), so it grades
+ * what that project duplicated; a clone *between* two packages is in neither of
+ * those measurements, which is what the repo-wide pass is for — its percentage
+ * is the rollup's.
  */
 
 export const JSCPD_TOOL = 'jscpd'
@@ -110,7 +111,10 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
   const execution = await execTool(
     {
       ...command,
-      args: [...command.args, ...invocationArgs(join(ctx.repoRoot, ctx.project.path), output)],
+      args: [
+        ...command.args,
+        ...invocationArgs(join(ctx.repoRoot, ctx.project.path), output, ctx.nestedProjects ?? []),
+      ],
     },
     // Started outside the repo: jscpd's default reporter writes `report/` into
     // the working directory, and `-o` is the flag that redirects it — but a
@@ -187,10 +191,21 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
  * over its own set; on a repo where those sets differ it is an approximation,
  * and a documented one.
  *
+ * A project's nested projects are ignored rather than measured: handing jscpd a
+ * directory means handing it everything under it, and a parent whose packages
+ * live inside it would otherwise grade their code — and the clones *between*
+ * them — as its own duplication. That measurement belongs to the repo-wide pass
+ * alone, which passes no nested list.
+ *
  * @param scanRoot absolute path of the directory to measure: the project's own,
  * or the repo root for the repo-wide pass
+ * @param nested repo-relative posix paths of the projects inside this one
  */
-export function invocationArgs(scanRoot: string, output: string): string[] {
+export function invocationArgs(
+  scanRoot: string,
+  output: string,
+  nested: readonly string[] = [],
+): string[] {
   return [
     '--reporters',
     'json',
@@ -200,7 +215,7 @@ export function invocationArgs(scanRoot: string, output: string): string[] {
     '--format',
     FORMATS,
     '--ignore',
-    IGNORE_GLOBS,
+    [IGNORE_GLOBS, ...nested.map((project) => `**/${project}/**`)].join(','),
     // Absolute names in the report; with relative ones jscpd resolves them
     // against its own cwd, which is the scratch dir, not the repo.
     '--absolute',

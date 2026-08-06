@@ -146,8 +146,9 @@ npx crank-health --project packages/api --project packages/web
 Scoping narrows the project dimension and nothing else. Repo-spanning tools still span the whole
 repo — a secrets scan that skipped half the tree would be a secrets scan that misses the secret —
 and the rollup is then computed over what was scanned: the selected projects' files as the
-denominator, plus every finding the run produced. An unknown path is a usage error (exit 2) whose
-message lists the projects discovery did find.
+denominator, plus every finding the run produced — and `report.json` records the selection under
+`scopedTo`, so the top-level grades are never mistaken for the whole tree's. An unknown path is a
+usage error (exit 2) whose message lists the projects discovery did find.
 
 ## Grading
 
@@ -206,12 +207,12 @@ date plus a 4-character run id), so consecutive runs keep their history instead 
 other; `.codebase-health/` carries a `.gitignore` (`*`) that hides every run from your working tree.
 `--out <dir>` writes this run exactly to `<dir>` — no dated subfolder. Each run directory contains:
 
-| File          | For                                                                                                                                                                                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `report.json` | The contract. Every finding, category state, metric, resolved tool version — as the rollup at the top level, and again per project under `projects[]` (path, manifests, languages, all eight states, metrics, and the toolchain each one owns).         |
-| `report.md`   | The human report: grades, provenance tags, remediation.                                                                                                                                                                                                 |
-| `agent.md`    | The coding-agent brief: ≤ 20 themed tasks in a deterministic priority order (security → types → dead code → complexity → duplication → lint → format, worst grade first), each with a stable ID, a grade impact, an evidence link and a verify command. |
-| `raw/`        | Each tool's own output, as evidence — source excerpts excepted, see below. Nested by what the run was about: `raw/<project-path>/`, `raw/root/` for the root project, `raw/repo/` for a repo-spanning run, and `raw/base/…` for a `--pr` base scan.     |
+| File          | For                                                                                                                                                                                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `report.json` | The contract. Every finding, category state, metric, resolved tool version — as the rollup at the top level, and again per project under `projects[]` (path, manifests, languages, all eight states, metrics, and the toolchain each one owns). `scopedTo` records a `--project` selection the rollup was computed over.                                           |
+| `report.md`   | The human report: grades, provenance tags, remediation.                                                                                                                                                                                                                                                                                                            |
+| `agent.md`    | The coding-agent brief: ≤ 20 themed tasks in a deterministic priority order (security → types → dead code → complexity → duplication → lint → format, worst grade first), each with a stable ID, a grade impact, an evidence link and a verify command.                                                                                                            |
+| `raw/`        | Each tool's own output, as evidence — source excerpts excepted, see below. Nested by what the run was about: `raw/<project-path>/`, `raw/root/` for the root project, `raw/repo/` for a repo-spanning run, and `raw/base/…` for a `--pr` base scan. A package whose own directory is called `root/` or `repo/` gets a trailing `_`, so nothing shares a directory. |
 
 ### Secrets stay in your repo
 
