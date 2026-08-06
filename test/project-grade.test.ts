@@ -4,11 +4,11 @@ import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
 import type { RunRecord, ScanResult } from '../src/core/orchestrator.ts'
-import { sortFindings } from '../src/core/orchestrator.ts'
+import { QUICK_MODE_DEEP_REASON, sortFindings } from '../src/core/orchestrator.ts'
 import type { Category, CategoryOutcome, RepoContext, ToolMetrics } from '../src/core/types.ts'
 import { CATEGORIES, REPO_SCOPE } from '../src/core/types.ts'
 import type { ProjectScan } from '../src/render/json.ts'
-import { QUICK_MODE_TEST_QUALITY_REASON, REPO_SCOPED_REASON, gradeProjects } from '../src/run.ts'
+import { REPO_SCOPED_REASON, gradeProjects } from '../src/run.ts'
 import { makeFinding } from './factories.ts'
 
 /**
@@ -52,7 +52,7 @@ describe('gradeProjects', () => {
   let graded: readonly ProjectScan[]
 
   beforeAll(async () => {
-    graded = await gradeProjects(repo(), scan(), CATEGORIES, false)
+    graded = await gradeProjects(repo(), scan(), CATEGORIES)
   })
 
   it('returns every project, in path order, with all eight states', () => {
@@ -119,7 +119,7 @@ describe('gradeProjects', () => {
   it('gives each project the quick profile’s reason for test quality', () => {
     expect(categories('packages/web')['test-quality']).toEqual({
       status: 'not-assessed',
-      reason: QUICK_MODE_TEST_QUALITY_REASON,
+      reason: QUICK_MODE_DEEP_REASON,
     })
   })
 
@@ -148,7 +148,6 @@ describe('gradeProjects when the repo-spanning run failed too', () => {
         ),
       },
       CATEGORIES,
-      false,
     )
 
     const api = graded.find((project) => project.project.path === 'packages/api')
@@ -201,14 +200,50 @@ describe('gradeProjects on a C#-only project', () => {
           ToolMetrics
         >,
         warnings: [],
+        deferredCategories: ['test-quality'],
       },
       CATEGORIES,
-      false,
     )
 
     expect(graded.map((project) => project.project.path)).toEqual(['packages/cs'])
     // One warning in 2000 lines is 0.5 weighted findings per KLOC → A.
     expect(graded[0]?.categories.lint).toEqual({ status: 'graded', grade: 'A' })
+  })
+
+  /**
+   * The deferral is the scan's, not test quality's: every project-mode C# tool
+   * is deep-only, so a quick scan defers lint too — and the project must read
+   * the same "run `--deep`" the rollup gives, not "no tool available" for a
+   * category a deep run would grade.
+   */
+  it('stamps the deep-run reason on every deferred category, not just test quality', async () => {
+    const files = inventoryOf(Object.keys(CS_TREE).toSorted())
+    const graded = await gradeProjects(
+      { repoRoot: csRoot, files, scratch: csRoot, projects: partitionProjects(files) },
+      {
+        findings: [],
+        runs: [],
+        categories: Object.fromEntries(
+          CATEGORIES.map((category) => [category, { status: 'assessed' }]),
+        ) as Record<Category, CategoryOutcome>,
+        metrics: Object.fromEntries(CATEGORIES.map((category) => [category, {}])) as Record<
+          Category,
+          ToolMetrics
+        >,
+        warnings: [],
+        deferredCategories: ['lint', 'test-quality'],
+      },
+      CATEGORIES,
+    )
+
+    expect(graded[0]?.categories.lint).toEqual({
+      status: 'not-assessed',
+      reason: QUICK_MODE_DEEP_REASON,
+    })
+    expect(graded[0]?.categories['test-quality']).toEqual({
+      status: 'not-assessed',
+      reason: QUICK_MODE_DEEP_REASON,
+    })
   })
 })
 
@@ -274,6 +309,8 @@ function scan(): ScanResult {
       ToolMetrics
     >,
     warnings: [],
+    // A quick scan: the mutation tier was deferred, not absent.
+    deferredCategories: ['test-quality'],
   }
 }
 
