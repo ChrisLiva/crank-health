@@ -1,12 +1,14 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, join, relative } from 'node:path'
+import { delimiter, dirname, join, relative } from 'node:path'
+import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { centralPackageManagementReason } from '../src/adapters/common/osv-scanner.ts'
 import type { Category, Finding, LanguageAdapter } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
-import { createFixtureRepo } from './support/fixture.ts'
+import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS, installedSystemTools } from './support/system-tools.ts'
 
@@ -348,6 +350,86 @@ describe('quick scan of the sec-basic fixture', () => {
   )
 })
 
+/** The exact sentence criterion 8 pins — see `centralPackageManagementReason`. */
+const CPM_REASON =
+  'Directory.Packages.props manages versions centrally; osv-scanner cannot read ' +
+  'Central Package Management, so NuGet dependencies were not scanned'
+
+/**
+ * The pure half of criterion 8, ungated so the sentence is pinned on every
+ * machine and not only osv-equipped ones. The helper is language-blind — it
+ * looks at file names, not at any adapter — which is why these live beside
+ * osv-scanner's own assertions rather than in the C# suite.
+ */
+describe('centralPackageManagementReason', () => {
+  it('names the NuGet gap when the repo manages versions centrally', () => {
+    expect(centralPackageManagementReason(['a/Directory.Packages.props', 'b.cs'])).toBe(CPM_REASON)
+  })
+
+  it('stays silent when no Central Package Management manifest exists', () => {
+    expect(centralPackageManagementReason(['b.cs'])).toBeUndefined()
+  })
+
+  /** MSBuild's own import is case-sensitive on case-sensitive filesystems. */
+  it('matches the manifest name case-sensitively', () => {
+    expect(centralPackageManagementReason(['directory.packages.props'])).toBeUndefined()
+  })
+})
+
+/**
+ * The wired half: a real osv-scanner over a Central Package Management repo
+ * still answers `ok` — it scanned what it could — and the record carries the
+ * reason naming what it could not. The reason attaches only on the `ok` path: a
+ * missing osv-scanner keeps its own `not-available` explanation.
+ */
+describe.runIf(installed.has('osv-scanner'))(
+  'osv-scanner on a Central Package Management repo',
+  () => {
+    let fixture: FixtureRepo
+    let scan: HealthScanResult
+
+    beforeAll(async () => {
+      fixture = await tempRepo({
+        'Directory.Packages.props':
+          '<Project>\n' +
+          '  <PropertyGroup>\n' +
+          '    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>\n' +
+          '  </PropertyGroup>\n' +
+          '  <ItemGroup>\n' +
+          '    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />\n' +
+          '  </ItemGroup>\n' +
+          '</Project>\n',
+        'App.csproj':
+          '<Project Sdk="Microsoft.NET.Sdk">\n' +
+          '  <PropertyGroup>\n' +
+          '    <TargetFramework>net10.0</TargetFramework>\n' +
+          '  </PropertyGroup>\n' +
+          '  <ItemGroup>\n' +
+          '    <PackageReference Include="Newtonsoft.Json" />\n' +
+          '  </ItemGroup>\n' +
+          '</Project>\n',
+        'App.cs':
+          'namespace App;\n\npublic static class Answer\n{\n    public const int Value = 42;\n}\n',
+      })
+      scan = await runHealthScan({ path: fixture.root, only: ['security'] })
+    }, SCAN_TIMEOUT_MS)
+
+    afterAll(async () => {
+      await fixture.remove()
+    })
+
+    it('answers ok, carrying the reason NuGet dependencies were not scanned', () => {
+      const record = parse(scan.json).tools.find((tool) => tool.tool === 'osv-scanner')
+      expect(record?.state).toBe('ok')
+      expect(record?.reason).toBe(CPM_REASON)
+    })
+
+    it('still grades security from the scanners that did run', () => {
+      expect(parse(scan.json).categories.security?.status).toBe('graded')
+    })
+  },
+)
+
 /** A ruff-shaped runner: category `lint`, emitting a `security` finding. */
 const ruffLike = (findings: readonly Finding[]): LanguageAdapter => ({
   language: 'python',
@@ -573,6 +655,38 @@ async function expectNoSecretUnder(runDirectory: string): Promise<void> {
     const where = relative(runDirectory, file)
     expect(contents, `${where} carries the planted secret`).not.toContain(PLANTED_SECRET)
     expect(contents, `${where} carries the planted secret`).not.toContain('AKIA')
+  }
+}
+
+/**
+ * A throwaway git repo from a file map, committed before it is scanned — the
+ * Central Package Management tree is not one any checked-in fixture has, and
+ * discovery is `git ls-files`-based, so the commit has to come first. Same
+ * frozen identity as `createFixtureRepo`.
+ */
+async function tempRepo(files: Readonly<Record<string, string>>): Promise<FixtureRepo> {
+  const root = await mkdtemp(join(tmpdir(), 'crank-sec-temp-'))
+  const git = (args: string[]) => execa('git', args, { cwd: root, env: COMMIT_IDENTITY })
+
+  for (const [path, content] of Object.entries(files)) {
+    const target = join(root, path)
+    // Sequential: a handful of files, and the order they are written in is the
+    // order they read in.
+    // eslint-disable-next-line no-await-in-loop
+    await mkdir(dirname(target), { recursive: true })
+    // eslint-disable-next-line no-await-in-loop
+    await writeFile(target, content, 'utf8')
+  }
+  await git(['init', '--quiet', '--initial-branch=main'])
+  await git(['add', '--all'])
+  await git(['commit', '--quiet', '--no-gpg-sign', '--message', 'fixture'])
+  const { stdout: commit } = await git(['rev-parse', 'HEAD'])
+
+  return {
+    root,
+    commit: commit.trim(),
+    status: async () => (await git(['status', '--porcelain'])).stdout,
+    remove: () => rm(root, { recursive: true, force: true }),
   }
 }
 
