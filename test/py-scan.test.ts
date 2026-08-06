@@ -663,6 +663,43 @@ describe('quick scan of a repo that declares mypy without configuring it', () =>
 })
 
 /**
+ * Zero footprint (spec §7) against a config that asks for the opposite. mypy's
+ * report settings are config-settable, are honoured because the invocation
+ * points `--config-file` at the repo's own config, and resolve relative to the
+ * cwd — which is the repo. The scan must still leave the target untouched.
+ */
+describe('quick scan of a repo whose mypy config asks for report files', () => {
+  let fixture: FixtureRepo
+  let result: HealthScanResult
+  let entries: readonly string[]
+
+  beforeAll(async () => {
+    fixture = await pyTempRepo({
+      'mypy.ini': '[mypy]\nlinecount_report = mypyreport\njunit_xml = junit.xml\n',
+      'app.py': 'def label(count: int) -> str:\n    return count\n',
+    })
+    await execa('uv', ['venv'], { cwd: fixture.root })
+    result = await runHealthScan({ path: fixture.root })
+    entries = (await readdir(fixture.root)).toSorted()
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  /** Without this the footprint assertion below would pass on a mypy that never ran. */
+  it('runs mypy from the config that asked for the reports', () => {
+    expect(mypyFindings(result)).toEqual([{ rule: 'return-value', file: 'app.py', startLine: 2 }])
+  })
+
+  it('leaves the target repo clean, the reports its config asked for included', async () => {
+    expect(await fixture.status()).toBe('')
+    expect(entries).not.toContain('mypyreport')
+    expect(entries).not.toContain('junit.xml')
+  })
+})
+
+/**
  * mypy cannot always speak. A repo whose layout it refuses to build gets an
  * `error` state quoting what mypy said — never an empty clean bill — the scan
  * still completes, and the default mypy displaced grades the category instead.

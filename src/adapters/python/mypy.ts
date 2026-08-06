@@ -62,10 +62,42 @@ const SEVERITY_BY_LEVEL: Readonly<Record<string, Severity>> = {
 /**
  * Flags shared by every invocation. `--output=json` is the whole contract:
  * mypy's text output has no stable machine form, and the JSON form is JSON
- * Lines. mypy has no writing mode reachable from here — `--cache-dir` is the
- * only thing it wants to write, and it is redirected per run.
+ * Lines. mypy has no writing mode reachable from here; everything it does want
+ * to write — its cache and its reports — is redirected into the scratch dir per
+ * run (see {@link REPORT_KINDS}).
  */
 const BASE_ARGS: readonly string[] = ['--output=json']
+
+/**
+ * The reports mypy generates without lxml, named by the middle of their
+ * `--<kind>-report` flag and written one directory apiece.
+ *
+ * Zero footprint (spec §7): every one of these is settable from the config file
+ * this runner deliberately points mypy at, and each resolves relative to the
+ * cwd, which is always the repo. Left alone, a `linecount_report = mypyreport`
+ * writes `mypyreport/` next to the code, and `junit_xml = junit.xml` writes
+ * that file beside it. The CLI wins over the config, so passing all five with a
+ * scratch destination is what makes such a setting harmless.
+ *
+ * mypy's other four reports — `--txt-report`, `--html-report`, `--xml-report`
+ * and `--cobertura-xml-report` — are deliberately *not* passed: each aborts
+ * mypy with an internal error when lxml is absent (verified against 2.3.0), so
+ * passing them would trade a config we can neutralize for a run we cannot make.
+ * A repo that sets one of the four either aborts honestly — surfaced as
+ * `state: 'error'` — or, on a machine with lxml, still writes it where its own
+ * config says.
+ */
+const REPORT_KINDS: readonly string[] = ['any-exprs', 'linecount', 'linecoverage', 'lineprecision']
+
+/** Where each report goes: fixed flag order, every destination under scratch. */
+function reportArgs(scratch: string): string[] {
+  const reports = join(scratch, 'mypy-reports')
+  return [
+    ...REPORT_KINDS.flatMap((kind) => [`--${kind}-report`, join(reports, kind)]),
+    '--junit-xml',
+    join(reports, 'junit.xml'),
+  ]
+}
 
 /**
  * `repoOwnedOnly` is the whole difference from ty and pyright. Those two are
@@ -128,10 +160,12 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
       args: [
         ...command.args,
         ...BASE_ARGS,
-        // Zero footprint (spec §7): without this mypy writes a `.mypy_cache/`
-        // next to the code it is checking.
+        // Zero footprint (spec §7): without these mypy writes a `.mypy_cache/`
+        // next to the code it is checking, and any report its config asked for
+        // beside it.
         '--cache-dir',
         join(ctx.scratch, 'mypy-cache'),
+        ...reportArgs(ctx.scratch),
         ...configArgs(ctx.detection, ctx.repoRoot),
         ...interpreterArgs,
         // One invocation, never batched: mypy builds one dependency graph over
