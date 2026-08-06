@@ -1,0 +1,1 @@
+Version 9.9.9 of package crank.health.nosuch.pkg is not found in NuGet feeds https://api.nuget.org/v3/index.json.

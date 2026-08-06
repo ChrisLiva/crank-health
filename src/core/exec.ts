@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execa } from 'execa'
-import type { PinnedPythonTool, PinnedTool } from '../manifest.ts'
-import { pinnedPythonSpec, pinnedPythonVersion, pinnedSpec } from '../manifest.ts'
+import type { PinnedDotnetTool, PinnedPythonTool, PinnedTool } from '../manifest.ts'
+import { pinnedDotnetSpec, pinnedPythonSpec, pinnedPythonVersion, pinnedSpec } from '../manifest.ts'
 
 /**
  * The shared subprocess layer every adapter runs its tool through. It exists so
@@ -12,9 +12,10 @@ import { pinnedPythonSpec, pinnedPythonVersion, pinnedSpec } from '../manifest.t
 
 /**
  * Who fetches a pinned tool: npm's runner for the JS/TS side, uv's for the
- * Python side. Both install into their own caches, never into the target repo.
+ * Python side, the .NET SDK's `dnx` for the C# side. All three install into
+ * their own caches, never into the target repo.
  */
-export type EphemeralFetcher = 'npx' | 'uvx'
+export type EphemeralFetcher = 'npx' | 'uvx' | 'dnx'
 
 /** A resolved command line: the binary plus its arguments. */
 export interface ToolCommand {
@@ -95,6 +96,35 @@ export function uvxCommand(
         ? [pinnedPythonSpec(tool), ...args]
         : ['--from', `${tool}==${pinnedPythonVersion(tool)}`, binary, ...args],
     ephemeral: 'uvx',
+  }
+}
+
+/**
+ * The .NET third of {@link ephemeralCommand}: runs the manifest-pinned version
+ * through `dnx`, which resolves the NuGet tool package into the NuGet cache and
+ * executes it from there — never into the target repo.
+ *
+ * `-y` skips the interactive "download and run?" prompt, `<id>@<version>` is
+ * dnx's exact-pin form, and `--source` names the feed explicitly so a machine's
+ * NuGet.config cannot redirect the pin. The trailing `--` is load-bearing:
+ * everything after it goes to the tool, so a tool flag that collides with one
+ * of dnx's own (`--source`, `--version`, `--prerelease`, …) never reaches dnx's
+ * parser.
+ *
+ * @param tool NuGet tool-package id from the manifest
+ */
+export function dnxCommand(tool: PinnedDotnetTool, args: readonly string[]): ToolCommand {
+  return {
+    command: 'dnx',
+    args: [
+      '-y',
+      pinnedDotnetSpec(tool),
+      '--source',
+      'https://api.nuget.org/v3/index.json',
+      '--',
+      ...args,
+    ],
+    ephemeral: 'dnx',
   }
 }
 
@@ -245,6 +275,17 @@ const OFFLINE_MARKERS: Readonly<Record<EphemeralFetcher, readonly RegExp[]>> = {
     /Request failed after \d+ retries/i,
     /Could not connect/i,
   ],
+  // NuGet's "is not found in NuGet feeds" (an unresolvable pin) is deliberately
+  // absent: a pin the feed does not have is a tool error quoting the pin, never
+  // "offline, warm your cache".
+  dnx: [
+    /Unable to load the service index/i,
+    /NU1301/,
+    /No such host is known/i,
+    /Temporary failure in name resolution/i,
+    /Connection refused/i,
+    /error sending request/i,
+  ],
 }
 
 /** What to tell the user when a fetcher itself is missing (spec §8). */
@@ -253,6 +294,16 @@ const MISSING_FETCHER: Readonly<Record<EphemeralFetcher, string>> = {
   uvx:
     '`uvx` is not on PATH — install uv (https://docs.astral.sh/uv/getting-started/installation/) ' +
     'so pinned Python tools can be fetched',
+  dnx:
+    '`dnx` is not on PATH — install the .NET SDK 10+ (https://dotnet.microsoft.com/download) ' +
+    'so pinned C# tools can be fetched',
+}
+
+/** What each fetcher's local cache is called, for the offline hint below. */
+const FETCHER_CACHE: Readonly<Record<EphemeralFetcher, string>> = {
+  npx: 'npm',
+  uvx: 'uv',
+  dnx: 'NuGet',
 }
 
 /** The parts of an execa result that decide whether the process itself failed. */
@@ -279,7 +330,7 @@ function classify(tool: ToolCommand, result: ExecaLike, stderr: string): ToolFai
       state: 'not-available',
       reason:
         `could not fetch ${pinnedArg(tool)}: no network and nothing in the ` +
-        `${tool.ephemeral === 'npx' ? 'npm' : 'uv'} cache — run crank-health once with ` +
+        `${FETCHER_CACHE[tool.ephemeral]} cache — run crank-health once with ` +
         'network access to warm the cache',
     }
   }

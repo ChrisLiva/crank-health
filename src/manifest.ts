@@ -42,6 +42,17 @@ export const PYTHON_TOOL_MANIFEST = {
 } as const satisfies Readonly<Record<string, string>>
 
 /**
+ * The same contract a third time, for the .NET side: NuGet tool-package names,
+ * resolved by `dnx` into the NuGet cache — never into the target repo. `dnx`
+ * ships with the .NET SDK itself (see {@link SYSTEM_TOOL_MANIFEST}'s `dotnet`
+ * entry), so these pins only apply on a machine that has the SDK.
+ */
+export const DOTNET_TOOL_MANIFEST = {
+  'microsoft.codeanalysis.netanalyzers': '10.0.302',
+  'roslynator.dotnet.cli': '0.12.0',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
  * Tools crank-health cannot fetch at all, and runs from `PATH` when the machine
  * already has them.
  *
@@ -59,8 +70,13 @@ export const PYTHON_TOOL_MANIFEST = {
  * install hint when there is none (spec §8). The version recorded here is the
  * one this release's parsers were captured and tested against — a floor for
  * "known to work", not a pin crank-health can enforce.
+ *
+ * A language SDK joins on the same contract: crank-health cannot fetch the
+ * `dotnet` SDK, uses whatever the machine has installed, and records here the
+ * verified floor this release was tested against.
  */
 export const SYSTEM_TOOL_MANIFEST = {
+  dotnet: '10.0.203',
   gitleaks: '8.30.1',
   opengrep: '1.26.0',
   'osv-scanner': '2.4.0',
@@ -75,9 +91,10 @@ export const SYSTEM_TOOL_MANIFEST = {
  * inside the environment that suite needs — the repo's `node_modules` with its
  * test-runner plugins, the project's virtualenv with pytest and the project's
  * dependencies. An ephemeral `npx @stryker-mutator/core` has no vitest runner
- * plugin and an ephemeral `uvx cosmic-ray` cannot import the code it is
- * mutating. Fetching them would produce a confident failure instead of an
- * honest "not available" (spec §8), so crank-health does not fetch them.
+ * plugin, an ephemeral `uvx cosmic-ray` cannot import the code it is mutating,
+ * and an ephemeral `dnx dotnet-stryker` cannot build the solution its mutants
+ * must compile against. Fetching them would produce a confident failure instead
+ * of an honest "not available" (spec §8), so crank-health does not fetch them.
  *
  * The versions here are what this release's parsers were captured and tested
  * against — a floor for "known to work", the same contract as
@@ -87,6 +104,7 @@ export const REPO_TOOL_MANIFEST = {
   '@stryker-mutator/core': '9.6.1',
   'cosmic-ray': '8.4.6',
   coverage: '7.15.3',
+  'dotnet-stryker': '4.16.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -99,6 +117,9 @@ export type PinnedTool = keyof typeof TOOL_MANIFEST
 
 /** A PyPI distribution crank-health runs through `uvx` at a pinned version. */
 export type PinnedPythonTool = keyof typeof PYTHON_TOOL_MANIFEST
+
+/** A NuGet tool package crank-health runs through `dnx` at a pinned version. */
+export type PinnedDotnetTool = keyof typeof DOTNET_TOOL_MANIFEST
 
 /** A tool crank-health runs from `PATH`; see {@link SYSTEM_TOOL_MANIFEST}. */
 export type SystemTool = keyof typeof SYSTEM_TOOL_MANIFEST
@@ -142,4 +163,18 @@ export function pinnedPythonVersion(tool: PinnedPythonTool): string {
  */
 export function pinnedPythonSpec(tool: PinnedPythonTool): string {
   return `${tool}@${PYTHON_TOOL_MANIFEST[tool]}`
+}
+
+/** The exact version this release pins for the .NET `tool`. */
+export function pinnedDotnetVersion(tool: PinnedDotnetTool): string {
+  return DOTNET_TOOL_MANIFEST[tool]
+}
+
+/**
+ * The `id@version` spec `dnx` resolves, e.g. `roslynator.dotnet.cli@0.12.0`.
+ * `dnx` reads the `@` form as an exact pin (see
+ * {@link import('./core/exec.ts').dnxCommand}).
+ */
+export function pinnedDotnetSpec(tool: PinnedDotnetTool): string {
+  return `${tool}@${DOTNET_TOOL_MANIFEST[tool]}`
 }

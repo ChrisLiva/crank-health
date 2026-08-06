@@ -5,8 +5,8 @@ import type { SystemTool } from '../../manifest.ts'
 import { firstLine } from '../support.ts'
 
 /**
- * The three security tools crank-health cannot fetch — gitleaks, opengrep and
- * osv-scanner — share one degradation story, and it lives here.
+ * The tools crank-health cannot fetch — gitleaks, opengrep, osv-scanner and the
+ * `dotnet` SDK — share one degradation story, and it lives here.
  *
  * Spec §8: a missing prerequisite is `not-available` *with an install hint*, the
  * run continues, and the exit code stays 0. What makes that honest rather than

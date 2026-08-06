@@ -1,14 +1,17 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  dnxCommand,
   ephemeralCommand,
   execTool,
   repoCommand,
   uvxCommand,
   writeScratchRaw,
 } from '../src/core/exec.ts'
+import { pinnedDotnetVersion, verifiedRepoVersion, verifiedVersion } from '../src/manifest.ts'
 
 /**
  * The subprocess layer's whole job is that nothing a tool does can throw at the
@@ -127,6 +130,115 @@ describe('uvxCommand', () => {
     } finally {
       await rm(scratch, { recursive: true, force: true })
     }
+  })
+})
+
+describe('dnxCommand', () => {
+  it('pins an exact version, names the feed, and fences tool flags behind --', () => {
+    expect(dnxCommand('roslynator.dotnet.cli', ['find-symbol'])).toEqual({
+      command: 'dnx',
+      args: [
+        '-y',
+        'roslynator.dotnet.cli@0.12.0',
+        '--source',
+        'https://api.nuget.org/v3/index.json',
+        '--',
+        'find-symbol',
+      ],
+      ephemeral: 'dnx',
+    })
+  })
+})
+
+describe('dnx classification', () => {
+  let scratch: string
+
+  beforeEach(async () => {
+    scratch = await mkdtemp(join(tmpdir(), 'crank-dnx-'))
+  })
+
+  afterEach(async () => {
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  it('explains how to get the .NET SDK when dnx is not installed', async () => {
+    const execution = await execTool(
+      { command: 'crank-no-such-dnx', args: [], ephemeral: 'dnx' },
+      { cwd: scratch, timeoutMs: 5_000 },
+    )
+    expect(execution.failure?.state).toBe('not-available')
+    expect(execution.failure?.reason).toContain('.NET SDK')
+  })
+
+  it('names each fetcher’s own cache in the offline hint — NuGet for dnx, never uv’s', async () => {
+    const offline = async (marker: string, pin: string, fetcher: 'npx' | 'uvx' | 'dnx') =>
+      (
+        await execTool(
+          {
+            command: '/bin/sh',
+            args: ['-c', `echo "${marker}" 1>&2; exit 1`, pin],
+            ephemeral: fetcher,
+          },
+          { cwd: scratch, timeoutMs: 5_000 },
+        )
+      ).failure
+    expect(
+      await offline(
+        'error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json',
+        'roslynator.dotnet.cli@0.12.0',
+        'dnx',
+      ),
+    ).toEqual({
+      state: 'not-available',
+      reason:
+        'could not fetch roslynator.dotnet.cli@0.12.0: no network and nothing in the ' +
+        'NuGet cache — run crank-health once with network access to warm the cache',
+    })
+    expect(await offline('ENOTFOUND', 'oxlint@1.77.0', 'npx')).toEqual({
+      state: 'not-available',
+      reason:
+        'could not fetch oxlint@1.77.0: no network and nothing in the ' +
+        'npm cache — run crank-health once with network access to warm the cache',
+    })
+    expect(await offline('failed to fetch', 'ruff@0.16.1', 'uvx')).toEqual({
+      state: 'not-available',
+      reason:
+        'could not fetch ruff@0.16.1: no network and nothing in the ' +
+        'uv cache — run crank-health once with network access to warm the cache',
+    })
+  })
+
+  it('declines dnx’s unresolvable-pin wording: an unfetchable pin is never "offline"', async () => {
+    // Real captured stderr from `dnx -y crank.health.nosuch.pkg@9.9.9 …`: the
+    // pin does not exist on the feed. That is a tool error quoting the pin, not
+    // "no network, warm your cache" — so classify must let it fall through to
+    // the runner's own failure mapping.
+    const captured = fileURLToPath(
+      new URL('./captured/dnx-unresolved-pin-10.0.203.stderr.txt', import.meta.url),
+    )
+    const execution = await execTool(
+      {
+        command: '/bin/sh',
+        args: ['-c', 'cat "$1" 1>&2; exit 1', 'sh', captured],
+        ephemeral: 'dnx',
+      },
+      { cwd: scratch, timeoutMs: 5_000 },
+    )
+    expect(execution.stderr).toContain('is not found in NuGet feeds')
+    expect(execution.exitCode).toBe(1)
+    expect(execution.failure).toBeUndefined()
+  })
+})
+
+describe('the dotnet pins', () => {
+  it('pins the exact NuGet tool versions this release captured and tested against', () => {
+    expect(pinnedDotnetVersion('roslynator.dotnet.cli')).toBe('0.12.0')
+    expect(pinnedDotnetVersion('microsoft.codeanalysis.netanalyzers')).toBe('10.0.302')
+  })
+
+  it('records the verified floors for the SDK and the repo-owned mutation tool', () => {
+    expect(verifiedVersion('dotnet')).toBe('10.0.203')
+    expect(verifiedRepoVersion('dotnet-stryker')).toBe('4.16.0')
   })
 })
 
