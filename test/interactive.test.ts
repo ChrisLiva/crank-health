@@ -2,14 +2,19 @@ import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../src/args.ts'
 import type { SystemToolSpec } from '../src/adapters/common/system-tool.ts'
-import { equivalentCommand, probeRepo, runInteractiveSession } from '../src/interactive.ts'
-import type { PromptIO, SessionDeps, SystemToolStatus } from '../src/interactive.ts'
+import {
+  equivalentCommand,
+  isPromptCancelled,
+  probeRepo,
+  runInteractiveSession,
+} from '../src/interactive.ts'
+import type { PromptIO, PromptKey, SessionDeps, SystemToolStatus } from '../src/interactive.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 
 /**
  * The interactive walk-through is a front-end over `CliOptions`, so these
- * tests script the prompts and assert on the options that come out — the same
+ * tests script the keyboard and assert on the options that come out — the same
  * contract the printed "equivalent command" makes to the user.
  *
  * The machine's toolchain must not decide what the session asks, so every test
@@ -57,19 +62,37 @@ function toolchain(
 const ALL_INSTALLED = () =>
   toolchain({ gitleaks: '8.30.1', opengrep: '1.26.0', 'osv-scanner': '2.4.0' }).deps
 
-/** A PromptIO fed from a fixed answer list; empty string = accept the default. */
-function scriptedIO(answers: readonly string[]) {
-  const queue = [...answers]
+// The keys a session is scripted with, named the way readline names them.
+const key = (name: string): PromptKey => ({ name })
+const ENTER = key('return')
+const ESC = key('escape')
+const DOWN = key('down')
+const UP = key('up')
+const SPACE = key('space')
+/** A run of printable characters, as the path edit receives them. */
+const typed = (text: string): PromptKey[] => [...text].map((sequence) => ({ sequence }))
+
+// The repaint traffic the widgets write; stripped so assertions see the text.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001B\[[0-9;?]*[A-Za-z]/g
+
+/** A PromptIO fed from a fixed keypress list. */
+function scriptedIO(keys: readonly PromptKey[]) {
+  const queue = [...keys]
   const transcript: string[] = []
   const io: PromptIO = {
     say: (line) => void transcript.push(line),
-    ask: (prompt) => {
-      transcript.push(prompt)
-      if (queue.length === 0) throw new Error(`unexpected prompt: ${prompt}`)
-      return Promise.resolve(queue.shift() as string)
-    },
+    write: (chunk) => void transcript.push(chunk),
+    nextKey: () =>
+      queue.length === 0
+        ? Promise.reject(new Error('session asked for a key the script did not provide'))
+        : Promise.resolve(queue.shift() as PromptKey),
   }
-  return { io, transcript, exhausted: () => queue.length === 0 }
+  return {
+    io,
+    text: () => transcript.join('\n').replaceAll(ANSI, ''),
+    exhausted: () => queue.length === 0,
+  }
 }
 
 describe('interactive session', () => {
@@ -87,8 +110,9 @@ describe('interactive session', () => {
     'accepting every default yields a plain whole-repo quick scan',
     async () => {
       // depth, categories, gate, output dir, final confirm — no scope question,
-      // because the only branch is the one we are on.
-      const { io, transcript, exhausted } = scriptedIO(['', '', '', '', ''])
+      // because the only branch is the one we are on, and no security keys,
+      // because every tool is already installed.
+      const { io, text, exhausted } = scriptedIO([ENTER, ENTER, ENTER, ENTER, ENTER])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.run).toBe(true)
@@ -103,7 +127,7 @@ describe('interactive session', () => {
         interactive: false,
       })
       expect(exhausted()).toBe(true)
-      expect(transcript.join('\n')).toContain('whole-repo scan')
+      expect(text()).toContain('whole-repo scan')
     },
     TEST_TIMEOUT_MS,
   )
@@ -123,17 +147,38 @@ describe('interactive session', () => {
   )
 
   it(
-    'a category subset and a gate survive into the options',
+    'spacebar-picked categories and an arrowed gate survive into the options',
     async () => {
-      // depth=quick, categories, gate, allow-missing, out dir, confirm.
-      const { io } = scriptedIO(['1', 'lint, types', 'b', '', '', ''])
+      // depth: quick. categories: `a` clears all eight, space re-picks types
+      // (row 2) and lint (row 6). gate: two rows down is B. allow-missing: No.
+      const { io, exhausted } = scriptedIO([
+        ENTER,
+        key('a'),
+        DOWN,
+        SPACE,
+        DOWN,
+        DOWN,
+        DOWN,
+        DOWN,
+        SPACE,
+        ENTER,
+        DOWN,
+        DOWN,
+        ENTER,
+        ENTER,
+        ENTER,
+        ENTER,
+      ])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
-      expect(session.options.only).toEqual(['lint', 'types'])
+      // Selection order is irrelevant: the subset comes out in canonical
+      // category order, exactly as --only normalizes it.
+      expect(session.options.only).toEqual(['types', 'lint'])
       expect(session.options.failUnder).toBe('B')
       // test-quality is not selected, so the tailored yes-default does not
       // apply and the gate stays strict.
       expect(session.options.allowMissing).toBe(false)
+      expect(exhausted()).toBe(true)
     },
     TEST_TIMEOUT_MS,
   )
@@ -142,27 +187,87 @@ describe('interactive session', () => {
     'a quick-mode gate over all categories defaults to --allow-missing',
     async () => {
       // depth, categories=all, gate=B, allow-missing (default yes), out, confirm.
-      const { io, transcript } = scriptedIO(['', '', 'B', '', '', ''])
+      const { io, text } = scriptedIO([ENTER, ENTER, DOWN, DOWN, ENTER, ENTER, ENTER, ENTER])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.failUnder).toBe('B')
       expect(session.options.allowMissing).toBe(true)
-      expect(transcript.join('\n')).toContain('quick mode always leaves test-quality not-assessed')
+      expect(text()).toContain('quick mode always leaves test-quality not-assessed')
     },
     TEST_TIMEOUT_MS,
   )
 
   it(
-    'invalid answers re-prompt instead of failing',
+    'unbound keys are ignored and an empty category selection cannot confirm',
     async () => {
-      // depth: "9" is out of range, then deep; categories: unknown, then valid;
-      // gate, out dir, confirm all default.
-      const { io, exhausted } = scriptedIO(['9', '2', 'nope', 'lint', '', '', ''])
+      // depth: "x" does nothing, then arrow to Deep. categories: `a` empties
+      // the selection, enter is refused, `a` restores all, enter confirms.
+      const { io, text, exhausted } = scriptedIO([
+        key('x'),
+        DOWN,
+        ENTER,
+        key('a'),
+        ENTER,
+        key('a'),
+        ENTER,
+        ENTER,
+        ENTER,
+        ENTER,
+      ])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.deep).toBe(true)
-      expect(session.options.only).toEqual(['lint'])
+      expect(session.options.only).toBeUndefined()
+      expect(text()).toContain('keep at least one selected')
       expect(exhausted()).toBe(true)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'escape steps back to the previous question with the draft answer intact',
+    async () => {
+      // depth: Deep. categories: escape — back to depth, which now defaults to
+      // Deep, so one arrow up re-picks Quick. Then defaults to the end.
+      const { io } = scriptedIO([DOWN, ENTER, ESC, UP, ENTER, ENTER, ENTER, ENTER, ENTER])
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
+
+      expect(session.options.deep).toBe(false)
+      expect(session.run).toBe(true)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'a digit jumps straight to that menu entry',
+    async () => {
+      // gate menu: 1 is "No gate", so 3 is B.
+      const { io } = scriptedIO([ENTER, ENTER, { sequence: '3' }, ENTER, ENTER, ENTER])
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
+      expect(session.options.failUnder).toBe('B')
+      expect(session.options.allowMissing).toBe(true)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'a custom output path is the one place the session asks for typing',
+    async () => {
+      // out: one arrow down to "Somewhere else…", then the typed path.
+      const { io } = scriptedIO([
+        ENTER,
+        ENTER,
+        ENTER,
+        DOWN,
+        ENTER,
+        ...typed('/tmp/health-x'),
+        ENTER,
+        ENTER,
+      ])
+      const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
+
+      expect(session.options.out).toBe('/tmp/health-x')
+      expect(equivalentCommand(session.options)).toContain('--out /tmp/health-x')
     },
     TEST_TIMEOUT_MS,
   )
@@ -170,9 +275,20 @@ describe('interactive session', () => {
   it(
     'declining the final confirmation does not run',
     async () => {
-      const { io } = scriptedIO(['', '', '', '', 'n'])
+      const { io } = scriptedIO([ENTER, ENTER, ENTER, ENTER, key('n')])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
       expect(session.run).toBe(false)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    'Ctrl-C anywhere cancels the whole session',
+    async () => {
+      const { io } = scriptedIO([{ name: 'c', ctrl: true }])
+      await expect(
+        runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED()),
+      ).rejects.toSatisfy(isPromptCancelled)
     },
     TEST_TIMEOUT_MS,
   )
@@ -193,14 +309,14 @@ describe('interactive session on a feature branch', () => {
   })
 
   it(
-    'offers main as a PR base and choosing it sets --pr',
+    'offers main as a PR base and arrowing onto it sets --pr',
     async () => {
-      // scope=2 (changes vs main), depth, categories, gate, out dir, confirm.
-      const { io, transcript } = scriptedIO(['2', '', '', '', '', ''])
+      // scope: one arrow down is "Changes vs main"; defaults from there on.
+      const { io, text } = scriptedIO([DOWN, ENTER, ENTER, ENTER, ENTER, ENTER, ENTER])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, ALL_INSTALLED())
 
       expect(session.options.pr).toBe('main')
-      expect(transcript.join('\n')).toContain('Changes vs main')
+      expect(text()).toContain('Changes vs main')
       expect(equivalentCommand(session.options)).toBe(`npx crank-health --pr main ${fixture.root}`)
     },
     TEST_TIMEOUT_MS,
@@ -210,7 +326,7 @@ describe('interactive session on a feature branch', () => {
     'a --pr flag passed alongside -i becomes the scope default',
     async () => {
       // Accept every default: scope defaults to the passed base.
-      const { io } = scriptedIO(['', '', '', '', '', ''])
+      const { io } = scriptedIO([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER])
       const session = await runInteractiveSession(
         parseCliArgs(['--pr', 'main', fixture.root]),
         io,
@@ -237,14 +353,13 @@ describe('security tool walkthrough', () => {
     'shows status and offers installs for missing tools; declining installs nothing',
     async () => {
       const { deps, installed } = toolchain({ gitleaks: undefined, opengrep: '1.26.0' })
-      // depth, categories, install gitleaks? (default no), gate, out, confirm.
-      const { io, transcript, exhausted } = scriptedIO(['', '', '', '', '', ''])
+      // depth, categories, install gitleaks? (default No), gate, out, confirm.
+      const { io, text, exhausted } = scriptedIO([ENTER, ENTER, ENTER, ENTER, ENTER, ENTER])
       await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
 
-      const text = transcript.join('\n')
-      expect(text).toContain('✗ gitleaks')
-      expect(text).toContain('✓ opengrep 1.26.0')
-      expect(text).toContain('skipped — later: brew install gitleaks')
+      expect(text()).toContain('✗ gitleaks')
+      expect(text()).toContain('✓ opengrep 1.26.0')
+      expect(text()).toContain('skipped — later: brew install gitleaks')
       expect(installed).toEqual([])
       expect(exhausted()).toBe(true)
     },
@@ -252,14 +367,14 @@ describe('security tool walkthrough', () => {
   )
 
   it(
-    'accepting an install runs it and reports success',
+    'pressing y on an install offer runs it and reports success',
     async () => {
       const { deps, installed } = toolchain({ gitleaks: undefined })
-      const { io, transcript } = scriptedIO(['', '', 'y', '', '', ''])
+      const { io, text } = scriptedIO([ENTER, ENTER, key('y'), ENTER, ENTER, ENTER])
       await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
 
       expect(installed).toEqual(['gitleaks'])
-      expect(transcript.join('\n')).toContain('✓ gitleaks installed')
+      expect(text()).toContain('✓ gitleaks installed')
     },
     TEST_TIMEOUT_MS,
   )
@@ -268,11 +383,11 @@ describe('security tool walkthrough', () => {
     'a failed install reports the hint and the session continues',
     async () => {
       const { deps, installed } = toolchain({ gitleaks: undefined }, { installOk: false })
-      const { io, transcript } = scriptedIO(['', '', 'y', '', '', ''])
+      const { io, text } = scriptedIO([ENTER, ENTER, key('y'), ENTER, ENTER, ENTER])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
 
       expect(installed).toEqual(['gitleaks'])
-      expect(transcript.join('\n')).toContain('✗ gitleaks install failed — brew install gitleaks')
+      expect(text()).toContain('✗ gitleaks install failed — brew install gitleaks')
       expect(session.run).toBe(true)
     },
     TEST_TIMEOUT_MS,
@@ -283,12 +398,11 @@ describe('security tool walkthrough', () => {
     async () => {
       const { deps, installed } = toolchain({ gitleaks: undefined }, { brew: false })
       // depth, categories, gate, out, confirm — no install question.
-      const { io, transcript, exhausted } = scriptedIO(['', '', '', '', ''])
+      const { io, text, exhausted } = scriptedIO([ENTER, ENTER, ENTER, ENTER, ENTER])
       await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
 
-      const text = transcript.join('\n')
-      expect(text).toContain('Homebrew was not found')
-      expect(text).toContain('brew install gitleaks')
+      expect(text()).toContain('Homebrew was not found')
+      expect(text()).toContain('brew install gitleaks')
       expect(installed).toEqual([])
       expect(exhausted()).toBe(true)
     },
@@ -303,8 +417,21 @@ describe('security tool walkthrough', () => {
         hasBrew: () => Promise.reject(new Error('must not be called')),
         install: () => Promise.reject(new Error('must not be called')),
       }
-      // depth, categories=lint, gate, out, confirm.
-      const { io } = scriptedIO(['', 'lint', '', '', ''])
+      // categories: clear all, arrow to lint (row 6), pick it alone.
+      const { io } = scriptedIO([
+        ENTER,
+        key('a'),
+        DOWN,
+        DOWN,
+        DOWN,
+        DOWN,
+        DOWN,
+        SPACE,
+        ENTER,
+        ENTER,
+        ENTER,
+        ENTER,
+      ])
       const session = await runInteractiveSession(parseCliArgs([fixture.root]), io, deps)
       expect(session.options.only).toEqual(['lint'])
     },

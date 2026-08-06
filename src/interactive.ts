@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { createInterface } from 'node:readline/promises'
+import { emitKeypressEvents } from 'node:readline'
 import { execa } from 'execa'
 import pc from 'picocolors'
 import { GITLEAKS } from './adapters/common/gitleaks.ts'
@@ -17,11 +17,13 @@ import { resolveRepoRoot } from './run.ts'
 
 /**
  * `--interactive`: a guided walk through the CLI's options, tailored to the
- * target repo. Everything here is a front-end — the probe only *reads* (same
- * covenant as `ToolRunner.detect`: no tool ever executes), and the outcome is
- * an ordinary {@link CliOptions} handed back to `cli.ts`, so the scan that runs
- * afterwards is byte-identical to the one the printed equivalent command would
- * produce.
+ * target repo and driven entirely by the keyboard — arrow keys move, enter
+ * chooses, space toggles, escape steps back to the previous question; nothing
+ * has to be typed unless the user asks for a custom output path. Everything
+ * here is a front-end — the probe only *reads* (same covenant as
+ * `ToolRunner.detect`: no tool ever executes), and the outcome is an ordinary
+ * {@link CliOptions} handed back to `cli.ts`, so the scan that runs afterwards
+ * is byte-identical to the one the printed equivalent command would produce.
  */
 
 /** Base branches worth offering for `--pr`, in preference order. */
@@ -55,10 +57,27 @@ export interface RepoProbe {
   readonly mutationToolOwned: boolean
 }
 
-/** The two streams a prompt needs; tests inject a scripted one. */
+/**
+ * One keypress, in the shape `node:readline`'s keypress parser emits: special
+ * keys carry a `name` ('up', 'return', 'escape', 'space', …), printable
+ * characters carry themselves in `sequence`.
+ */
+export interface PromptKey {
+  readonly name?: string | undefined
+  readonly sequence?: string | undefined
+  readonly ctrl?: boolean | undefined
+  readonly meta?: boolean | undefined
+  readonly shift?: boolean | undefined
+}
+
+/** What a prompt needs from the terminal; tests inject a scripted one. */
 export interface PromptIO {
+  /** A finished line of output. */
   say(line: string): void
-  ask(prompt: string): Promise<string>
+  /** A raw fragment — the repaint traffic menus redraw themselves with. */
+  write(text: string): void
+  /** The next keypress. */
+  nextKey(): Promise<PromptKey>
 }
 
 /**
@@ -100,11 +119,20 @@ const REAL_DEPS: SessionDeps = {
     ),
   hasBrew: async () => (await execa('brew', ['--version'], { reject: false })).exitCode === 0,
   install: async (spec) => {
-    const result = await execa('brew', ['install', spec.binary], {
-      stdio: 'inherit',
-      reject: false,
-    })
-    return result.exitCode === 0
+    // brew inherits our stdio; hand it a cooked terminal, not the raw mode the
+    // menus run in, so its output and Ctrl-C behave normally.
+    const stdin = process.stdin
+    const wasRaw = stdin.isTTY === true && stdin.isRaw === true
+    if (wasRaw) stdin.setRawMode(false)
+    try {
+      const result = await execa('brew', ['install', spec.binary], {
+        stdio: 'inherit',
+        reject: false,
+      })
+      return result.exitCode === 0
+    } finally {
+      if (wasRaw) stdin.setRawMode(true)
+    }
   },
 }
 
@@ -115,21 +143,54 @@ export interface InteractiveOutcome {
   readonly run: boolean
 }
 
-/**
- * True when a prompt failed because stdin ended (Ctrl-D) — the user walking
- * away mid-session, which is a cancellation, not a crank-health error.
- */
-export function isPromptCancelled(error: unknown): boolean {
-  return error instanceof Error && (error as { code?: string }).code === 'ERR_USE_AFTER_CLOSE'
+/** Ctrl-C / Ctrl-D mid-session: a cancellation, not a crank-health error. */
+export class PromptCancelledError extends Error {
+  constructor() {
+    super('interactive session cancelled')
+    this.name = 'PromptCancelledError'
+  }
 }
 
-/** Readline-backed {@link PromptIO} for the real terminal. */
+/** True when a prompt failed because the user cancelled the session. */
+export function isPromptCancelled(error: unknown): boolean {
+  return error instanceof PromptCancelledError
+}
+
+/**
+ * Raw-mode keypress {@link PromptIO} for the real terminal. Raw mode is what
+ * lets a single arrow key arrive as one event; it also means Ctrl-C arrives as
+ * a keypress instead of a signal, which {@link readKey} turns into
+ * {@link PromptCancelledError}.
+ */
 export function createTerminalIO(): PromptIO & { close(): void } {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  const stdin = process.stdin
+  emitKeypressEvents(stdin)
+  if (stdin.isTTY === true) stdin.setRawMode(true)
+  stdin.resume()
+
+  const pending: PromptKey[] = []
+  const waiting: ((key: PromptKey) => void)[] = []
+  const onKeypress = (input: string | undefined, key: PromptKey | undefined): void => {
+    const resolved: PromptKey = key ?? { sequence: input }
+    const next = waiting.shift()
+    if (next === undefined) pending.push(resolved)
+    else next(resolved)
+  }
+  stdin.on('keypress', onKeypress)
+
   return {
-    say: (line) => process.stdout.write(`${line}\n`),
-    ask: (prompt) => rl.question(prompt),
-    close: () => rl.close(),
+    say: (line) => void process.stdout.write(`${line}\n`),
+    write: (text) => void process.stdout.write(text),
+    nextKey: () =>
+      pending.length === 0
+        ? new Promise((resolve) => waiting.push(resolve))
+        : Promise.resolve(pending.shift() as PromptKey),
+    close: () => {
+      stdin.off('keypress', onKeypress)
+      if (stdin.isTTY === true) stdin.setRawMode(false)
+      stdin.pause()
+      process.stdout.write(SHOW_CURSOR)
+    },
   }
 }
 
@@ -171,11 +232,25 @@ export async function probeRepo(path: string): Promise<RepoProbe> {
   }
 }
 
+/** A question's request to return to the one before it (escape / left arrow). */
+const BACK: unique symbol = Symbol('back')
+type Back = typeof BACK
+
+/** The "type a path yourself" entry in the output-directory menu. */
+const CUSTOM: unique symbol = Symbol('custom')
+
+/** One question in the walk-through; `applies` is re-read on every pass. */
+interface SessionStep {
+  applies(): boolean
+  run(): Promise<Back | undefined>
+}
+
 /**
  * The whole session: probe, walk the questions, print the summary. `base`
  * carries any flags that were passed alongside `--interactive`; they become
- * the prompts' defaults, so `crank-health -i --pr main` starts from PR mode
- * instead of contradicting the user.
+ * the menus' defaults, so `crank-health -i --pr main` starts from PR mode
+ * instead of contradicting the user. Escape (or ←) on any question returns to
+ * the previous one with the draft answers intact.
  */
 export async function runInteractiveSession(
   base: CliOptions,
@@ -185,29 +260,208 @@ export async function runInteractiveSession(
   const probe = await probeRepo(base.path)
   sayHeader(probe, io)
 
-  const pr = await askScope(base, probe, io)
-  const deep = await askDepth(base, probe, io)
-  const only = await askCategories(base, deep, io)
-  if (only === undefined || only.includes('security')) await askSystemTools(io, deps)
-  const failUnder = await askGate(base, io)
-  const allowMissing = failUnder === undefined ? false : await askAllowMissing(base, deep, only, io)
-  const out = await askOutputDir(base, probe, io)
-
-  const options: CliOptions = {
-    ...base,
-    pr,
-    deep,
-    only,
-    failUnder,
-    allowMissing,
-    out,
-    interactive: false,
+  // A base the user named on the command line is always offered, even when the
+  // probe did not find it (it may be a sha or a remote-tracking ref).
+  const bases =
+    base.pr !== undefined && !probe.baseCandidates.includes(base.pr)
+      ? [base.pr, ...probe.baseCandidates]
+      : [...probe.baseCandidates]
+  if (bases.length === 0) {
+    io.say('')
+    io.say('No other branch shares history with HEAD, so this will be a whole-repo scan.')
   }
 
-  io.say('')
-  io.say(`Equivalent command: ${pc.cyan(equivalentCommand(options))}`)
-  const run = await confirm(io, 'Run this scan now?', true)
-  return { options, run }
+  /** The answers so far; going back edits this in place. */
+  const draft = {
+    pr: base.pr,
+    deep: base.deep,
+    only: base.only === undefined ? undefined : [...base.only],
+    failUnder: base.failUnder,
+    allowMissing: base.allowMissing,
+    out: base.out,
+    securityReviewed: false,
+    run: true,
+  }
+
+  const assemble = (): CliOptions => ({
+    ...base,
+    pr: draft.pr,
+    deep: draft.deep,
+    only: draft.only,
+    failUnder: draft.failUnder,
+    // The gate question is the only path to --allow-missing; no gate, no flag.
+    allowMissing: draft.failUnder === undefined ? false : draft.allowMissing,
+    out: draft.out,
+    interactive: false,
+  })
+
+  const steps: readonly SessionStep[] = [
+    {
+      // Whole repo vs a `--pr` delta — only asked when a viable base exists.
+      applies: () => bases.length > 0,
+      run: async () => {
+        const picked = await select(
+          io,
+          'Scan scope?',
+          [
+            { label: 'Whole repo', note: 'grade everything as it stands' },
+            ...bases.map((name) => ({
+              label: `Changes vs ${name}`,
+              note: `delta against \`git merge-base ${name} HEAD\``,
+            })),
+          ],
+          draft.pr === undefined ? 0 : bases.indexOf(draft.pr) + 1,
+        )
+        if (picked === BACK) return BACK
+        draft.pr = picked === 0 ? undefined : bases[picked - 1]
+        return undefined
+      },
+    },
+    {
+      // Quick vs `--deep`, with the honest prognosis for test quality.
+      applies: () => true,
+      run: async () => {
+        const deepNote = probe.mutationToolOwned
+          ? 'a repo-owned mutation tool was detected, so test quality can be graded'
+          : 'no repo-owned mutation tool — test quality would still read not-available'
+        const picked = await select(
+          io,
+          'Depth?',
+          [
+            { label: 'Quick', note: 'static analysis only; never executes your code' },
+            {
+              label: 'Deep',
+              note: `adds the mutation / test-suite tier (runs your tests); ${deepNote}`,
+            },
+          ],
+          draft.deep ? 1 : 0,
+        )
+        if (picked === BACK) return BACK
+        draft.deep = picked === 1
+        return undefined
+      },
+    },
+    {
+      // `--only`: all eight checked is the default and means no subset.
+      applies: () => true,
+      run: async () => {
+        const picked = await multiSelect(
+          io,
+          'Categories?',
+          CATEGORIES.map((category) => ({
+            label: category,
+            note:
+              category === 'test-quality' && !draft.deep ? 'needs --deep to be graded' : undefined,
+          })),
+          CATEGORIES.map((category) => draft.only === undefined || draft.only.includes(category)),
+        )
+        if (picked === BACK) return BACK
+        draft.only = picked.every(Boolean)
+          ? undefined
+          : CATEGORIES.filter((_, index) => picked[index])
+        return undefined
+      },
+    },
+    {
+      // Security-tool status and, where Homebrew can do it, guided installs.
+      // Only reached when the security category is selected, and only once:
+      // an install cannot be un-run by going back.
+      applies: () =>
+        !draft.securityReviewed && (draft.only === undefined || draft.only.includes('security')),
+      run: async () => {
+        const outcome = await askSystemTools(io, deps)
+        if (outcome === BACK) return BACK
+        draft.securityReviewed = true
+        return undefined
+      },
+    },
+    {
+      // `--fail-under`: a grade off the shelf, or no gate at all.
+      applies: () => true,
+      run: async () => {
+        const picked = await select(
+          io,
+          'Fail (exit 1) below which grade?',
+          [
+            { label: 'No gate', note: 'the scan always exits 0' },
+            ...GRADES.map((grade) => ({ label: grade })),
+          ],
+          draft.failUnder === undefined ? 0 : GRADES.indexOf(draft.failUnder as Grade) + 1,
+        )
+        if (picked === BACK) return BACK
+        draft.failUnder = picked === 0 ? undefined : GRADES[picked - 1]
+        return undefined
+      },
+    },
+    {
+      // `--allow-missing`, only reachable when a gate is set. In quick mode
+      // with test-quality selected the honest default is yes: that category is
+      // *always* not-assessed without `--deep`, and a gate that trips on it
+      // every run is a gate nobody keeps.
+      applies: () => draft.failUnder !== undefined,
+      run: async () => {
+        const testQualitySelected = draft.only === undefined || draft.only.includes('test-quality')
+        const tailored = !draft.deep && testQualitySelected
+        io.say('')
+        if (tailored) {
+          io.say(
+            pc.dim(
+              '  quick mode always leaves test-quality not-assessed, so it would trip the gate',
+            ),
+          )
+        }
+        const picked = await confirm(
+          io,
+          'Ignore categories nothing could assess (--allow-missing)?',
+          tailored ? true : draft.allowMissing,
+        )
+        if (picked === BACK) return BACK
+        draft.allowMissing = picked
+        return undefined
+      },
+    },
+    {
+      // `--out`: the keyboard picks between keeping the default and a custom
+      // path; only "somewhere else" ever needs typing.
+      applies: () => true,
+      run: () => askOutputDir(io, probe, draft),
+    },
+    {
+      // The review: the one-shot command this session reproduces, then go.
+      applies: () => true,
+      run: async () => {
+        io.say('')
+        io.say(`Equivalent command: ${pc.cyan(equivalentCommand(assemble()))}`)
+        const picked = await confirm(io, 'Run this scan now?', true)
+        if (picked === BACK) return BACK
+        draft.run = picked
+        return undefined
+      },
+    },
+  ]
+
+  // Forward through the applicable questions; BACK pops to the last one that
+  // actually ran (skipped questions never enter the history). At the first
+  // question BACK has nowhere to go and the question is simply asked again.
+  const history: number[] = []
+  let index = 0
+  while (index < steps.length) {
+    const step = steps[index] as SessionStep
+    if (!step.applies()) {
+      index += 1
+      continue
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const outcome = await step.run()
+    if (outcome === BACK) {
+      index = history.pop() ?? index
+    } else {
+      history.push(index)
+      index += 1
+    }
+  }
+
+  return { options: assemble(), run: draft.run }
 }
 
 /** The one-shot command line that reproduces the chosen scan. */
@@ -243,96 +497,14 @@ function sayHeader(probe: RepoProbe, io: PromptIO): void {
   )
 }
 
-/** Whole repo vs a `--pr` delta — only asked when a viable base exists. */
-async function askScope(
-  base: CliOptions,
-  probe: RepoProbe,
-  io: PromptIO,
-): Promise<string | undefined> {
-  // A base the user named on the command line is always offered, even when the
-  // probe did not find it (it may be a sha or a remote-tracking ref).
-  const bases =
-    base.pr !== undefined && !probe.baseCandidates.includes(base.pr)
-      ? [base.pr, ...probe.baseCandidates]
-      : [...probe.baseCandidates]
-
-  if (bases.length === 0) {
-    io.say('')
-    io.say('No other branch shares history with HEAD, so this will be a whole-repo scan.')
-    return undefined
-  }
-
-  const choice = await select(
-    io,
-    'Scan scope?',
-    [
-      { label: 'Whole repo', note: 'grade everything as it stands' },
-      ...bases.map((name) => ({
-        label: `Changes vs ${name}`,
-        note: `delta against \`git merge-base ${name} HEAD\``,
-      })),
-    ],
-    base.pr === undefined ? 0 : bases.indexOf(base.pr) + 1,
-  )
-  return choice === 0 ? undefined : bases[choice - 1]
-}
-
-/** Quick vs `--deep`, with the honest prognosis for test quality. */
-async function askDepth(base: CliOptions, probe: RepoProbe, io: PromptIO): Promise<boolean> {
-  const deepNote = probe.mutationToolOwned
-    ? 'a repo-owned mutation tool was detected, so test quality can be graded'
-    : 'no repo-owned mutation tool — test quality would still read not-available'
-  const choice = await select(
-    io,
-    'Depth?',
-    [
-      { label: 'Quick', note: 'static analysis only; never executes your code' },
-      { label: 'Deep', note: `adds the mutation / test-suite tier (runs your tests); ${deepNote}` },
-    ],
-    base.deep ? 1 : 0,
-  )
-  return choice === 1
-}
-
-/** `--only`: empty answer means all eight categories. */
-async function askCategories(
-  base: CliOptions,
-  deep: boolean,
-  io: PromptIO,
-): Promise<string[] | undefined> {
-  io.say('')
-  io.say('Categories?')
-  for (const category of CATEGORIES) {
-    const note = category === 'test-quality' && !deep ? '  (needs --deep to be graded)' : ''
-    io.say(`  · ${category}${pc.dim(note)}`)
-  }
-  const fallback = base.only?.join(',') ?? 'all'
-  for (;;) {
-    // eslint-disable-next-line no-await-in-loop
-    const answer = (await io.ask(`  comma-separated subset [${fallback}]: `)).trim()
-    const raw = answer.length === 0 ? fallback : answer
-    if (raw === 'all') return undefined
-    const picked = raw
-      .split(',')
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0)
-    const unknown = picked.filter((name) => !CATEGORIES.some((known) => known === name))
-    if (picked.length > 0 && unknown.length === 0) return picked
-    io.say(
-      `  ${unknown.length > 0 ? `unknown: ${unknown.join(', ')}` : 'pick at least one'} — expected ${CATEGORIES.join(', ')} or "all"`,
-    )
-  }
-}
-
 /**
- * Security-tool status and, where Homebrew can do it, guided installs. Only
- * reached when the security category is selected: these three run as release
+ * Security-tool status and guided installs. These three run as release
  * binaries crank-health cannot fetch ephemerally, so a missing one quietly
  * narrows what security can assess — this step is where that stops being
  * quiet. Declining (the default) changes nothing; the scan degrades exactly
  * as before.
  */
-async function askSystemTools(io: PromptIO, deps: SessionDeps): Promise<void> {
+async function askSystemTools(io: PromptIO, deps: SessionDeps): Promise<Back | undefined> {
   const status = await deps.checkSystemTools()
   io.say('')
   io.say('Security tools (release binaries crank-health cannot fetch itself):')
@@ -345,18 +517,20 @@ async function askSystemTools(io: PromptIO, deps: SessionDeps): Promise<void> {
   }
 
   const missing = status.filter((tool) => tool.version === undefined)
-  if (missing.length === 0) return
+  if (missing.length === 0) return undefined
 
   if (!(await deps.hasBrew())) {
     io.say('  Homebrew was not found, so crank-health cannot install these for you:')
     for (const tool of missing) io.say(`    ${tool.spec.install}`)
-    return
+    return undefined
   }
 
   for (const tool of missing) {
     const question = `Install ${tool.spec.binary} now (brew install ${tool.spec.binary})?`
     // eslint-disable-next-line no-await-in-loop
-    if (!(await confirm(io, question, false))) {
+    const picked = await confirm(io, question, false)
+    if (picked === BACK) return BACK
+    if (!picked) {
       io.say(`  skipped — later: ${tool.spec.install}`)
       continue
     }
@@ -368,95 +542,286 @@ async function askSystemTools(io: PromptIO, deps: SessionDeps): Promise<void> {
         : `  ✗ ${tool.spec.binary} install failed — ${tool.spec.install}`,
     )
   }
+  return undefined
 }
 
-/** `--fail-under`: empty answer means the gate stays off. */
-async function askGate(base: CliOptions, io: PromptIO): Promise<string | undefined> {
-  io.say('')
-  const fallback = base.failUnder ?? 'none'
-  for (;;) {
-    // eslint-disable-next-line no-await-in-loop
-    const answer = (await io.ask(`Fail (exit 1) below which grade? A–F or none [${fallback}]: `))
-      .trim()
-      .toUpperCase()
-    const raw = answer.length === 0 ? fallback.toUpperCase() : answer
-    if (raw === 'NONE') return undefined
-    if (GRADES.includes(raw as Grade)) return raw
-    io.say(`  expected one of ${GRADES.join(', ')} or none`)
-  }
-}
-
-/**
- * `--allow-missing`, only reachable when a gate is set. In quick mode with
- * test-quality selected the honest default is yes: that category is *always*
- * not-assessed without `--deep`, and a gate that trips on it every run is a
- * gate nobody keeps.
- */
-async function askAllowMissing(
-  base: CliOptions,
-  deep: boolean,
-  only: readonly string[] | undefined,
-  io: PromptIO,
-): Promise<boolean> {
-  const testQualitySelected = only === undefined || only.includes('test-quality')
-  if (!deep && testQualitySelected) {
-    io.say('  (quick mode always leaves test-quality not-assessed, so it would trip the gate)')
-    return confirm(io, 'Ignore categories nothing could assess (--allow-missing)?', true)
-  }
-  return confirm(io, 'Ignore categories nothing could assess (--allow-missing)?', base.allowMissing)
-}
-
-/** `--out`: empty keeps the default (or whatever `--out` was already passed). */
+/** The `--out` question, looping between the menu and the optional path edit. */
 async function askOutputDir(
-  base: CliOptions,
-  probe: RepoProbe,
   io: PromptIO,
-): Promise<string | undefined> {
-  io.say('')
-  if (base.out === undefined) {
-    io.say('The default keeps every run: each one lands in its own dated folder underneath.')
-    io.say('Naming a directory instead writes this run exactly there.')
+  probe: RepoProbe,
+  draft: { out: string | undefined },
+): Promise<Back | undefined> {
+  const standard = join(probe.repoRoot, DEFAULT_OUTPUT_DIRNAME)
+  for (;;) {
+    const choices: { label: string; note?: string; out: string | undefined | typeof CUSTOM }[] = [
+      ...(draft.out === undefined
+        ? []
+        : [{ label: draft.out, note: 'this run writes exactly here', out: draft.out }]),
+      {
+        label: standard,
+        note: 'the default — every run kept in its own dated folder underneath',
+        out: undefined,
+      },
+      { label: 'Somewhere else…', note: 'type a path', out: CUSTOM },
+    ]
+    // eslint-disable-next-line no-await-in-loop
+    const picked = await select(io, 'Output directory?', choices, 0)
+    if (picked === BACK) return BACK
+    const chosen = (choices[picked] as (typeof choices)[number]).out
+    if (chosen !== CUSTOM) {
+      draft.out = chosen
+      return undefined
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const typed = await textInput(io, 'Output directory', draft.out ?? '')
+    if (typed !== null && typed.length > 0) {
+      draft.out = typed
+      return undefined
+    }
+    // Escaped or emptied the edit: back to the menu, not to the previous step.
   }
-  const fallback = base.out ?? join(probe.repoRoot, DEFAULT_OUTPUT_DIRNAME)
-  const answer = (await io.ask(`Output directory [${fallback}]: `)).trim()
-  return answer.length === 0 ? base.out : answer
 }
 
-/** Numbered single-choice prompt; returns the chosen index. */
+// ── The widgets ──────────────────────────────────────────────────────────────
+// Each renders a block, repaints it in place on every keypress, and collapses
+// to a single `question answer` line once settled, so the transcript that
+// scrolls away reads like a filled-in form.
+
+const HIDE_CURSOR = '\u001B[?25l'
+const SHOW_CURSOR = '\u001B[?25h'
+const CLEAR_BELOW = '\u001B[0J'
+const moveUp = (lines: number): string => (lines > 0 ? `\u001B[${lines}A` : '')
+
+const SELECT_HINT = '↑↓ move · enter choose · esc back'
+const MULTI_HINT = '↑↓ move · space toggle · a all/none · enter confirm · esc back'
+const CONFIRM_HINT = '←→ toggle · y/n · enter · esc back'
+const TEXT_HINT = 'enter confirm · esc back'
+
+/** Tracks how many lines the current block occupies on screen. */
+interface Painted {
+  lines: number
+}
+
+function paint(io: PromptIO, state: Painted, lines: readonly string[]): void {
+  io.write(`${moveUp(state.lines)}\r${CLEAR_BELOW}${lines.join('\n')}\n`)
+  state.lines = lines.length
+}
+
+/** Erases the block and leaves one settled line in its place. */
+function settle(io: PromptIO, state: Painted, line: string): void {
+  io.write(`${moveUp(state.lines)}\r${CLEAR_BELOW}`)
+  state.lines = 0
+  io.say(line)
+}
+
+/** Next keypress; Ctrl-C / Ctrl-D cancel the whole session from any prompt. */
+async function readKey(io: PromptIO): Promise<PromptKey> {
+  const key = await io.nextKey()
+  if (key.ctrl === true && (key.name === 'c' || key.name === 'd')) {
+    throw new PromptCancelledError()
+  }
+  return key
+}
+
+/** '1'–'9' as a shortcut straight to that entry, where the list has one. */
+function digitIndex(key: PromptKey, count: number): number | undefined {
+  const digit = key.sequence
+  if (digit === undefined || digit.length !== 1 || digit < '1' || digit > '9') return undefined
+  const index = Number(digit) - 1
+  return index < count ? index : undefined
+}
+
+/** Arrow-key single choice; returns the chosen index, or {@link BACK}. */
 async function select(
   io: PromptIO,
   question: string,
-  choices: readonly { label: string; note?: string }[],
+  choices: readonly { label: string; note?: string | undefined }[],
   defaultIndex: number,
-): Promise<number> {
+): Promise<number | Back> {
+  const count = choices.length
+  let cursor = Math.min(Math.max(defaultIndex, 0), count - 1)
+  const state: Painted = { lines: 0 }
+  const render = (): string[] => [
+    `${question} ${pc.dim(`(${SELECT_HINT})`)}`,
+    ...choices.map((choice, index) => {
+      const active = index === cursor
+      const marker = active ? pc.cyan('❯') : ' '
+      const note = choice.note === undefined ? '' : pc.dim(` — ${choice.note}`)
+      return `  ${marker} ${active ? pc.bold(choice.label) : choice.label}${note}`
+    }),
+  ]
+
   io.say('')
-  io.say(question)
-  choices.forEach((choice, index) => {
-    const note = choice.note === undefined ? '' : pc.dim(`  — ${choice.note}`)
-    io.say(`  ${index + 1}. ${choice.label}${note}`)
-  })
+  io.write(HIDE_CURSOR)
+  try {
+    for (;;) {
+      paint(io, state, render())
+      // eslint-disable-next-line no-await-in-loop
+      const key = await readKey(io)
+      if (key.name === 'up' || key.name === 'k') cursor = (cursor + count - 1) % count
+      else if (key.name === 'down' || key.name === 'j') cursor = (cursor + 1) % count
+      else if (key.name === 'return' || key.name === 'enter') break
+      else if (key.name === 'escape' || key.name === 'left') {
+        settle(io, state, `${question} ${pc.dim('(back)')}`)
+        return BACK
+      } else {
+        const jump = digitIndex(key, count)
+        if (jump !== undefined) {
+          cursor = jump
+          break
+        }
+      }
+    }
+  } finally {
+    io.write(SHOW_CURSOR)
+  }
+  settle(io, state, `${question} ${pc.cyan((choices[cursor] as { label: string }).label)}`)
+  return cursor
+}
+
+/**
+ * Arrow-key multi choice: space toggles the entry under the cursor, `a` flips
+ * everything at once, enter confirms (at least one must stay selected).
+ * Returns one flag per choice, or {@link BACK}.
+ */
+async function multiSelect(
+  io: PromptIO,
+  question: string,
+  choices: readonly { label: string; note?: string | undefined }[],
+  initial: readonly boolean[],
+): Promise<boolean[] | Back> {
+  const count = choices.length
+  let cursor = 0
+  let warn = false
+  const selected = [...initial]
+  const state: Painted = { lines: 0 }
+  const render = (): string[] => [
+    `${question} ${pc.dim(`(${MULTI_HINT})`)}`,
+    ...choices.map((choice, index) => {
+      const active = index === cursor
+      const marker = active ? pc.cyan('❯') : ' '
+      const box = selected[index] === true ? pc.cyan('◉') : '◯'
+      const note = choice.note === undefined ? '' : pc.dim(` — ${choice.note}`)
+      return `  ${marker} ${box} ${active ? pc.bold(choice.label) : choice.label}${note}`
+    }),
+    ...(warn ? [`  ${pc.yellow('keep at least one selected')}`] : []),
+  ]
+
+  io.say('')
+  io.write(HIDE_CURSOR)
+  try {
+    for (;;) {
+      paint(io, state, render())
+      // eslint-disable-next-line no-await-in-loop
+      const key = await readKey(io)
+      if (key.name === 'up' || key.name === 'k') cursor = (cursor + count - 1) % count
+      else if (key.name === 'down' || key.name === 'j') cursor = (cursor + 1) % count
+      else if (key.name === 'space') {
+        selected[cursor] = selected[cursor] !== true
+        warn = false
+      } else if (key.name === 'a') {
+        const all = selected.every(Boolean)
+        selected.fill(!all)
+        warn = false
+      } else if (key.name === 'return' || key.name === 'enter') {
+        if (selected.some(Boolean)) break
+        warn = true
+      } else if (key.name === 'escape' || key.name === 'left') {
+        settle(io, state, `${question} ${pc.dim('(back)')}`)
+        return BACK
+      }
+    }
+  } finally {
+    io.write(SHOW_CURSOR)
+  }
+  const chosen = selected.every(Boolean)
+    ? 'all'
+    : choices
+        .filter((_, index) => selected[index])
+        .map((choice) => choice.label)
+        .join(', ')
+  settle(io, state, `${question} ${pc.cyan(chosen)}`)
+  return selected
+}
+
+/** A Yes/No toggle: arrows flip it, y/n answer directly, enter confirms. */
+async function confirm(io: PromptIO, question: string, fallback: boolean): Promise<boolean | Back> {
+  let value = fallback
+  const state: Painted = { lines: 0 }
+  const render = (): string[] => {
+    const yes = value ? pc.bold(pc.cyan('❯ Yes')) : pc.dim('  Yes')
+    const no = value ? pc.dim('  No') : pc.bold(pc.cyan('❯ No'))
+    return [`${question}  ${yes}  ${no}  ${pc.dim(`(${CONFIRM_HINT})`)}`]
+  }
+
+  io.write(HIDE_CURSOR)
+  try {
+    for (;;) {
+      paint(io, state, render())
+      // eslint-disable-next-line no-await-in-loop
+      const key = await readKey(io)
+      if (key.name === 'y') {
+        value = true
+        break
+      }
+      if (key.name === 'n') {
+        value = false
+        break
+      }
+      if (key.name === 'return' || key.name === 'enter') break
+      if (key.name === 'escape') {
+        settle(io, state, `${question} ${pc.dim('(back)')}`)
+        return BACK
+      }
+      if (
+        key.name === 'left' ||
+        key.name === 'right' ||
+        key.name === 'up' ||
+        key.name === 'down' ||
+        key.name === 'tab' ||
+        key.name === 'space'
+      ) {
+        value = !value
+      }
+    }
+  } finally {
+    io.write(SHOW_CURSOR)
+  }
+  settle(io, state, `${question} ${pc.cyan(value ? 'Yes' : 'No')}`)
+  return value
+}
+
+/**
+ * The one place typing happens: a minimal line edit for a custom path.
+ * Returns the trimmed text, or `null` when escaped.
+ */
+async function textInput(io: PromptIO, label: string, initial: string): Promise<string | null> {
+  let value = initial
+  const state: Painted = { lines: 0 }
   for (;;) {
+    paint(io, state, [`${label}: ${value}${pc.dim('▏')}  ${pc.dim(`(${TEXT_HINT})`)}`])
     // eslint-disable-next-line no-await-in-loop
-    const answer = (await io.ask(`  choice [${defaultIndex + 1}]: `)).trim()
-    if (answer.length === 0) return defaultIndex
-    const picked = Number(answer)
-    if (Number.isInteger(picked) && picked >= 1 && picked <= choices.length) return picked - 1
-    io.say(`  enter a number between 1 and ${choices.length}`)
+    const key = await readKey(io)
+    if (key.name === 'return' || key.name === 'enter') {
+      const trimmed = value.trim()
+      settle(io, state, `${label} ${pc.cyan(trimmed.length === 0 ? '(unchanged)' : trimmed)}`)
+      return trimmed
+    }
+    if (key.name === 'escape') {
+      settle(io, state, `${label} ${pc.dim('(back)')}`)
+      return null
+    }
+    if (key.name === 'backspace') value = value.slice(0, -1)
+    else if (key.ctrl === true && key.name === 'u') value = ''
+    else if (printable(key)) value += key.sequence
   }
 }
 
-/** Yes/no prompt with a default. */
-async function confirm(io: PromptIO, question: string, fallback: boolean): Promise<boolean> {
-  for (;;) {
-    // eslint-disable-next-line no-await-in-loop
-    const answer = (await io.ask(`${question} [${fallback ? 'Y/n' : 'y/N'}]: `))
-      .trim()
-      .toLowerCase()
-    if (answer.length === 0) return fallback
-    if (answer === 'y' || answer === 'yes') return true
-    if (answer === 'n' || answer === 'no') return false
-    io.say('  y or n')
-  }
+/** A single character the path edit should accept as itself. */
+function printable(key: PromptKey): boolean {
+  if (key.ctrl === true || key.meta === true) return false
+  const ch = key.sequence
+  return ch !== undefined && ch.length === 1 && ch >= ' ' && ch !== '\u007F'
 }
 
 /**

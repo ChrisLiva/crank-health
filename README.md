@@ -51,11 +51,14 @@ is unaffected.
 | `--allow-missing`           | Not-assessed categories do not trip that gate                             |
 | `--json`                    | Print `report.json` to stdout instead of the terminal summary             |
 | `--timeout <secs>`          | Per-tool budget for the quick tier (default 120 s)                        |
-| `-i`, `--interactive`       | Choose options through guided prompts tailored to the repo                |
+| `-i`, `--interactive`       | Choose options through arrow-key menus tailored to the repo               |
 | `-h`, `--help`, `--version` |                                                                           |
 
 `--interactive` first probes the target the same way detection does — read-only, no tool ever
-executes — and tailors the questions to what it finds: the discovered projects are listed up front, a
+executes — and walks the options as keyboard menus: arrow keys move, enter chooses, space toggles
+categories on and off, a digit jumps straight to a menu entry, and escape steps back to the previous
+question with the answers so far intact; the only thing ever typed is a custom output path. The
+questions are tailored to what the probe finds: the discovered projects are listed up front, a
 PR delta is only offered against branches that actually share history with `HEAD`, the deep tier says
 whether a repo-owned mutation tool exists to grade test quality, and a quick-mode gate defaults to
 `--allow-missing` so the always-unassessed test-quality category doesn't trip it. When the security

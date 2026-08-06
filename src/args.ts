@@ -32,7 +32,7 @@ export interface CliOptions {
   allowMissing: boolean
   /** Print report.json to stdout instead of the terminal summary. */
   json: boolean
-  /** `-i` / `--interactive`: pick options through prompts tailored to the repo. */
+  /** `-i` / `--interactive`: pick options through keyboard menus tailored to the repo. */
   interactive: boolean
   help: boolean
   version: boolean
@@ -62,7 +62,7 @@ Options:
   --allow-missing     not-assessed categories do not trip the gate
   --json              print report.json to stdout instead of terminal summary
   --timeout <secs>    per-tool budget for the quick tier (default 120)
-  -i, --interactive   choose options through guided prompts tailored to the repo
+  -i, --interactive   choose options through arrow-key menus tailored to the repo
   -h, --help          show this help
   --version           print version
 
