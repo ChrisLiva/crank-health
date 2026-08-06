@@ -12,6 +12,13 @@ export interface CliOptions {
   out: string | undefined
   /** Category subset, e.g. ['lint', 'types']; undefined means all. */
   only: string[] | undefined
+  /**
+   * `--project <path>`, repeatable: analyze only these projects, as
+   * repo-relative posix paths (`.` for the root project). Undefined means every
+   * discovered project. Paths are normalized here; whether they exist is a
+   * question only discovery can answer, so it is asked in `run.ts`.
+   */
+  projects: string[] | undefined
   /** Lowest passing grade for the exit-1 gate; undefined means the gate is off. */
   failUnder: string | undefined
   /**
@@ -47,6 +54,7 @@ Usage:
 
 Options:
   --pr <base>         two-scan delta vs merge-base with <base>
+  --project <path>    scope per-project analysis to <path>; repeatable (default: every project)
   --deep              add mutation testing / test-suite tier
   --out <dir>         output dir (default <path>/.codebase-health/)
   --only <cats>       subset, e.g. --only lint,types,security
@@ -63,7 +71,10 @@ Exit codes:
   1  --fail-under gate tripped
   2  crank-health errored
 
---fail-under treats not-assessed/error categories as gate failures unless --allow-missing.
+--fail-under trips on any scanned project or the rollup, and treats not-assessed/error
+categories as gate failures unless --allow-missing.
+--deep runs mutation testing in every project that owns a mutation tool; --project is
+how you bound what that costs.
 `
 
 const GRADES = ['A', 'B', 'C', 'D', 'E', 'F']
@@ -104,6 +115,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     deep: values.deep ?? false,
     out: values.out,
     only,
+    projects: parseProjects(values.project),
     failUnder,
     timeoutSeconds: parseTimeout(values.timeout),
     allowMissing: values['allow-missing'] ?? false,
@@ -112,6 +124,29 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     help: values.help ?? false,
     version: values.version ?? false,
   }
+}
+
+/**
+ * `--project <path>`, repeatable, as the repo-relative posix paths discovery
+ * uses for project identity: a trailing slash and a leading `./` are how a
+ * shell completes a directory name, so both are accepted and neither is
+ * identity, and `.` is the root project. Repeats of one path are the same
+ * selection, so they collapse.
+ *
+ * @throws {CliUsageError} on a value that names no path at all
+ */
+function parseProjects(values: readonly string[] | undefined): string[] | undefined {
+  if (values === undefined) return undefined
+  const paths = values.map((value) => {
+    const path = value.trim().replace(/\/+$/, '').replace(/^\.\//, '')
+    if (path.length === 0) {
+      throw new CliUsageError(
+        `--project expects a project path, e.g. --project packages/api (or . for the repo root), got "${value}"`,
+      )
+    }
+    return path
+  })
+  return [...new Set(paths)]
 }
 
 /**
@@ -149,6 +184,7 @@ const OPTION_CONFIG = {
   deep: { type: 'boolean' },
   out: { type: 'string' },
   only: { type: 'string' },
+  project: { type: 'string', multiple: true },
   'fail-under': { type: 'string' },
   'allow-missing': { type: 'boolean' },
   json: { type: 'boolean' },

@@ -8,7 +8,7 @@ import { OSV_SCANNER } from './adapters/common/osv-scanner.ts'
 import type { SystemToolSpec } from './adapters/common/system-tool.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import type { CliOptions } from './args.ts'
-import { discoverFiles, repoDetectContext } from './core/discover.ts'
+import { discoverFiles, partitionProjects, repoDetectContext } from './core/discover.ts'
 import { headCommit, mergeBase, resolveCommit } from './core/git.ts'
 import type { Grade } from './core/types.ts'
 import { CATEGORIES, GRADES } from './core/types.ts'
@@ -32,6 +32,11 @@ export interface RepoProbe {
   readonly repoRoot: string
   readonly jsTsFiles: number
   readonly pythonFiles: number
+  /**
+   * The discovered projects' repo-relative paths, stable-sorted — what each
+   * grade in the report will be about, and what `--project` selects from.
+   */
+  readonly projects: readonly string[]
   /** Branch name, or `null` on a detached HEAD. */
   readonly currentBranch: string | null
   /**
@@ -158,6 +163,7 @@ export async function probeRepo(path: string): Promise<RepoProbe> {
     repoRoot,
     jsTsFiles: files.byLanguage['js-ts'].length,
     pythonFiles: files.byLanguage.python.length,
+    projects: partitionProjects(files).map((project) => project.path),
     currentBranch: await currentBranch(repoRoot),
     baseCandidates: await viableBases(repoRoot),
     ownedTools,
@@ -208,6 +214,7 @@ export async function runInteractiveSession(
 export function equivalentCommand(options: CliOptions): string {
   const parts = ['npx', 'crank-health']
   if (options.pr !== undefined) parts.push('--pr', options.pr)
+  for (const project of options.projects ?? []) parts.push('--project', project)
   if (options.deep) parts.push('--deep')
   if (options.only !== undefined) parts.push('--only', options.only.join(','))
   if (options.failUnder !== undefined) parts.push('--fail-under', options.failUnder)
@@ -223,6 +230,13 @@ function sayHeader(probe: RepoProbe, io: PromptIO): void {
   io.say(`${pc.bold('crank-health')} — interactive setup for ${probe.repoRoot}`)
   io.say('')
   io.say(`  files       ${probe.jsTsFiles} JS/TS · ${probe.pythonFiles} Python`)
+  io.say(`  projects    ${probe.projects.join(', ')}`)
+  // Only worth saying where there is something to choose between.
+  if (probe.projects.length > 1) {
+    io.say(
+      pc.dim('              each is graded on its own files and toolchain; scope with --project'),
+    )
+  }
   io.say(`  branch      ${probe.currentBranch ?? 'detached HEAD'}`)
   io.say(
     `  repo-owned  ${probe.ownedTools.length > 0 ? probe.ownedTools.join(', ') : 'no owned tools detected — pinned defaults will run'}`,

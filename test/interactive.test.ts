@@ -114,6 +114,7 @@ describe('interactive session', () => {
       const probe = await probeRepo(fixture.root)
       expect(probe.jsTsFiles).toBeGreaterThan(0)
       expect(probe.pythonFiles).toBe(0)
+      expect(probe.projects).toEqual(['.'])
       expect(probe.currentBranch).toBe('main')
       expect(probe.baseCandidates).toEqual([])
       expect(await fixture.status()).toBe('')
@@ -316,6 +317,8 @@ describe('equivalentCommand', () => {
     const options = parseCliArgs([
       '--pr',
       'main',
+      '--project',
+      'packages/api',
       '--deep',
       '--only',
       'lint,types',
@@ -329,7 +332,7 @@ describe('equivalentCommand', () => {
       'repo',
     ])
     expect(equivalentCommand(options)).toBe(
-      'npx crank-health --pr main --deep --only lint,types --fail-under B --allow-missing --out /tmp/health --timeout 30 repo',
+      'npx crank-health --pr main --project packages/api --deep --only lint,types --fail-under B --allow-missing --out /tmp/health --timeout 30 repo',
     )
   })
 

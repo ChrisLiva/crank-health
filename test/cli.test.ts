@@ -8,8 +8,8 @@ import { HELP_TEXT } from '../src/args.ts'
 import { VERSION } from '../src/version.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
-import type { HistoryRepo } from './support/history.ts'
-import { createHistoryRepo } from './support/history.ts'
+import type { HistoryRepo, HistorySpec } from './support/history.ts'
+import { createHistoryRepo, paddedFile } from './support/history.ts'
 import { CLEAN, CONST_ASSIGN } from './support/pr-fixture.ts'
 import { GOLDEN_TOOLCHAIN } from './support/system-tools.ts'
 
@@ -247,6 +247,100 @@ describe(
       const result = await runCli(['--pr', 'no-such-branch', '--out', out, fixture.root])
       expect(result.exitCode).toBe(2)
       expect(result.stderr).toContain('unknown base ref "no-such-branch"')
+    })
+  },
+  CLI_TIMEOUT_MS,
+)
+
+/**
+ * A workspace whose two packages answer the same question differently: `big` is
+ * two thousand clean lines (one statement, so it is not the empty file oxlint
+ * would flag, and padding for the rest), `small` is five lines with a `const`
+ * reassignment in them. One finding over both packages' KLOC is a B for the
+ * blend and an F for the package it is actually in — which is the whole reason
+ * the gate is asked per project and not only of the rollup.
+ */
+const MONO_GATE: HistorySpec = {
+  base: {
+    'package.json': `${JSON.stringify({ name: 'mono-gate', private: true, workspaces: ['packages/*'] }, null, 2)}\n`,
+    'packages/big/package.json': `${JSON.stringify({ name: 'big', version: '0.0.0', private: true }, null, 2)}\n`,
+    'packages/big/src/index.js': paddedFile(2000, { 1: 'export const value = 1' }),
+    'packages/small/package.json': `${JSON.stringify({ name: 'small', version: '0.0.0', private: true }, null, 2)}\n`,
+    'packages/small/src/index.js': CONST_ASSIGN,
+  },
+  head: [],
+}
+
+/** The keys these tests read back out of `report.json`. */
+interface GateReport {
+  readonly categories: Record<string, { status: string; grade?: string }>
+  readonly projects: {
+    path: string
+    categories: Record<string, { status: string; grade?: string }>
+  }[]
+  readonly tools: { tool: string; project: string }[]
+}
+
+describe(
+  'crank-health --project and the gate',
+  () => {
+    let repo: HistoryRepo
+    let out: string
+
+    beforeAll(async () => {
+      repo = await createHistoryRepo(MONO_GATE)
+      out = await mkdtemp(join(tmpdir(), 'crank-cli-mono-'))
+    }, CLI_TIMEOUT_MS)
+
+    afterAll(async () => {
+      await repo.remove()
+      await rm(out, { recursive: true, force: true })
+    })
+
+    async function report(): Promise<GateReport> {
+      return JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as GateReport
+    }
+
+    it('exits 1 for a package below the threshold, though the rollup clears it', async () => {
+      const result = await runCli(['--only', 'lint', '--fail-under', 'B', '--out', out, repo.root])
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toContain('packages/small lint F')
+      // The blend really does pass: without the per-project gate this run
+      // would have exited 0 on a package graded F.
+      expect((await report()).categories['lint']).toEqual({ status: 'graded', grade: 'B' })
+    })
+
+    it('scopes the scan and the rollup to --project, and exits 0', async () => {
+      const result = await runCli([
+        '--only',
+        'lint,security',
+        '--project',
+        'packages/big',
+        '--fail-under',
+        'B',
+        '--allow-missing',
+        '--out',
+        out,
+        repo.root,
+      ])
+      expect(result.exitCode).toBe(0)
+
+      const scoped = await report()
+      expect(scoped.projects.map((project) => project.path)).toEqual(['packages/big'])
+      // The rollup is what was scanned: `small`'s finding is not in it.
+      expect(scoped.categories['lint']).toEqual({ status: 'graded', grade: 'A' })
+      // …and a repo-spanning runner still spans the repo under scoping
+      // (spec acceptance criterion 7).
+      expect(scoped.tools.some((tool) => tool.project === 'repo')).toBe(true)
+    })
+
+    it('exits 2 on an unknown --project, listing the projects it did find', async () => {
+      const result = await runCli(['--project', 'packages/nope', '--out', out, repo.root])
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('unknown --project "packages/nope"')
+      expect(result.stderr).toContain('packages/big, packages/small')
     })
   },
   CLI_TIMEOUT_MS,

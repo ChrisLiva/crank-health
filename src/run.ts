@@ -4,7 +4,13 @@ import { join, resolve } from 'node:path'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
 import type { RootShell } from './core/discover.ts'
-import { countPhysicalLines, discoverFiles, discoverProjects } from './core/discover.ts'
+import {
+  countPhysicalLines,
+  discoverFiles,
+  discoverProjects,
+  inventoryOf,
+  partitionProjects,
+} from './core/discover.ts'
 import { headCommit } from './core/git.ts'
 import { failingFilePercent, gradeCategory } from './core/grade.ts'
 import { aggregateCategories, aggregateMetrics, runScan } from './core/orchestrator.ts'
@@ -19,6 +25,7 @@ import type {
   Finding,
   Grade,
   LanguageAdapter,
+  Project,
   RepoContext,
   ToolMetrics,
 } from './core/types.ts'
@@ -54,6 +61,11 @@ export interface HealthScanOptions {
   readonly out?: string | undefined
   /** `--only`; defaults to every category. */
   readonly only?: readonly Category[] | undefined
+  /**
+   * `--project`; defaults to every discovered project. See
+   * {@link scopedProjects} for what scoping does and does not narrow.
+   */
+  readonly projects?: readonly string[] | undefined
   /** `--deep` (spec §5): add the mutation / test-suite tier. */
   readonly deep?: boolean | undefined
   readonly concurrency?: number | undefined
@@ -92,6 +104,7 @@ export interface HealthScanResult {
 export async function runHealthScan(options: HealthScanOptions): Promise<HealthScanResult> {
   const startedAt = Date.now()
   const repoRoot = await resolveRepoRoot(options.path)
+  await assertProjectScope(repoRoot, options.projects)
   const commit = await headCommit(repoRoot)
   const scratch = await mkdtemp(join(tmpdir(), 'crank-health-'))
 
@@ -128,7 +141,10 @@ export interface TreeScan {
   /** The rollup's states: the whole tree, on the whole tree's denominators. */
   readonly categories: Record<Category, CategoryState>
   readonly selected: readonly Category[]
-  /** The same, per project, ordered by path. Never empty. */
+  /**
+   * The same, per project, ordered by path. Never empty, except on the side of
+   * a `--pr` comparison that has none of the selected projects yet.
+   */
   readonly projects: readonly ProjectScan[]
   /** Present when the tree's root is a workspace shell rather than a project. */
   readonly rootShell?: RootShell
@@ -152,11 +168,12 @@ export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'>
 export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   const files = await discoverFiles(options.repoRoot)
   const discovery = await discoverProjects(options.repoRoot, files)
+  const scanned = scopedProjects(discovery.projects, options.projects)
   const repo: RepoContext = {
     repoRoot: options.repoRoot,
     files,
     scratch: options.scratch,
-    projects: discovery.projects,
+    projects: scanned,
   }
 
   const scan = await runScan(repo, options.adapters ?? ADAPTERS, {
@@ -173,7 +190,12 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   return {
     scan,
     selected,
-    categories: await gradeAll(repo.repoRoot, rollupScope(repo, scan), selected, deep),
+    categories: await gradeAll(
+      repo.repoRoot,
+      rollupScope(scan, options.projects === undefined ? files : filesOf(scanned)),
+      selected,
+      deep,
+    ),
     projects: await gradeProjects(repo, scan, selected, deep),
     ...(discovery.rootShell === undefined ? {} : { rootShell: discovery.rootShell }),
   }
@@ -302,14 +324,78 @@ interface GradedScope {
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
 }
 
-/** The whole tree, which is exactly what a single-project repo has always been. */
-function rollupScope(repo: RepoContext, scan: ScanResult): GradedScope {
+/**
+ * The whole tree, which is exactly what a single-project repo has always been —
+ * and, under `--project`, the part of it that was scanned.
+ *
+ * @param files the denominator: the whole inventory, or the selected projects'
+ * files. Every finding the run produced counts either way, including the ones a
+ * repo-spanning scanner brought back from outside the selection — those tools
+ * still scan the repo, and a secret is not less of a secret for sitting in a
+ * package this invocation did not grade.
+ */
+function rollupScope(scan: ScanResult, files: FileInventory): GradedScope {
   return {
-    files: repo.files,
+    files,
     findings: scan.findings,
     categories: scan.categories,
     metrics: scan.metrics,
   }
+}
+
+/**
+ * The projects this scan analyzes: every discovered one, or the `--project`
+ * selection.
+ *
+ * Scoping narrows the *project* dimension and nothing else. Repo-spanning
+ * runners still span the repo (a secrets scan that skipped half the tree would
+ * be a secrets scan that missed the secret), and what the rollup is graded over
+ * follows the selection — see {@link rollupScope}.
+ *
+ * A selected path this tree does not have simply selects nothing here: the PR
+ * base predates a project the change added, and that is churn to report rather
+ * than an error. The usage error for a path no project matches is raised once,
+ * against the tree the user pointed at, by {@link assertProjectScope}.
+ */
+function scopedProjects(
+  projects: readonly Project[],
+  requested: readonly string[] | undefined,
+): readonly Project[] {
+  if (requested === undefined) return projects
+  return projects.filter((project) => requested.includes(project.path))
+}
+
+/** The selected projects' files as one inventory; projects never overlap. */
+function filesOf(projects: readonly Project[]): FileInventory {
+  return inventoryOf(projects.flatMap((project) => project.files.all).toSorted(compareFiles))
+}
+
+/**
+ * Checks a `--project` selection against the projects the target actually has,
+ * before any tool runs — a mistyped package name is worth a second of discovery
+ * rather than a full scan of the wrong thing, and in PR mode it is the head tree
+ * the user typed the path against.
+ *
+ * @throws {CliUsageError} when a selected path matches no discovered project
+ */
+export async function assertProjectScope(
+  repoRoot: string,
+  requested: readonly string[] | undefined,
+): Promise<void> {
+  if (requested === undefined) return
+  const known = partitionProjects(await discoverFiles(repoRoot)).map((project) => project.path)
+  const unknown = requested.filter((path) => !known.includes(path))
+  if (unknown.length === 0) return
+  throw new CliUsageError(
+    `unknown --project ${unknown.map((path) => `"${path}"`).join(', ')}; ` +
+      `this repo's projects are ${known.join(', ')}`,
+  )
+}
+
+/** Byte-wise ordering, not locale-aware: the sort must not vary by machine. */
+function compareFiles(a: string, b: string): number {
+  if (a === b) return 0
+  return a < b ? -1 : 1
 }
 
 /**

@@ -3,8 +3,8 @@
 Deterministic codebase health grades for JS/TS and Python repos.
 
 `crank-health` runs a fixed set of best-in-class analyzers against a repo — whole-repo or
-PR-vs-base — and reports one A–F grade per category, plus an action-ordered report for people
-and one for coding agents. It installs nothing into the target, writes nothing outside its own
+PR-vs-base — and reports one A–F grade per category, per project in a monorepo plus a whole-repo
+rollup, along with an action-ordered report for people and one for coding agents. It installs nothing into the target, writes nothing outside its own
 output directory, and produces the same bytes for the same commit.
 
 ```
@@ -43,6 +43,7 @@ is unaffected.
 | Flag                        | Effect                                                                    |
 | --------------------------- | ------------------------------------------------------------------------- |
 | `--pr <base>`               | Two-scan delta against `git merge-base <base> HEAD`                       |
+| `--project <path>`          | Scope per-project analysis to `<path>`; repeatable (default: every one)   |
 | `--deep`                    | Add the mutation-testing / test-suite tier                                |
 | `--out <dir>`               | Output directory (default: a dated run dir in `<path>/.codebase-health/`) |
 | `--only <cats>`             | Subset, e.g. `--only lint,types,security`                                 |
@@ -54,15 +55,15 @@ is unaffected.
 | `-h`, `--help`, `--version` |                                                                           |
 
 `--interactive` first probes the target the same way detection does — read-only, no tool ever
-executes — and tailors the questions to what it finds: a PR delta is only offered against branches
-that actually share history with `HEAD`, the deep tier says up front whether a repo-owned mutation
-tool exists to grade test quality, and a quick-mode gate defaults to `--allow-missing` so the
-always-unassessed test-quality category doesn't trip it. When the security category is selected, the
-session also shows which of the release-binary security tools (gitleaks, opengrep, osv-scanner) are
-on `PATH` and — where Homebrew is available — offers to install the missing ones, one confirmation
-per tool; declining leaves the scan to degrade exactly as before. Flags passed alongside `-i` become
-the prompts' defaults, and the session ends by printing the equivalent one-shot command before
-running (or not — declining just prints the command and exits 0).
+executes — and tailors the questions to what it finds: the discovered projects are listed up front, a
+PR delta is only offered against branches that actually share history with `HEAD`, the deep tier says
+whether a repo-owned mutation tool exists to grade test quality, and a quick-mode gate defaults to
+`--allow-missing` so the always-unassessed test-quality category doesn't trip it. When the security
+category is selected, the session also shows which of the release-binary security tools (gitleaks,
+opengrep, osv-scanner) are on `PATH` and — where Homebrew is available — offers to install the
+missing ones, one confirmation per tool; declining leaves the scan to degrade exactly as before.
+Flags passed alongside `-i` become the prompts' defaults, and the session ends by printing the
+equivalent one-shot command before running (or not — declining just prints the command and exits 0).
 
 ### Exit codes
 
@@ -72,9 +73,12 @@ running (or not — declining just prints the command and exits 0).
 | `1`  | `--fail-under` tripped.                                                             |
 | `2`  | crank-health itself errored (bad arguments, not a git repo, unwritable output dir). |
 
-`--fail-under` treats a not-assessed or errored category as a failure — a missing signal is not a
-passing one — unless `--allow-missing` is given. Categories excluded by `--only` are never selected
-and never trip it.
+`--fail-under` trips on **any scanned project or the rollup** grading below the threshold — a small
+failing package must not hide behind a large healthy one — and the message names the project
+(`packages/small lint F`). It treats a not-assessed or errored category as a failure too, since a
+missing signal is not a passing one, unless `--allow-missing` is given. Categories excluded by
+`--only` are never selected and never trip it, and a project's `not-assessed(repo-scoped)` never
+does: that category was answered for the repo, and the repo's answer is gated in the rollup.
 
 ## Categories and tools
 
@@ -113,6 +117,37 @@ alone.
 
 Every finding carries `provenance: "repo-config" | "default-config"` and a `gradeScope` flag, and
 when a default tool steps aside for a repo-owned one, `report.json` records that it did.
+
+## Monorepos
+
+Discovery partitions the repo into **projects**: every directory holding a `package.json` or a
+`pyproject.toml` is a candidate, and each file belongs to the nearest one above it, so every source
+file is graded exactly once. A root that keeps no source of its own is a workspace shell rather than
+a project — recorded as `rootShell` in `report.json`, not graded as eight empty categories.
+Workspace globs (npm/pnpm/yarn/uv) corroborate that classification and never decide which projects
+exist, so an unlisted or unbuilt package is still scanned. There is no mode flag: one project
+behaves exactly as it always has, and more than one produces per-project output automatically.
+
+Each project is detected, run and graded on its own terms — its own config, its own installed
+binaries, its own KLOC and file-count denominators — with ownership inheriting from ancestors, so a
+tool hoisted to the workspace root is owned by the packages under it (`tsconfig.json` is the
+exception: type ownership is strictly project-local). Alongside them, the report's top-level grades
+are the **rollup**: the whole-repo math, unchanged, which is what a single-project repo has always
+been. Categories only a repo-spanning tool can answer — secrets, dependency vulnerabilities,
+workflow hygiene — read `not-assessed(repo-scoped)` per project, and what those tools _found_ still
+counts toward the grade of the package it landed in.
+
+`--project <path>` scopes a run, and it is repeatable:
+
+```sh
+npx crank-health --project packages/api --project packages/web
+```
+
+Scoping narrows the project dimension and nothing else. Repo-spanning tools still span the whole
+repo — a secrets scan that skipped half the tree would be a secrets scan that misses the secret —
+and the rollup is then computed over what was scanned: the selected projects' files as the
+denominator, plus every finding the run produced. An unknown path is a usage error (exit 2) whose
+message lists the projects discovery did find.
 
 ## Grading
 
@@ -173,10 +208,10 @@ other; `.codebase-health/` carries a `.gitignore` (`*`) that hides every run fro
 
 | File          | For                                                                                                                                                                                                                                                     |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `report.json` | The contract. Every finding, category state, metric, resolved tool version.                                                                                                                                                                             |
+| `report.json` | The contract. Every finding, category state, metric, resolved tool version — as the rollup at the top level, and again per project under `projects[]` (path, manifests, languages, all eight states, metrics, and the toolchain each one owns).         |
 | `report.md`   | The human report: grades, provenance tags, remediation.                                                                                                                                                                                                 |
 | `agent.md`    | The coding-agent brief: ≤ 20 themed tasks in a deterministic priority order (security → types → dead code → complexity → duplication → lint → format, worst grade first), each with a stable ID, a grade impact, an evidence link and a verify command. |
-| `raw/`        | Each tool's own output, as evidence — source excerpts excepted, see below.                                                                                                                                                                              |
+| `raw/`        | Each tool's own output, as evidence — source excerpts excepted, see below. Nested by what the run was about: `raw/<project-path>/`, `raw/root/` for the root project, `raw/repo/` for a repo-spanning run, and `raw/base/…` for a `--pr` base scan.     |
 
 ### Secrets stay in your repo
 
@@ -249,6 +284,11 @@ suite needs (a `node_modules` with the right runner plugin, a virtualenv with th
 dependencies), so an ephemeral install would produce a confident failure instead of an honest "not
 available".
 
+On a monorepo it runs in **every** project that owns a mutation tool, with no cap on how many that
+is — each invocation bounded by the deep tier's own 15-minute per-tool budget, and no whole-run
+ceiling, because a report whose contents depend on how fast the machine was is not a report.
+`--project` is the cost control: `crank-health --deep --project packages/api` mutates one package.
+
 **cosmic-ray mutates files in place.** Unlike StrykerJS, which mutates a sandboxed copy, cosmic-ray
 edits the file on disk, runs the suite and restores it — a run killed in between leaves mutated
 source in the target. crank-health will not do that to a repo that never asked for it, which is why
@@ -271,6 +311,11 @@ flagged directly actionable), **resolved** findings, and each category's grade m
 Whole-repo measures — duplication, dead code — are computed over the whole tree on both sides, since
 a changed-file subset gives the wrong answer for both. In deep mode, mutation is scoped to the files
 the diff touched.
+
+Both sides scan every project, so the delta carries each project's own movement as well as the
+rollup's: a root config edit shows up in the packages it reached, a file moved across a package
+boundary is the same finding re-attributed rather than churn, and a project this change added or
+removed is labeled as such — so deleting a package never reads as the best work in the PR.
 
 ## Determinism
 

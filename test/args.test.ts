@@ -12,6 +12,7 @@ describe('parseCliArgs', () => {
       deep: false,
       out: undefined,
       only: undefined,
+      projects: undefined,
       failUnder: undefined,
       timeoutSeconds: undefined,
       allowMissing: false,
@@ -39,6 +40,8 @@ describe('parseCliArgs', () => {
       '/tmp/health',
       '--only',
       'lint,types,security',
+      '--project',
+      'packages/api',
       '--fail-under',
       'B',
       '--allow-missing',
@@ -53,6 +56,7 @@ describe('parseCliArgs', () => {
       deep: true,
       out: '/tmp/health',
       only: ['lint', 'types', 'security'],
+      projects: ['packages/api'],
       failUnder: 'B',
       timeoutSeconds: 30,
       allowMissing: true,
@@ -79,6 +83,29 @@ describe('parseCliArgs', () => {
     const options = parseCliArgs(['--only', 'lint, types ,', '--fail-under', 'c'])
     expect(options.only).toEqual(['lint', 'types'])
     expect(options.failUnder).toBe('C')
+  })
+
+  /** Spec CLI surface: `--project` is repeatable, and each one is a project. */
+  it('collects every --project into the scan scope', () => {
+    expect(
+      parseCliArgs(['--project', 'packages/api', '--project', 'packages/web']).projects,
+    ).toEqual(['packages/api', 'packages/web'])
+  })
+
+  it('normalizes --project paths to the identity discovery uses', () => {
+    expect(parseCliArgs(['--project', ' ./packages/api/ ']).projects).toEqual(['packages/api'])
+    expect(parseCliArgs(['--project', './']).projects).toEqual(['.'])
+    expect(parseCliArgs(['--project', '.']).projects).toEqual(['.'])
+  })
+
+  it('collapses a --project repeated with itself', () => {
+    expect(
+      parseCliArgs(['--project', 'packages/api', '--project', 'packages/api/']).projects,
+    ).toEqual(['packages/api'])
+  })
+
+  it('rejects a --project that names no path', () => {
+    expect(() => parseCliArgs(['--project', '  '])).toThrow(CliUsageError)
   })
 
   it('rejects an empty --only list', () => {
@@ -113,6 +140,7 @@ describe('HELP_TEXT', () => {
   it('documents every flag in the approved surface', () => {
     for (const flag of [
       '--pr <base>',
+      '--project <path>',
       '--deep',
       '--out <dir>',
       '--only <cats>',
@@ -132,6 +160,12 @@ describe('HELP_TEXT', () => {
     expect(HELP_TEXT).toContain('0  scan completed')
     expect(HELP_TEXT).toContain('1  --fail-under gate tripped')
     expect(HELP_TEXT).toContain('2  crank-health errored')
+  })
+
+  /** Spec CLI surface: `--project` is the documented cost control for `--deep`. */
+  it('says the gate is per project and that --project bounds a deep run', () => {
+    expect(HELP_TEXT).toContain('--fail-under trips on any scanned project or the rollup')
+    expect(HELP_TEXT).toContain('--project is\nhow you bound what that costs')
   })
 })
 

@@ -17,6 +17,7 @@ import { buildReport } from './render/json.ts'
 import type { HealthScanOptions, HealthScanResult } from './run.ts'
 import {
   adoptRawFiles,
+  assertProjectScope,
   createRunDirectory,
   resolveRepoRoot,
   scanTree,
@@ -68,6 +69,9 @@ export interface PrScanOptions extends HealthScanOptions {
 export async function runPrScan(options: PrScanOptions): Promise<HealthScanResult> {
   const startedAt = Date.now()
   const repoRoot = await resolveRepoRoot(options.path)
+  // Against head, which is the tree the user typed the paths against. A project
+  // only the base has is not a usage error — it is the `removed` churn state.
+  await assertProjectScope(repoRoot, options.projects)
 
   const commit = await headCommit(repoRoot)
   if (commit === null) {
