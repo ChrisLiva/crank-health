@@ -4,7 +4,14 @@ import {
   failingFilePercent,
   weightedCount,
 } from '../core/grade.ts'
-import type { Category, Finding, Language, Severity, ToolMetrics } from '../core/types.ts'
+import type {
+  Category,
+  CategoryState,
+  Finding,
+  Language,
+  Severity,
+  ToolMetrics,
+} from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
 import {
   ADVISORY_TAG,
@@ -13,9 +20,18 @@ import {
   location,
   percent,
   plural,
+  projectLabel,
+  rootShellNote,
   stateLabel,
 } from './display.ts'
-import type { Report, ReportDelta, ReportNewFinding, ReportTool } from './json.ts'
+import type {
+  Report,
+  ReportDelta,
+  ReportNewFinding,
+  ReportProject,
+  ReportProjectTool,
+  ReportTool,
+} from './json.ts'
 
 /**
  * `report.md` — the full human report (spec §9): every category's grade, what
@@ -59,14 +75,37 @@ export function renderReportMarkdown(report: Report, options: ReportMarkdownOpti
     '# Codebase health',
     subtitle(report, delta),
     '## Grades',
-    gradesTable(report, delta),
+    gradesTable(report.categories, rollupScope(report), delta),
     ...languageBreakdown(report),
     ...measurements(report),
     ...deltaSection(delta, options.maxDeltaFindings ?? DEFAULT_MAX_FINDINGS),
+    ...projectsSection(report),
     ...CATEGORIES.flatMap((category) => categorySection(report, category, limit, delta)),
     trailer(report),
   ]
   return `${blocks.join('\n\n')}\n`
+}
+
+/**
+ * What a set of grades was computed from: the whole repo's findings and
+ * measurements, or one project's. Everything that explains a grade reads from
+ * one of these, so the rollup's basis and a project's are the same sentences
+ * about different numbers.
+ */
+interface GradeScope {
+  readonly findings: readonly Finding[]
+  readonly metrics: Readonly<Partial<Record<Category, ToolMetrics>>>
+}
+
+function rollupScope(report: Report): GradeScope {
+  return { findings: report.findings, metrics: report.metrics }
+}
+
+function projectScope(report: Report, project: ReportProject): GradeScope {
+  return {
+    findings: report.findings.filter((finding) => finding.project === project.path),
+    metrics: project.metrics,
+  }
 }
 
 function subtitle(report: Report, delta: ReportDelta | undefined): string {
@@ -139,10 +178,14 @@ function short(sha: string): string {
 
 /* -------------------------------------------------------------- the summary */
 
-function gradesTable(report: Report, delta: ReportDelta | undefined): string {
+function gradesTable(
+  states: Readonly<Record<Category, CategoryState>>,
+  scope: GradeScope,
+  delta: ReportDelta | undefined,
+): string {
   const rows = CATEGORIES.map((category) => {
-    const state = report.categories[category]
-    const basis = state.status === 'graded' ? gradeBasis(report, category, delta) : state.reason
+    const state = states[category]
+    const basis = state.status === 'graded' ? gradeBasis(scope, category, delta) : state.reason
     return row([CATEGORY_LABELS[category], stateLabel(state), basis])
   })
   return table(['Category', 'Grade', 'Basis'], rows)
@@ -231,6 +274,61 @@ function measurements(report: Report): string[] {
   return lines.length === 0 ? [] : ['### Measurements', lines.join('\n')]
 }
 
+/* ----------------------------------------------------------- the projects */
+
+/**
+ * The same questions answered per project, in path order, after the rollup they
+ * add up to: each project's eight states against its own findings, its own
+ * measurements and its own denominators, then the toolchain that produced them.
+ *
+ * A single-project repo *is* the rollup — the section would restate the grades
+ * above it word for word — so it is rendered only where there is more than one
+ * project.
+ */
+function projectsSection(report: Report): string[] {
+  if (report.projects.length < 2) return []
+  const blocks = [
+    '## Projects',
+    `${plural(report.projects.length, 'project')}, each graded on its own files, its own toolchain ` +
+      'and its own denominators; the grades above are the repo as a whole. A category marked ' +
+      '`repo-scoped` is one a repo-spanning scan answered — secrets, dependency audits, workflow ' +
+      'checks — so it is graded once, above, and not per project.',
+  ]
+  if (report.rootShell !== undefined) blocks.push(rootShellNote(report.rootShell))
+  return [...blocks, ...report.projects.flatMap((project) => projectBlock(report, project))]
+}
+
+function projectBlock(report: Report, project: ReportProject): string[] {
+  const manifests = project.manifests.map((manifest) => `\`${manifest}\``)
+  const languages = project.languages.length === 0 ? [] : [project.languages.join(', ')]
+  return [
+    `### ${projectLabel(project.path)}`,
+    [...manifests, ...languages].join(' · '),
+    gradesTable(project.categories, projectScope(report, project), undefined),
+    ...(project.toolchain.length === 0
+      ? ['This project declares no tool of its own: it was analyzed on crank-health’s defaults.']
+      : [projectToolTable(project.toolchain)]),
+  ]
+}
+
+/**
+ * What this project owns and what made it own it. `Owned via` is the manifest
+ * or config that decided it, which in a monorepo is regularly an ancestor's —
+ * that is how a hoisted dependency at the root becomes this package's toolchain.
+ */
+function projectToolTable(toolchain: readonly ReportProjectTool[]): string {
+  const rows = toolchain.map((tool) =>
+    row([
+      tool.tool,
+      CATEGORY_LABELS[tool.category],
+      `${tool.reason}${tool.installed ? '' : ', not installed'}`,
+      tool.ownedVia ?? '—',
+      tool.version ?? '—',
+    ]),
+  )
+  return table(['Tool', 'Category', 'Ownership', 'Owned via', 'Version'], rows)
+}
+
 /* ---------------------------------------------------------- category detail */
 
 function categorySection(
@@ -248,7 +346,7 @@ function categorySection(
   const blocks: string[] = [
     `## ${CATEGORY_LABELS[category]} — ${stateLabel(state)}`,
     state.status === 'graded'
-      ? `${gradeBasis(report, category, delta)}\n\nGraded on ${bandText(category)}`
+      ? `${gradeBasis(rollupScope(report), category, delta)}\n\nGraded on ${bandText(category)}`
       : `Not graded: ${state.reason}`,
   ]
 
@@ -326,8 +424,8 @@ function findingLine(finding: Finding | ReportNewFinding): string {
  * (spec §3): counts for the absolute shape, the measured percentage for the
  * ratio shapes, weighted findings for the density shapes.
  */
-function gradeBasis(report: Report, category: Category, delta: ReportDelta | undefined): string {
-  const mine = report.findings.filter((finding) => finding.category === category)
+function gradeBasis(scope: GradeScope, category: Category, delta: ReportDelta | undefined): string {
+  const mine = scope.findings.filter((finding) => finding.category === category)
   const graded = mine.filter((finding) => finding.gradeScope)
   const advisory = mine.length - graded.length
   const note =
@@ -346,7 +444,7 @@ function gradeBasis(report: Report, category: Category, delta: ReportDelta | und
         ? `Nothing counted toward the grade.${note}`
         : `${plural(graded.length, 'graded finding')}${severityBreakdown(graded)}, weighted total ${round(weightedCount(graded))} (error ×5, warning ×1, info ×0.2).${note}`
     case 'ratio':
-      return `${ratioBasis(report, category, graded)}${note}`
+      return `${ratioBasis(scope, category, graded)}${note}`
   }
 }
 
@@ -358,8 +456,8 @@ function deltaNote(delta: ReportDelta | undefined, category: Category): string {
   return ` This change: ${movement.newFindings} new, ${movement.resolvedFindings} resolved.`
 }
 
-function ratioBasis(report: Report, category: Category, graded: readonly Finding[]): string {
-  const metrics = report.metrics[category]
+function ratioBasis(scope: GradeScope, category: Category, graded: readonly Finding[]): string {
+  const metrics = scope.metrics[category]
   switch (category) {
     case 'complexity': {
       const total = metrics?.functionsTotal
@@ -370,7 +468,7 @@ function ratioBasis(report: Report, category: Category, graded: readonly Finding
     }
     case 'duplication': {
       const share = metrics?.duplicationPercent
-      const clones = report.findings.filter((finding) => finding.category === category).length
+      const clones = scope.findings.filter((finding) => finding.category === category).length
       if (share === undefined) return `${plural(clones, 'duplicated block')} reported.`
       return clones === 0
         ? `${percent(share)} of tokens duplicated.`

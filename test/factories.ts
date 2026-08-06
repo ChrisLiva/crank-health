@@ -1,4 +1,4 @@
-import { inventoryOf, repoProject } from '../src/core/discover.ts'
+import { inventoryOf, partitionProjects, repoProject } from '../src/core/discover.ts'
 import type {
   Category,
   CategoryState,
@@ -18,6 +18,25 @@ import { buildReport } from '../src/render/json.ts'
  */
 export function makeProject(files: readonly string[] = []): Project {
   return repoProject(inventoryOf(files))
+}
+
+/** A workspace with no source at its root: two packages, two languages. */
+export const MONOREPO = partitionProjects(
+  inventoryOf([
+    'package.json',
+    'packages/api/api/main.py',
+    'packages/api/pyproject.toml',
+    'packages/web/package.json',
+    'packages/web/src/a.ts',
+    'pnpm-workspace.yaml',
+  ]),
+)
+
+/** One project of {@link MONOREPO}, by path. */
+export function projectAt(path: string): Project {
+  const found = MONOREPO.find((project) => project.path === path)
+  if (found === undefined) throw new Error(`no project at ${path}`)
+  return found
 }
 
 /** A minimal valid finding; override only what the assertion is about. */

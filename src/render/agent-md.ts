@@ -1,3 +1,4 @@
+import { ROOT_PROJECT } from '../core/discover.ts'
 import { SEVERITY_WEIGHTS } from '../core/grade.ts'
 import type { Category, Finding, Grade } from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
@@ -7,6 +8,7 @@ import {
   TOUCHED_TAG,
   location,
   plural,
+  projectLabel,
   stateLabel,
 } from './display.ts'
 import type { Report, ReportDelta } from './json.ts'
@@ -53,6 +55,12 @@ export interface AgentTask {
   /** Stable within one report: `T1`, `T2`, … in the order tasks are emitted. */
   readonly id: string
   readonly category: Category
+  /**
+   * The project this task's work is in, `.` at the repo root. A theme never
+   * spans two projects: the same rule broken in two packages is two sittings,
+   * under two configs, and an agent has to be told which package it is in.
+   */
+  readonly project: string
   /**
    * PR mode only: at least one of this task's findings sits on a line the
    * change touched (spec §4's directly-actionable). Always `false` for a
@@ -108,7 +116,7 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
     '## Tasks',
     ...(tasks.length === 0
       ? [delta === undefined ? NOTHING_TO_DO : NOTHING_NEW]
-      : tasks.map((task) => renderTask(task))),
+      : tasks.map((task) => renderTask(task, report.projects.length > 1))),
     ...resolvedSection(delta),
     footer(report, all.length, tasks.length),
   ]
@@ -160,7 +168,8 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
         Number(isDirect(b, touched)) - Number(isDirect(a, touched)) ||
         severityWeight(b.findings) - severityWeight(a.findings) ||
         b.findings.length - a.findings.length ||
-        compare(a.key, b.key),
+        compare(a.key, b.key) ||
+        compare(a.project, b.project),
     )
     .map((theme, index) => toTask(theme, index + 1, report, rawByTool, touched))
 }
@@ -189,6 +198,7 @@ function toTask(
   return {
     id: `T${ordinal}`,
     category: theme.category,
+    project: theme.project,
     directlyActionable: isDirect(theme, touched),
     title: theme.title,
     gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
@@ -213,6 +223,8 @@ function verifyArgv(category: Category): string[] {
 
 interface Theme {
   readonly category: Category
+  /** The project every finding in it belongs to; see {@link AgentTask.project}. */
+  readonly project: string
   /** Stable tiebreaker, and the reason two findings ended up together. */
   readonly key: string
   readonly title: string
@@ -223,20 +235,26 @@ interface Theme {
  * Groups one category's findings into themes. Each category groups by the thing
  * that makes two of its findings the same piece of work: a rule, a kind of dead
  * code, or — where the whole category is one mechanical sweep — nothing at all.
+ * Always within one project: in a single-project repo that is every finding, so
+ * the grouping is the one it has always been.
  */
 function themesOf(category: Category, findings: readonly Finding[]): Theme[] {
-  const groups = new Map<string, Finding[]>()
+  const groups = new Map<string, { project: string; key: string; findings: Finding[] }>()
   for (const finding of findings) {
+    const project = finding.project ?? ROOT_PROJECT
     const key = themeKey(finding)
-    const existing = groups.get(key)
-    if (existing === undefined) groups.set(key, [finding])
-    else existing.push(finding)
+    // Keyed on both, so no project path can be read as part of a theme key.
+    const id = JSON.stringify([project, key])
+    const group = groups.get(id)
+    if (group === undefined) groups.set(id, { project, key, findings: [finding] })
+    else group.findings.push(finding)
   }
-  return [...groups].map(([key, grouped]) => ({
+  return [...groups.values()].map((group) => ({
     category,
-    key,
-    title: themeTitle(category, key, grouped),
-    findings: grouped,
+    project: group.project,
+    key: group.key,
+    title: themeTitle(category, group.key, group.findings),
+    findings: group.findings,
   }))
 }
 
@@ -376,10 +394,19 @@ const NOTHING_TO_DO =
 
 const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
 
-function renderTask(task: AgentTask): string {
+/**
+ * One task. In a monorepo the task names the project it is in: two packages can
+ * break the same rule under two configs, and an agent that is not told which
+ * package it is working in has to guess from the file paths.
+ *
+ * A single-project repo has one answer and states it in the header already, so
+ * `named` is false there and the task reads exactly as it always has.
+ */
+function renderTask(task: AgentTask, named: boolean): string {
   const lines = [
     `### ${task.id} — ${task.title}${task.directlyActionable ? ` ${TOUCHED_TAG}` : ''}`,
     '',
+    ...(named ? [`Project: ${projectLabel(task.project)}`, ''] : []),
     `Grade impact: ${task.gradeImpact}`,
     '',
     ...findingBlock(task.findings),

@@ -1,8 +1,19 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
+import type { CategoryState } from '../src/core/types.ts'
+import { CATEGORIES } from '../src/core/types.ts'
+import { CATEGORY_LABELS } from '../src/render/display.ts'
+import type { ReportProject } from '../src/render/json.ts'
 import { renderReportMarkdown } from '../src/render/report-md.ts'
 import { TIMINGS_MARKER } from '../src/render/report-md.ts'
-import { allGraded, makeFinding, makeReport } from './factories.ts'
+import {
+  allGraded,
+  allNotAssessed,
+  makeFinding,
+  makeProjectScan,
+  makeReport,
+  projectAt,
+} from './factories.ts'
 import { normalizeMarkdown, readGoldenReport } from './support/report.ts'
 
 /**
@@ -28,6 +39,12 @@ async function render(name: string): Promise<string> {
 function section(markdown: string, heading: string): string {
   const [, rest = ''] = markdown.split(heading)
   return rest.split('\n## ')[0] ?? ''
+}
+
+/** One project's `###` block, from its heading to the next heading of any level. */
+function projectBlock(markdown: string, heading: string): string {
+  const [, rest = ''] = markdown.split(heading)
+  return rest.split('\n### ')[0]?.split('\n## ')[0] ?? ''
 }
 
 describe('renderReportMarkdown', () => {
@@ -169,5 +186,130 @@ describe('renderReportMarkdown', () => {
     )
     expect(markdown).toContain('**Findings** (30)')
     expect(markdown).toContain('… 25 more in `report.json`.')
+  })
+})
+
+/**
+ * The per-project half of the report (spec's per-project grades): the rollup
+ * first, then every project in path order, each graded on its own findings and
+ * its own measurements. A single-project repo is the rollup, so it gets no
+ * section at all — the goldens above are what a one-project repo renders, and
+ * the last test here holds them to it with a project list of exactly one.
+ */
+describe('renderReportMarkdown projects', () => {
+  const REPO_SCOPED: CategoryState = { status: 'not-assessed', reason: 'repo-scoped' }
+
+  const report = makeReport({
+    categories: { ...allGraded('A'), lint: { status: 'graded', grade: 'D' } },
+    projects: [
+      makeProjectScan({
+        project: projectAt('packages/web'),
+        categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'F' } },
+      }),
+      makeProjectScan({
+        project: projectAt('packages/api'),
+        categories: { ...allNotAssessed(), security: REPO_SCOPED },
+      }),
+    ],
+    rootShell: { declaredBy: ['package.json', 'pnpm-workspace.yaml'] },
+    findings: [
+      makeFinding({ id: 'w1', file: 'packages/web/src/a.ts', project: 'packages/web' }),
+      makeFinding({
+        id: 'w2',
+        severity: 'error',
+        file: 'packages/web/src/b.ts',
+        project: 'packages/web',
+      }),
+      makeFinding({ id: 'a1', file: 'packages/api/api/main.py', project: 'packages/api' }),
+    ],
+    runs: [
+      {
+        record: {
+          tool: 'oxlint',
+          category: 'lint',
+          scope: 'js-ts',
+          project: 'packages/web',
+          rollupOnly: false,
+          pinnedVersion: '1.77.0',
+          detection: {
+            reason: 'dependency',
+            configFiles: [],
+            // The hoisted case: the root manifest is what makes this package own it.
+            ownedVia: 'package.json',
+            installed: true,
+            version: '1.70.0',
+          },
+          result: { state: 'ok', findings: [], rawFiles: [], toolVersion: '1.70.0' },
+          durationMs: 1,
+          standby: false,
+        },
+        raw: [],
+      },
+    ],
+  })
+
+  const markdown = renderReportMarkdown(report)
+
+  it('puts the projects after the rollup, in path order', () => {
+    expect(markdown.indexOf('## Projects')).toBeGreaterThan(markdown.indexOf('## Grades'))
+    expect(markdown.indexOf('### packages/api')).toBeGreaterThan(markdown.indexOf('## Projects'))
+    expect(markdown.indexOf('### packages/web')).toBeGreaterThan(
+      markdown.indexOf('### packages/api'),
+    )
+  })
+
+  it('grades each project on its own findings, not the repo’s', () => {
+    expect(projectBlock(markdown, '### packages/web')).toContain(
+      '| lint | F | 2 graded findings (1 error, 1 warning), weighted total 6',
+    )
+    // The rollup's own basis counts all three, and is where it always was.
+    expect(section(markdown, '## Grades')).toContain('| lint | D | 3 graded findings')
+  })
+
+  it('gives every project all eight category states, in priority order', () => {
+    for (const project of ['### packages/api', '### packages/web']) {
+      const [, table = ''] = projectBlock(markdown, project).split('| Category | Grade | Basis |\n')
+      const rows = (table.split('\n\n')[0] ?? '').split('\n').slice(1)
+      expect(rows.map((row) => row.split(' | ')[0]?.slice(2))).toEqual(
+        CATEGORIES.map((category) => CATEGORY_LABELS[category]),
+      )
+    }
+  })
+
+  it('says a repo-scoped category was answered for the repo, not for the project', () => {
+    expect(projectBlock(markdown, '### packages/api')).toContain(
+      '| security | not assessed | repo-scoped |',
+    )
+    expect(markdown).toContain(
+      'A category marked `repo-scoped` is one a repo-spanning scan answered',
+    )
+  })
+
+  it('names each project’s manifests, languages and what made it own a tool', () => {
+    const web = projectBlock(markdown, '### packages/web')
+    expect(web).toContain('`packages/web/package.json` · js-ts')
+    expect(web).toContain('| oxlint | lint | dependency | package.json | 1.70.0 |')
+    expect(projectBlock(markdown, '### packages/api')).toContain('declares no tool of its own')
+  })
+
+  it('records the workspace-shell root as a note rather than as a project', () => {
+    expect(markdown).toContain('The repo root is a workspace shell (declared by package.json')
+    expect(markdown).not.toContain('### repo root')
+  })
+
+  it('leaves a single-project report exactly as it was', async () => {
+    const golden = await readGoldenReport('js-basic')
+    const one: ReportProject = {
+      path: '.',
+      manifests: ['package.json'],
+      languages: ['js-ts'],
+      categories: golden.categories,
+      metrics: golden.metrics,
+      toolchain: [],
+    }
+    expect(renderReportMarkdown({ ...golden, projects: [one] })).toBe(renderReportMarkdown(golden))
+    expect(normalizeMarkdown(renderReportMarkdown({ ...golden, projects: [one] }), '<repo>')).toBe(
+      await goldenMarkdown('js-basic'),
+    )
   })
 })

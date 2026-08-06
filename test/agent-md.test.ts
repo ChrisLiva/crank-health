@@ -6,7 +6,14 @@ import { CATEGORIES, categoryRank } from '../src/core/types.ts'
 import type { AgentTask } from '../src/render/agent-md.ts'
 import { MAX_TASKS, buildAgentTasks, renderAgentMarkdown } from '../src/render/agent-md.ts'
 import type { Report } from '../src/render/json.ts'
-import { allGraded, makeFinding, makeReport } from './factories.ts'
+import {
+  allGraded,
+  makeFinding,
+  makeProject,
+  makeProjectScan,
+  makeReport,
+  projectAt,
+} from './factories.ts'
 import { normalizeMarkdown, readGoldenReport } from './support/report.ts'
 
 /**
@@ -342,6 +349,18 @@ function impactOf(tasks: readonly AgentTask[], category: Category): string | und
   return tasks.find((task) => task.category === category)?.gradeImpact
 }
 
+/** Two packages, one failing category, and the findings a test plants in them. */
+function monorepo(findings: readonly Finding[]): Report {
+  return makeReport({
+    categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+    projects: [
+      makeProjectScan({ project: projectAt('packages/web') }),
+      makeProjectScan({ project: projectAt('packages/api') }),
+    ],
+    findings,
+  })
+}
+
 /** A report where every category has work in it, each at a different grade. */
 function everyCategoryFailing(): Report {
   const grades = { security: 'F', types: 'D', 'dead-code': 'C', complexity: 'B' } as const
@@ -376,3 +395,52 @@ function manyLintRules(count: number): Report {
     ),
   })
 }
+
+/**
+ * A task in a monorepo has to say which package it is in: two packages break
+ * the same rule under two configs, and the file paths are not an instruction.
+ * A single-project repo has one answer and says it in the header, so its tasks
+ * read exactly as they always have — which the goldens above hold to.
+ */
+describe('tasks in a monorepo', () => {
+  const SAME_RULE = [
+    makeFinding({ id: 'w', file: 'packages/web/src/a.ts', project: 'packages/web' }),
+    makeFinding({ id: 'a', file: 'packages/api/api/main.py', project: 'packages/api' }),
+  ]
+
+  it('keeps one rule broken in two packages as two tasks, one per project', () => {
+    const tasks = buildAgentTasks(monorepo(SAME_RULE))
+    expect(tasks.map((task) => [task.project, task.title])).toEqual([
+      ['packages/api', 'Fix 1 `no-unused-vars` finding'],
+      ['packages/web', 'Fix 1 `no-unused-vars` finding'],
+    ])
+    expect(tasks.map((task) => task.findings.length)).toEqual([1, 1])
+  })
+
+  it('names the project in every rendered task', () => {
+    const markdown = renderAgentMarkdown(monorepo(SAME_RULE))
+    expect(markdown).toContain('### T1 — Fix 1 `no-unused-vars` finding\n\nProject: packages/api')
+    expect(markdown).toContain('### T2 — Fix 1 `no-unused-vars` finding\n\nProject: packages/web')
+  })
+
+  it('calls the root project the repo root', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+      projects: [
+        makeProjectScan({ project: projectAt('packages/web') }),
+        makeProjectScan({ project: makeProject(['package.json', 'src/a.ts']) }),
+      ],
+      findings: [makeFinding({ id: 'r', file: 'src/a.ts', project: '.' })],
+    })
+    expect(renderAgentMarkdown(report)).toContain('Project: repo root')
+  })
+
+  it('names no project when the repo is one project', () => {
+    const single = makeReport({
+      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+      findings: [makeFinding({ id: 'a' })],
+    })
+    expect(single.projects).toHaveLength(1)
+    expect(renderAgentMarkdown(single)).not.toContain('Project:')
+  })
+})

@@ -1,8 +1,8 @@
 import pc from 'picocolors'
 import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
-import { CATEGORY_LABELS, percent, stateLabel } from './display.ts'
-import type { Report, ReportDelta } from './json.ts'
+import { CATEGORY_LABELS, percent, projectLabel, rootShellNote, stateLabel } from './display.ts'
+import type { Report, ReportDelta, ReportProject } from './json.ts'
 
 /**
  * The terminal summary (spec §9): every category's grade, then the findings
@@ -46,6 +46,9 @@ export function renderTerminal(
   for (const category of CATEGORIES) {
     lines.push(categoryLine(report, category, color))
   }
+
+  const projects = projectLines(report, color)
+  if (projects.length > 0) lines.push('', ...projects)
 
   if (report.delta !== undefined) lines.push('', ...deltaLines(report.delta, color))
 
@@ -111,6 +114,45 @@ function deltaLines(delta: ReportDelta, color: Colors): string[] {
     )
   }
   return lines
+}
+
+/**
+ * The projects inside the repo, in path order, under the rollup they add up to.
+ *
+ * One line each, naming the categories this project was graded on and counting
+ * the ones nothing assessed — this is the glance, and eight rows per package is
+ * a report. `report.md` carries every project's eight states in full.
+ *
+ * A single-project repo is the whole repo, and repeating the grades above it
+ * would say nothing: the block is only rendered where there is more than one.
+ */
+function projectLines(report: Report, color: Colors): string[] {
+  if (report.projects.length < 2) return []
+  const lines = [color.bold('Projects')]
+  if (report.rootShell !== undefined) lines.push(color.dim(`  ${rootShellNote(report.rootShell)}`))
+
+  const width = Math.max(...report.projects.map((project) => projectLabel(project.path).length))
+  for (const project of report.projects) {
+    lines.push(`  ${projectLabel(project.path).padEnd(width)}  ${projectGrades(project, color)}`)
+  }
+  return lines
+}
+
+/** `types A · lint F · 5 not assessed` — what this project was graded on. */
+function projectGrades(project: ReportProject, color: Colors): string {
+  const parts: string[] = []
+  let unassessed = 0
+  for (const category of CATEGORIES) {
+    const state = project.categories[category]
+    const label = CATEGORY_LABELS[category]
+    if (state.status === 'graded')
+      parts.push(`${label} ${gradeColor(state.grade, color)(state.grade)}`)
+    else if (state.status === 'error') parts.push(`${label} ${color.red('error')}`)
+    else unassessed += 1
+  }
+  if (parts.length === 0) return color.dim('nothing assessed')
+  const rest = unassessed === 0 ? '' : color.dim(` · ${unassessed} not assessed`)
+  return `${parts.join(color.dim(' · '))}${rest}`
 }
 
 function header(report: Report, color: Colors): string {

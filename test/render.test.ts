@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
 import type { RunRecord } from '../src/core/orchestrator.ts'
 import { sortFindings } from '../src/core/orchestrator.ts'
-import type { CategoryState, Finding, Project } from '../src/core/types.ts'
+import type { CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import { buildReport, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
@@ -13,28 +12,11 @@ import {
   makeFinding,
   makeProjectScan,
   makeReportInput,
+  projectAt,
 } from './factories.ts'
 import { normalizeReport } from './support/report.ts'
 
-/** A workspace with no source at its root: two packages, two languages. */
-const MONOREPO = partitionProjects(
-  inventoryOf([
-    'package.json',
-    'packages/api/api/main.py',
-    'packages/api/pyproject.toml',
-    'packages/web/package.json',
-    'packages/web/src/a.ts',
-    'pnpm-workspace.yaml',
-  ]),
-)
-
 const REPO_SCOPED: CategoryState = { status: 'not-assessed', reason: REPO_SCOPED_REASON }
-
-function projectAt(path: string): Project {
-  const found = MONOREPO.find((project) => project.path === path)
-  if (found === undefined) throw new Error(`no project at ${path}`)
-  return found
-}
 
 describe('buildReport', () => {
   it('emits the top-level keys in a fixed order', () => {
@@ -411,6 +393,60 @@ describe('renderTerminal', () => {
   it('emits no escape sequences when colour is off, and some when it is on', () => {
     expect(renderTerminal(report, paths, { color: false })).not.toContain('\u001B[')
     expect(renderTerminal(report, paths, { color: true })).toContain('\u001B[')
+  })
+})
+
+/**
+ * The glance in a monorepo: the rollup as it always was, then the projects
+ * under it. A single-project repo *is* the rollup, so the block is not there —
+ * which is the whole of "a one-project repo renders as it did before".
+ */
+describe('renderTerminal projects', () => {
+  const paths = { markdown: '/out/report.md', agent: '/out/agent.md', json: '/out/report.json' }
+
+  const monorepo = buildReport(
+    input({
+      categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'D' } },
+      projects: [
+        makeProjectScan({
+          project: projectAt('packages/web'),
+          categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'F' } },
+        }),
+        makeProjectScan({
+          project: projectAt('packages/api'),
+          categories: {
+            ...allNotAssessed(),
+            security: REPO_SCOPED,
+            types: { status: 'error', reason: 'mypy crashed' },
+            lint: { status: 'graded', grade: 'A' },
+          },
+        }),
+      ],
+      rootShell: { declaredBy: ['package.json', 'pnpm-workspace.yaml'] },
+    }),
+  )
+
+  it('lists the projects under the rollup, in path order', () => {
+    const lines = renderTerminal(monorepo, paths, { color: false }).split('\n')
+    const heading = lines.indexOf('Projects')
+    expect(heading).toBeGreaterThan(lines.findIndex((line) => line.includes('lint')))
+    expect(lines.filter((line) => line.startsWith('  packages/'))).toEqual([
+      '  packages/api  types error · lint A · 6 not assessed',
+      '  packages/web  lint F · 7 not assessed',
+    ])
+  })
+
+  it('says the root is a workspace shell rather than grading it', () => {
+    const lines = renderTerminal(monorepo, paths, { color: false }).split('\n')
+    expect(lines).toContain(
+      '  The repo root is a workspace shell (declared by package.json, pnpm-workspace.yaml): it holds no source of its own, so it is not graded as a project.',
+    )
+    expect(lines.some((line) => line.startsWith('  repo root'))).toBe(false)
+  })
+
+  it('adds nothing at all to a single-project repo', () => {
+    const single = buildReport(input({ projects: [makeProjectScan({ categories: allGraded() })] }))
+    expect(renderTerminal(single, paths, { color: false })).not.toContain('Projects')
   })
 })
 

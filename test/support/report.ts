@@ -69,5 +69,7 @@ const FIXED_TIMINGS = {
 export async function readGoldenReport(name: string): Promise<Report> {
   const url = new URL(`../golden/${name}.report.json`, import.meta.url)
   const golden = JSON.parse(await readFile(url, 'utf8')) as Report
-  return { ...golden, timings: FIXED_TIMINGS }
+  // Goldens captured before `projects` existed describe one project — the whole
+  // repo — which is what the renderers make of a list this short either way.
+  return { ...golden, projects: golden.projects ?? [], timings: FIXED_TIMINGS }
 }

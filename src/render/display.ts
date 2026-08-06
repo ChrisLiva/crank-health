@@ -1,4 +1,6 @@
+import { ROOT_PROJECT } from '../core/discover.ts'
 import type { Category, CategoryState, Finding } from '../core/types.ts'
+import type { ReportRootShell } from './json.ts'
 
 /**
  * The vocabulary every renderer shares: how a category, a grade state and a
@@ -27,6 +29,24 @@ export const ADVISORY_TAG = '[advisory]'
  * that one is a non-local regression, caused from somewhere else.
  */
 export const TOUCHED_TAG = '[in-diff]'
+
+/**
+ * A project's path as a reader reads it. `.` is the root project's identity in
+ * `report.json`, and a bare dot at the head of a section says nothing.
+ */
+export function projectLabel(path: string): string {
+  return path === ROOT_PROJECT ? 'repo root' : path
+}
+
+/**
+ * The workspace-shell root in one sentence: it holds no source of its own, so
+ * there is nothing to grade there and it is not in the project list.
+ */
+export function rootShellNote(shell: ReportRootShell): string {
+  const declared =
+    shell.declaredBy.length === 0 ? '' : ` (declared by ${shell.declaredBy.join(', ')})`
+  return `The repo root is a workspace shell${declared}: it holds no source of its own, so it is not graded as a project.`
+}
 
 /** A grade letter, or the degradation state, in the fewest words that are true. */
 export function stateLabel(state: CategoryState): string {
