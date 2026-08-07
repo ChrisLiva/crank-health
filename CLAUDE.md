@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`crank-health` — a CLI that runs a fixed set of pinned analyzers (oxlint, tsc, ruff, gitleaks, jscpd, StrykerJS, …) against a JS/TS or Python repo and emits deterministic A–F grades per category, whole-repo or PR-vs-base. Node ≥ 20, ESM, TypeScript throughout (imports use explicit `.ts` extensions).
+`crank-health` — a CLI that runs a fixed set of pinned analyzers (oxlint, tsc, ruff, gitleaks, jscpd, StrykerJS, dotnet build + NetAnalyzers, …) against a JS/TS, Python or C# repo and emits deterministic A–F grades per category, whole-repo or PR-vs-base. Node ≥ 20, ESM, TypeScript throughout (imports use explicit `.ts` extensions).
 
 ## Commands
 
