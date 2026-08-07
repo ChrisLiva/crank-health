@@ -753,6 +753,7 @@ async function execute(
         nestedProjects: nestedProjectsOf(repo, job),
         files: job.files,
         scratch,
+        runScratch: repo.scratch,
         detection: job.detection,
         timeoutMs,
         deep: profile.deep,

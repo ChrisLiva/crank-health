@@ -109,6 +109,7 @@ describe('the dotnet-format runner', () => {
       project: makeProject(['src/a.ts']),
       files: [],
       scratch: '/scratch',
+      runScratch: '/scratch',
       detection: null,
       timeoutMs: 1_000,
       deep: false,

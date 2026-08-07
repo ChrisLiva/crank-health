@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { QUICK_MODE_DEEP_REASON } from '../src/core/orchestrator.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import type { Category, Finding } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
@@ -68,8 +69,11 @@ const PLANTED = [
 /** Files planted deliberately clean; a finding in one of these is a false positive. */
 const CLEAN_FILES = new Set(['clean.cs'])
 
-/** The five categories no C# quick-tier runner answers at this point of the run. */
-const UNANSWERED: readonly Category[] = ['types', 'lint', 'complexity', 'dead-code', 'test-quality']
+/** The categories no C# runner in any profile answers at this point of the run. */
+const UNANSWERED: readonly Category[] = ['dead-code', 'test-quality']
+
+/** The build-backed trio: deep-only runners exist, so a quick scan defers them. */
+const DEFERRED: readonly Category[] = ['types', 'complexity', 'lint']
 
 describe('quick scan of the cs-basic fixture', () => {
   let fixture: FixtureRepo
@@ -135,8 +139,14 @@ describe('quick scan of the cs-basic fixture', () => {
     // Flips to `graded` when any of gitleaks/opengrep/osv-scanner is installed:
     // a security tool that ran and found nothing is an honest A.
     expect(report.categories.security?.status).toBe(GOLDEN_TOOLCHAIN ? 'not-assessed' : 'graded')
-    // These reasons flip to the run-`--deep` sentence as Tasks 7–9 land the
-    // deep-only C# runners for each category.
+    // The compiled trio's runners exist but are deep-only, so a quick scan
+    // defers them to `--deep`; the rest flip as Tasks 8–9 land their runners.
+    for (const category of DEFERRED) {
+      expect(report.categories[category]).toEqual({
+        status: 'not-assessed',
+        reason: QUICK_MODE_DEEP_REASON,
+      })
+    }
     for (const category of UNANSWERED) {
       expect(report.categories[category]).toEqual({
         status: 'not-assessed',

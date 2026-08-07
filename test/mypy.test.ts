@@ -399,6 +399,7 @@ describe('mypyRunner.run before it runs anything', () => {
         project: makeProject([]),
         files: [],
         scratch,
+        runScratch: scratch,
         detection: { reason: 'config', configFiles: ['mypy.ini'], installed: false },
         timeoutMs: 60_000,
         deep: false,
@@ -419,6 +420,7 @@ describe('mypyRunner.run before it runs anything', () => {
       project: makeProject(['app.py']),
       files: ['app.py'],
       scratch,
+      runScratch: scratch,
       detection: {
         reason: 'dependency',
         configFiles: [],
@@ -485,6 +487,7 @@ describe('mypyRunner.run against a planted mypy', () => {
       project: makeProject(['app.py']),
       files: ['app.py'],
       scratch,
+      runScratch: scratch,
       detection: {
         reason: 'config',
         configFiles: ['mypy.ini'],

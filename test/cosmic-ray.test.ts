@@ -34,6 +34,7 @@ const CONTEXT: RunContext = {
   ]),
   files: ['pkg/__init__.py', 'pkg/calc.py', 'pkg/util.py', 'tests/test_calc.py', 'test_top.py'],
   scratch: '/scratch',
+  runScratch: '/scratch',
   detection: {
     reason: 'dependency',
     configFiles: [],

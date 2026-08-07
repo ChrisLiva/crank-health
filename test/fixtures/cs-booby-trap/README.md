@@ -6,8 +6,9 @@ MSBuild evaluation of the project writes `evaluated.txt` into the repo.
 
 A quick scan must complete with `evaluated.txt` absent and `git status`
 clean — `dotnet format whitespace --folder` treats the tree as plain files and
-never loads the project. Only `--deep` may trip this trap, and the deep build
-runner runs against a copy, never the target.
+never loads the project. Only `--deep` may trip this trap: the deep build
+runner evaluates the target's own project files, with every output redirected
+into scratch.
 
 The fixture's own `.gitignore` keeps `bin/`/`obj/` out of the fixture commit:
 an editor's design-time build may drop MSBuild output here, and the commit sha

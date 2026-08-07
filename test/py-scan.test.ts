@@ -842,6 +842,7 @@ describe('the mypy runner given one file that imports another', () => {
       project: makeProject(['h.py', 'i.py', 'mypy.ini']),
       files: ['i.py'],
       scratch,
+      runScratch: scratch,
       detection: {
         reason: 'config',
         configFiles: ['mypy.ini'],

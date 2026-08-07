@@ -215,6 +215,7 @@ describe('zero footprint, in the arguments', () => {
       project: makeProject(['src/A.cs']),
       files: ['src/A.cs'],
       scratch: SCRATCH,
+      runScratch: SCRATCH,
       detection: null,
       timeoutMs: 12_345,
       deep: false,

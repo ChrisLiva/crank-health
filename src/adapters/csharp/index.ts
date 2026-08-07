@@ -1,4 +1,9 @@
 import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
+import {
+  dotnetBuildComplexityRunner,
+  dotnetBuildLintRunner,
+  dotnetBuildTypesRunner,
+} from './build.ts'
 import { dotnetFormatRunner } from './dotnet-format.ts'
 
 /**
@@ -14,5 +19,10 @@ import { dotnetFormatRunner } from './dotnet-format.ts'
 export const csharpAdapter: LanguageAdapter = {
   language: 'csharp',
   detect: (ctx: DetectContext) => Promise.resolve(ctx.project.files.byLanguage.csharp.length > 0),
-  runners: [dotnetFormatRunner],
+  runners: [
+    dotnetBuildTypesRunner,
+    dotnetBuildComplexityRunner,
+    dotnetBuildLintRunner,
+    dotnetFormatRunner,
+  ],
 }

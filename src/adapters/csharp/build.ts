@@ -1,16 +1,33 @@
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import { COMPLEXITY_CEILING } from '../../core/grade.ts'
-import type { PendingFinding, Severity } from '../../core/types.ts'
+import type {
+  PendingFinding,
+  RunContext,
+  Severity,
+  ToolResult,
+  ToolRunner,
+} from '../../core/types.ts'
 import { pinnedDotnetVersion } from '../../manifest.ts'
-import { asArray, asNumber, asRecord, asString, byLocation, repoRelative } from '../support.ts'
+import {
+  asArray,
+  asNumber,
+  asRecord,
+  asString,
+  byLocation,
+  firstLine,
+  identify,
+  repoRelative,
+} from '../support.ts'
+import { DOTNET, dotnetExecOptions, sdkGate } from './dotnet-project.ts'
 
 /**
- * The pure half of the `dotnet build` host: the injected MSBuild assets, the
- * command line, and the SARIF parsing that turns one build into `types` and
- * `lint` findings plus the complexity metrics. The runtime that spawns the
- * build (and the three runners consuming it) lives beside this in Task 7 —
- * nothing in this module executes anything.
+ * The `dotnet build` host: the injected MSBuild assets, the command line, the
+ * SARIF parsing that turns one build into `types` and `lint` findings plus the
+ * complexity metrics — and the runtime that spawns the build once for the
+ * three runners consuming it ({@link buildFor} and the mappers below).
  *
  * One empiric shapes everything here (probed on SDK 10.0.203): a
  * multi-targeting project (`<TargetFrameworks>net8.0;net10.0</TargetFrameworks>`)
@@ -71,13 +88,21 @@ export const INJECTED_TARGETS = `<Project TreatAsLocalProperty="ErrorLog">
  * The analyzer config injected beside the targets file. `global_level = 0`
  * sits above the analyzer package's shipped configs (−100, whose disabling of
  * CA1502 would tie and win at −100) and below a repo's own `.globalconfig`
- * (default 100) — so CA1502 turns on here, and the repo's explicit analyzer
+ * (default 100) — so the rules turn on here, and the repo's explicit analyzer
  * choices still override ours (which is what lets criterion 17 read a missing
  * CA1502 as "suppressed by the repo").
+ *
+ * Two rules: CA1502 is the complexity census (see {@link CODE_METRICS_CONFIG}),
+ * and CA1823 (unused private fields) is the one lint rule netanalyzers leaves
+ * off by default that the default lint tier turns on — probed on SDK 10.0.203:
+ * without it, an untooled C# repo's build yields no CA lint diagnostics at all
+ * (`cs-basic`'s planted unused field fires only the CS0414 compiler warning),
+ * and the lint category would grade on the analyzer set's near-empty default.
  */
 export const INJECTED_GLOBALCONFIG = `is_global = true
 global_level = 0
 dotnet_diagnostic.CA1502.severity = warning
+dotnet_diagnostic.CA1823.severity = warning
 `
 
 /**
@@ -97,16 +122,18 @@ export const CODE_METRICS_CONFIG = 'CA1502: 0\n'
 export type SarifLog = string
 
 /**
- * One `dotnet build`'s outcome, as Task 7's runtime will classify it. A
+ * One `dotnet build`'s outcome, as {@link buildFor} classifies it. A
  * discriminated union rather than optional fields: there is no SARIF when the
  * build never ran. `loud` carries criterion 16's one distinction — an
  * unresolvable analyzer pin is a tool `error` (never a silent fallback to the
  * SDK's bundled analyzers); everything else that stopped the build is
- * `not-available`.
+ * `not-available`. `rawFile` is where the runtime staged the merged log
+ * (written once per build); every consuming record references it, so the run
+ * directory holds one SARIF however many runners graded from it.
  */
 export type CsBuild =
-  | { readonly state: 'ok'; readonly sarif: SarifLog }
-  | { readonly state: 'compile-failed'; readonly sarif: SarifLog }
+  | { readonly state: 'ok'; readonly sarif: SarifLog; readonly rawFile: string }
+  | { readonly state: 'compile-failed'; readonly sarif: SarifLog; readonly rawFile: string }
   | { readonly state: 'unavailable'; readonly reason: string; readonly loud?: true }
 
 /**
@@ -358,3 +385,282 @@ export function parseBuildSarif(json: string, repoRoot: string): ParsedBuild {
     },
   }
 }
+
+/**
+ * Criterion 16's loud reason: the injected analyzer pin did not resolve, and
+ * grading on the SDK's bundled analyzers instead would be a silently different
+ * toolchain — so the three build-backed runners surface this as tool `error`,
+ * quoting the pin.
+ */
+export const UNRESOLVED_PIN_REASON =
+  `the pinned analyzer ${NETANALYZERS_PACKAGE}@${pinnedDotnetVersion(NETANALYZERS_PACKAGE)} ` +
+  'did not resolve (NU1102) — refusing to grade on the SDK’s bundled analyzers instead'
+
+/**
+ * Why `lint` and `complexity` decline a `compile-failed` build: a partial
+ * multi-csproj build is one failure, and CA results from the sub-projects that
+ * did compile would be a lint grade over an unknown fraction of the code — a
+ * flattering number, not a measurement.
+ */
+export const BUILD_FAILED_REASON = 'build failed'
+
+/**
+ * Criterion 17: the build succeeded, the project holds C# source, and the
+ * census came back empty — at threshold 0 CA1502 reports *every* method, so
+ * zero records means the repo's own analyzer config outranked the injected one
+ * (its `.globalconfig` defaults to `global_level` 100, ours is 0). The honest
+ * state is not-assessed with this reason, never a "no complex functions" A.
+ */
+export const CA1502_SUPPRESSED_REASON = 'CA1502 suppressed by the repo’s analyzer config'
+
+/**
+ * One scan's builds: the **promise** is cached, not the result, so the three
+ * runners `mapLimit` starts concurrently share one `dotnet build` instead of
+ * racing three. Keyed on {@link RunContext.runScratch} — the scan-root scratch
+ * every job shares — plus the project path; the per-job `ctx.scratch` would
+ * never collide across the trio of one project and would never share.
+ */
+const builds = new Map<string, Promise<CsBuild>>()
+
+/** Between the key's two halves; can never appear in a path. */
+const KEY_SEPARATOR = '\u0000'
+
+/** The per-TFM logs one build writes (see {@link INJECTED_TARGETS}). */
+const PER_TFM_SARIF = /^build\..+\.sarif$/
+
+/**
+ * The one `dotnet build` of this scan × this project, memoized so the three
+ * consuming runners trigger exactly one compilation — and every one of them
+ * reads the same resolved value, which is what makes "the identical reason
+ * from all three" hold by construction when the build is unavailable.
+ */
+export function buildFor(ctx: RunContext): Promise<CsBuild> {
+  const key = `${ctx.runScratch}${KEY_SEPARATOR}${ctx.project.path}`
+  const cached = builds.get(key)
+  if (cached !== undefined) return cached
+  const build = runBuild(ctx)
+  builds.set(key, build)
+  return build
+}
+
+/**
+ * Releases every build memoized under a scan's scratch dir — called from the
+ * scan teardowns beside the `rm` of that dir, so a long-lived process (the
+ * test suite) does not retain a parsed SARIF per scan. Matches by path prefix
+ * because PR mode nests its two sides (`<scratch>/base-scratch`,
+ * `<scratch>/head-scratch`) under the one dir its finally holds.
+ */
+export function forgetBuilds(runScratch: string): void {
+  const prefix = `${runScratch}/`
+  for (const key of builds.keys()) {
+    const root = key.slice(0, key.indexOf(KEY_SEPARATOR))
+    if (root === runScratch || root.startsWith(prefix)) builds.delete(key)
+  }
+}
+
+/**
+ * The build itself: gate the SDK, materialize the injected assets into
+ * scratch, compile with every output redirected there, then classify — first
+ * match wins. See {@link CsBuild} for the states.
+ */
+async function runBuild(ctx: RunContext): Promise<CsBuild> {
+  // The assets live under the *scan* scratch, keyed by project, because the
+  // build they configure is the scan × project's — not any one runner's.
+  const assetDir = join(ctx.runScratch, 'dotnet-build', ...ctx.project.path.split('/'))
+  await mkdir(assetDir, { recursive: true })
+
+  // Built once and passed to both the gate and the real command, so the gate
+  // provably answered for the identical directory (a repo `global.json` changes
+  // what `dotnet --version` resolves per directory).
+  const options = dotnetExecOptions(ctx, assetDir)
+  const gate = await sdkGate(options)
+  if (gate !== undefined) return { state: 'unavailable', reason: gate.reason }
+
+  const targetsPath = join(assetDir, 'crank-health.targets')
+  // Must end in `.sarif`: the injected targets' per-TFM rewrite string-matches
+  // `.sarif,version=2.1`, and a different suffix would silently resurrect the
+  // shared-file corruption the rewrite exists to prevent.
+  const sarifPath = join(assetDir, 'build.sarif')
+  await writeFile(targetsPath, INJECTED_TARGETS, 'utf8')
+  await writeFile(join(assetDir, 'crank-health.globalconfig'), INJECTED_GLOBALCONFIG, 'utf8')
+  await writeFile(join(assetDir, 'CodeMetricsConfig.txt'), CODE_METRICS_CONFIG, 'utf8')
+
+  const projectDir = ctx.project.path === '.' ? ctx.repoRoot : join(ctx.repoRoot, ctx.project.path)
+  const execution = await execTool(
+    systemCommand(
+      DOTNET.binary,
+      buildInvocationArgs({ projectDir, scratch: assetDir, sarifPath, targetsPath }),
+    ),
+    options,
+  )
+
+  if (execution.failure !== undefined) {
+    return { state: 'unavailable', reason: execution.failure.reason }
+  }
+  // MSBuild writes its diagnostics to stdout, so the pin check reads both.
+  if (isUnresolvedPin(execution.stdout + execution.stderr)) {
+    return { state: 'unavailable', reason: UNRESOLVED_PIN_REASON, loud: true }
+  }
+
+  const names = (await readdir(assetDir)).filter((name) => PER_TFM_SARIF.test(name)).toSorted()
+  if (names.length === 0) {
+    return {
+      state: 'unavailable',
+      reason:
+        `dotnet build exited ${execution.exitCode ?? 'signal'} without a SARIF log: ` +
+        firstLine(execution.stderr),
+    }
+  }
+
+  const sarif = mergeSarifLogs(
+    await Promise.all(names.map((name) => readFile(join(assetDir, name), 'utf8'))),
+  )
+  // Staged once, here, inside the memoized promise — the job scratch is shared
+  // by the trio's runners (same project, same raw prefix), so every record can
+  // reference this one file.
+  const rawFile = await writeScratchRaw(ctx.scratch, 'dotnet-build.sarif.json', sarif)
+  return execution.exitCode === 0
+    ? { state: 'ok', sarif, rawFile }
+    : { state: 'compile-failed', sarif, rawFile }
+}
+
+/** The narrowed `unavailable` variant, as one mapper-shared result. */
+function unavailableResult(build: Extract<CsBuild, { state: 'unavailable' }>): ToolResult {
+  return {
+    state: build.loud === true ? 'error' : 'not-available',
+    findings: [],
+    rawFiles: [],
+    reason: build.reason,
+  }
+}
+
+/** A SARIF the strict gate refused: an `error`, never zero findings. */
+function parseFailure(rawFiles: readonly string[], error: unknown): ToolResult {
+  return {
+    state: 'error',
+    findings: [],
+    rawFiles,
+    reason: `could not parse the build SARIF: ${error instanceof Error ? error.message : String(error)}`,
+  }
+}
+
+/**
+ * The `types` view of one build. On `ok` it grades from the compiler
+ * diagnostics; on `compile-failed` it *still* grades — the compile errors are
+ * the types findings — and when the failed build's diagnostics all lacked
+ * locations (csc's CS5001 does), the state is `error` naming the failure,
+ * never an `ok` that reads as a clean A.
+ */
+export async function typesResultFor(build: CsBuild, repoRoot: string): Promise<ToolResult> {
+  if (build.state === 'unavailable') return unavailableResult(build)
+  const rawFiles = [build.rawFile]
+  let parsed: ParsedBuild
+  try {
+    parsed = parseBuildSarif(build.sarif, repoRoot)
+  } catch (error) {
+    return parseFailure(rawFiles, error)
+  }
+  const findings = await identify(repoRoot, parsed.types)
+  if (build.state === 'compile-failed') {
+    return findings.length === 0
+      ? {
+          state: 'error',
+          findings: [],
+          rawFiles,
+          reason:
+            'dotnet build failed, and its diagnostics carry no source locations — ' +
+            'types cannot be graded',
+        }
+      : {
+          state: 'ok',
+          findings,
+          rawFiles,
+          reason: 'dotnet build failed; types graded from the compiler diagnostics',
+        }
+  }
+  return { state: 'ok', findings, rawFiles }
+}
+
+/**
+ * The `lint` view of one build: the analyzer diagnostics on `ok`, and
+ * {@link BUILD_FAILED_REASON} on a partial build — see that constant for why a
+ * failed compilation grades nothing here.
+ */
+export async function lintResultFor(build: CsBuild, repoRoot: string): Promise<ToolResult> {
+  if (build.state === 'unavailable') return unavailableResult(build)
+  const rawFiles = [build.rawFile]
+  if (build.state === 'compile-failed') {
+    return { state: 'not-available', findings: [], rawFiles, reason: BUILD_FAILED_REASON }
+  }
+  try {
+    const parsed = parseBuildSarif(build.sarif, repoRoot)
+    return { state: 'ok', findings: await identify(repoRoot, parsed.lint), rawFiles }
+  } catch (error) {
+    return parseFailure(rawFiles, error)
+  }
+}
+
+/**
+ * The `complexity` view of one build: the CA1502 census as metrics, never as
+ * findings. `hasCsFiles` is the suppression witness — a successful build over
+ * real C# source with zero census records means the repo's config turned the
+ * rule off ({@link CA1502_SUPPRESSED_REASON}); with no C# files there is
+ * nothing to census and nothing to accuse the repo of suppressing.
+ */
+export function complexityResultFor(build: CsBuild, hasCsFiles: boolean): ToolResult {
+  if (build.state === 'unavailable') return unavailableResult(build)
+  const rawFiles = [build.rawFile]
+  if (build.state === 'compile-failed') {
+    return { state: 'not-available', findings: [], rawFiles, reason: BUILD_FAILED_REASON }
+  }
+  let parsed: ParsedBuild
+  try {
+    // The census never leaves this function as findings, so file paths are
+    // internal dedupe keys only — a fixed root keeps them deterministic.
+    parsed = parseBuildSarif(build.sarif, '/')
+  } catch (error) {
+    return parseFailure(rawFiles, error)
+  }
+  const { functionsTotal, functionsOverCeiling, ca1502Count } = parsed.complexity
+  if (hasCsFiles && ca1502Count === 0) {
+    return { state: 'not-available', findings: [], rawFiles, reason: CA1502_SUPPRESSED_REASON }
+  }
+  return { state: 'ok', findings: [], rawFiles, metrics: { functionsTotal, functionsOverCeiling } }
+}
+
+/** The shape the three build-backed runners share; only category and run differ. */
+function buildBackedRunner(
+  category: 'types' | 'complexity' | 'lint',
+  run: (ctx: RunContext) => Promise<ToolResult>,
+): ToolRunner {
+  return {
+    tool: DOTNET_BUILD_TOOL,
+    category,
+    // The executed binary is the machine's SDK; what this release pins exactly
+    // is the analyzer package the build injects (spec §6).
+    pinnedVersion: pinnedDotnetVersion(NETANALYZERS_PACKAGE),
+    // Only `--deep` may evaluate MSBuild: a build executes the repo's own
+    // project files (criterion 5's booby trap is exactly that proof).
+    deepOnly: true,
+    // The build is never repo-owned — it is our injected toolchain over the
+    // repo's sources — and detection never spawns.
+    detect: () => Promise.resolve(null),
+    run,
+  }
+}
+
+/** `types` from the one memoized build: compiler diagnostics, repo-config. */
+export const dotnetBuildTypesRunner: ToolRunner = buildBackedRunner('types', async (ctx) =>
+  typesResultFor(await buildFor(ctx), ctx.repoRoot),
+)
+
+/** `complexity` from the one memoized build: the CA1502 census as metrics. */
+export const dotnetBuildComplexityRunner: ToolRunner = buildBackedRunner(
+  'complexity',
+  async (ctx) => complexityResultFor(await buildFor(ctx), ctx.files.length > 0),
+)
+
+/** `lint` from the one memoized build: the injected analyzers' diagnostics. */
+export const dotnetBuildLintRunner: ToolRunner = buildBackedRunner('lint', async (ctx) =>
+  lintResultFor(await buildFor(ctx), ctx.repoRoot),
+)

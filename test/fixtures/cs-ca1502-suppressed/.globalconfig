@@ -1,0 +1,2 @@
+is_global = true
+dotnet_diagnostic.CA1502.severity = none

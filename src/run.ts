@@ -1,6 +1,7 @@
 import { mkdtemp, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { forgetBuilds } from './adapters/csharp/build.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
 import type { RootShell } from './core/discover.ts'
@@ -134,6 +135,9 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
       }),
     )
   } finally {
+    // The C# build memo keys on this scratch path; forgetting it here means a
+    // long-lived process (the test suite) never retains a parsed SARIF per scan.
+    forgetBuilds(scratch)
     await rm(scratch, { recursive: true, force: true })
   }
 }

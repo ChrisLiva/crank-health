@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { forgetBuilds } from './adapters/csharp/build.ts'
 import type { DeltaProject } from './core/delta.ts'
 import { computeDelta } from './core/delta.ts'
 import {
@@ -167,6 +168,9 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
     // cannot fail for the reasons `git worktree remove` can. A leftover
     // registration in the target repo's `.git` is exactly the footprint this
     // tool promises never to leave. On the happy path both are already done.
+    // Both sides' scratch dirs nest under this one, so one forget releases
+    // every build the two scans memoized.
+    forgetBuilds(scratch)
     await rm(scratch, { recursive: true, force: true })
     await removeWorktree(repoRoot, worktree)
   }

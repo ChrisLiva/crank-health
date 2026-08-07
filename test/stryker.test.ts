@@ -29,6 +29,7 @@ const CONTEXT: RunContext = {
   project: makeProject(['src/calc.js', 'src/other.ts', 'test/calc.test.js', 'README.md']),
   files: ['src/calc.js', 'src/other.ts', 'test/calc.test.js', 'README.md'],
   scratch: '/scratch',
+  runScratch: '/scratch',
   detection: null,
   timeoutMs: 1_000,
   deep: true,
