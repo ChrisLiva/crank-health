@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
@@ -27,6 +27,8 @@ import { buildInvocationArgs } from '../src/adapters/csharp/build.ts'
 import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
 import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
 import { csharpAdapter } from '../src/adapters/csharp/index.ts'
+import { roslynatorInvocationArgs } from '../src/adapters/csharp/roslynator.ts'
+import { dnxCommand } from '../src/core/exec.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
 import type { RunContext } from '../src/core/types.ts'
 import { categoryRank } from '../src/core/types.ts'
@@ -206,6 +208,48 @@ describe('zero footprint, in the arguments', () => {
   })
 
   /**
+   * The roslynator tail handed to `dnxCommand`: read-only `find-symbol` (the
+   * mutating `--remove` mode is unreachable), and every MSBuild output the
+   * design-time build produces redirected into scratch through `--properties`
+   * (flag spelling surveyed against the 0.12.0 CLI's `find-symbol --help`).
+   */
+  it('builds a read-only roslynator find-symbol command confined to scratch', () => {
+    const args = roslynatorInvocationArgs(join(REPO, 'App.csproj'), join(SCRATCH, 'roslynator'))
+
+    expect(args).toEqual([
+      'find-symbol',
+      '/repo/App.csproj',
+      '--unused',
+      '--properties',
+      'BaseIntermediateOutputPath=/scratch/roslynator/obj/',
+      'BaseOutputPath=/scratch/roslynator/bin/',
+      'MSBuildProjectExtensionsPath=/scratch/roslynator/obj/',
+    ])
+    expect(args).not.toContain('--remove')
+  })
+
+  /**
+   * The exact pin and the exact feed are `dnxCommand`'s (spec §6): `-y`, the
+   * `id@version` form, `--source` nuget.org, and the `--` that keeps every
+   * tool argument out of dnx's own parser.
+   */
+  it('wraps the roslynator tail in the pinned, nuget.org-locked dnx form', () => {
+    const tail = roslynatorInvocationArgs(join(REPO, 'App.csproj'), join(SCRATCH, 'roslynator'))
+    const command = dnxCommand('roslynator.dotnet.cli', tail)
+
+    expect(command.command).toBe('dnx')
+    expect(command.ephemeral).toBe('dnx')
+    expect(command.args.slice(0, 5)).toEqual([
+      '-y',
+      'roslynator.dotnet.cli@0.12.0',
+      '--source',
+      'https://api.nuget.org/v3/index.json',
+      '--',
+    ])
+    expect(command.args.slice(5)).toEqual([...tail])
+  })
+
+  /**
    * The one builder every C# runner passes to `execTool`: `cwd`, `timeoutMs`
    * and `env` are decided once here, not in five runner bodies.
    */
@@ -226,6 +270,17 @@ describe('zero footprint, in the arguments', () => {
       timeoutMs: 12_345,
       env: dotnetEnv(),
     })
+
+    // The dnx-fetched runners work from scratch, with the pinned environment:
+    // NUGET_PACKAGES pinned to the machine cache (zero footprint under a
+    // hostile NuGet.config), diagnostics forced to English (determinism).
+    expect(dotnetExecOptions(ctx, join(SCRATCH, 'roslynator'))).toEqual({
+      cwd: '/scratch/roslynator',
+      timeoutMs: 12_345,
+      env: dotnetEnv(),
+    })
+    expect(dotnetEnv()['NUGET_PACKAGES']).toBe(join(homedir(), '.nuget', 'packages'))
+    expect(dotnetEnv()['DOTNET_CLI_UI_LANGUAGE']).toBe('en')
   })
 
   /** Spec §7's block-list names `osv-scanner fix` explicitly. */
@@ -334,6 +389,9 @@ describe('the C# adapter', () => {
     const categories = csharpAdapter.runners.map((runner) => runner.category)
     expect(categories).toEqual(categories.toSorted((a, b) => categoryRank(a) - categoryRank(b)))
     expect(categories).toContain('format')
+    // `dead-code` precedes `complexity` in `CATEGORIES`, so roslynator sits at
+    // index 1 — between the build-backed `types` runner and the rest.
+    expect(categories[1]).toBe('dead-code')
   })
 })
 

@@ -76,6 +76,25 @@ describe.runIf(ENABLED)('--deep on cs-basic: the compiled trio lights up', () =>
   })
 
   /**
+   * The dead-code plant, from roslynator's ephemeral `find-symbol --unused`
+   * run: the unreferenced public method in dead.cs placed at its declaration,
+   * and the unused private field that doubles as the CA1823 lint plant — the
+   * public-API half is why roslynator owns this category (knip/vulture parity)
+   * rather than the build's private-only RCS/CA view.
+   */
+  it('grades dead-code, with the planted unused symbols at their declarations', () => {
+    expect(deep.report.categories['dead-code']?.status).toBe('graded')
+    const dead = deep.report.findings.filter((finding) => finding.category === 'dead-code')
+    expect(dead.map((finding) => [finding.file, finding.rule, finding.range.startLine])).toEqual([
+      ['dead.cs', 'unused-method', 10],
+      ['warnings.cs', 'unused-field', 5],
+    ])
+    expect(dead.map((finding) => finding.tool)).toEqual(['roslynator', 'roslynator'])
+    const record = report(deep).tools.find((tool) => tool.tool === 'roslynator')
+    expect(record?.state).toBe('ok')
+  })
+
+  /**
    * The memo oracle: three tool records reference the build, and the build ran
    * once — exactly one SARIF staged into the project's raw dir.
    */

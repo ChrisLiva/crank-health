@@ -5,6 +5,7 @@ import {
   dotnetBuildTypesRunner,
 } from './build.ts'
 import { dotnetFormatRunner } from './dotnet-format.ts'
+import { roslynatorRunner } from './roslynator.ts'
 
 /**
  * The C# language adapter. It answers one question — does this project contain
@@ -21,6 +22,7 @@ export const csharpAdapter: LanguageAdapter = {
   detect: (ctx: DetectContext) => Promise.resolve(ctx.project.files.byLanguage.csharp.length > 0),
   runners: [
     dotnetBuildTypesRunner,
+    roslynatorRunner,
     dotnetBuildComplexityRunner,
     dotnetBuildLintRunner,
     dotnetFormatRunner,

@@ -1,0 +1,10 @@
+Loading project '/tmp/roslynator-capture-cL84SB/proj/Cap.csproj'...
+Analyze 'Cap'
+
+method Cap.Dead.NeverCalled(int value)
+field  Cap.Holder.unusedCount
+
+1 field symbols
+1 method symbols
+
+2 symbols found

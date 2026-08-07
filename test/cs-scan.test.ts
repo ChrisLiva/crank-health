@@ -32,8 +32,9 @@ const SCAN_TIMEOUT_MS = 180_000
 
 /**
  * Every quick-tier finding planted in `test/fixtures/cs-basic` — see that
- * fixture's README for the human-readable half. The complexity and lint plants
- * are dormant until the deep-only build and analyzer runners land (Tasks 6–9).
+ * fixture's README for the human-readable half. The complexity, lint and
+ * dead-code plants belong to the deep-only runners and fire under `--deep`
+ * (`test/deep-csharp-e2e.test.ts`).
  */
 const PLANTED = [
   {
@@ -70,10 +71,10 @@ const PLANTED = [
 const CLEAN_FILES = new Set(['clean.cs'])
 
 /** The categories no C# runner in any profile answers at this point of the run. */
-const UNANSWERED: readonly Category[] = ['dead-code', 'test-quality']
+const UNANSWERED: readonly Category[] = ['test-quality']
 
-/** The build-backed trio: deep-only runners exist, so a quick scan defers them. */
-const DEFERRED: readonly Category[] = ['types', 'complexity', 'lint']
+/** The build-backed trio plus roslynator: deep-only, so a quick scan defers them. */
+const DEFERRED: readonly Category[] = ['types', 'dead-code', 'complexity', 'lint']
 
 describe('quick scan of the cs-basic fixture', () => {
   let fixture: FixtureRepo
@@ -127,20 +128,21 @@ describe('quick scan of the cs-basic fixture', () => {
   })
 
   /**
-   * Hand-computable against the formula table (spec §3): 1 of 6 `.cs` files
-   * failing format = 16.7% → C (B ≤10, C ≤30); the duplicated 24-line
-   * `Accumulate` body is well past the duplication D band's 20% of tokens.
+   * Hand-computable against the formula table (spec §3): 1 of 8 `.cs` files
+   * failing format = 12.5% → C (B ≤10, C ≤30); the duplicated 24-line
+   * `Accumulate` body, diluted by `main.cs` and `dead.cs` joining the token
+   * pool, sits in the duplication D band (>10%, ≤20% of tokens).
    */
   it('grades format and duplication, and says why the rest have no grade', () => {
     const report = parse(json)
     expect(Object.keys(report.categories).toSorted()).toEqual([...CATEGORIES].toSorted())
     expect(report.categories.format).toEqual({ status: 'graded', grade: 'C' })
-    expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
+    expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'D' })
     // Flips to `graded` when any of gitleaks/opengrep/osv-scanner is installed:
     // a security tool that ran and found nothing is an honest A.
     expect(report.categories.security?.status).toBe(GOLDEN_TOOLCHAIN ? 'not-assessed' : 'graded')
-    // The compiled trio's runners exist but are deep-only, so a quick scan
-    // defers them to `--deep`; the rest flip as Tasks 8–9 land their runners.
+    // The compiled trio's and roslynator's runners exist but are deep-only, so
+    // a quick scan defers them; test-quality flips when Task 9 lands its runner.
     for (const category of DEFERRED) {
       expect(report.categories[category]).toEqual({
         status: 'not-assessed',
@@ -157,7 +159,7 @@ describe('quick scan of the cs-basic fixture', () => {
 
   it('reports the measurements the ratio grades were computed from', () => {
     const metrics = parse(json).metrics
-    expect(metrics.format).toEqual({ formattableFiles: 6 })
+    expect(metrics.format).toEqual({ formattableFiles: 8 })
     expect(metrics.duplication?.['duplicationPercent']).toBeGreaterThan(0)
   })
 
