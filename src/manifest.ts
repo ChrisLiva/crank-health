@@ -20,6 +20,10 @@ export const TOOL_MANIFEST = {
   knip: '6.31.0',
   'fta-cli': '3.0.0',
   jscpd: '5.0.14',
+  // Modified-MIT license: forbids ML-training use and hosted resale, accepted
+  // for scanner use. Releases daily, so this pin goes stale fast — bumping it
+  // is a crank-health version bump with re-captured fixtures, per the header.
+  'react-doctor': '0.9.5',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
