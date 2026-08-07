@@ -156,6 +156,10 @@ describe('HELP_TEXT', () => {
     }
   })
 
+  it('names all three languages in its banner', () => {
+    expect(HELP_TEXT).toContain('JS/TS, Python and C#')
+  })
+
   it('documents the exit-code semantics', () => {
     expect(HELP_TEXT).toContain('0  scan completed')
     expect(HELP_TEXT).toContain('1  --fail-under gate tripped')

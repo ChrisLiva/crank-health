@@ -11,7 +11,7 @@ import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { pathFarm } from './support/path-farm.ts'
-import { normalizeReport } from './support/report.ts'
+import { expectGolden, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 
 /**
@@ -168,6 +168,10 @@ describe('quick scan of the cs-basic fixture', () => {
     expect(await readFile(join(fixture.root, 'unformatted.cs'), 'utf8')).toBe(unformattedBefore)
     expect(await fixture.status()).toBe('')
     expect((await readdir(fixture.root)).toSorted()).toEqual(entriesBefore)
+  })
+
+  it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
+    await expectGolden('cs-basic.report.json', normalizeReport(json))
   })
 
   it(
