@@ -35,8 +35,8 @@ if [[ $mode != check && $mode != capture ]]; then
 fi
 
 # Development binaries, taken from wherever this machine keeps them: node and
-# its package runners, uv's, and git for the fixture repos.
-required=(node npm npx uv uvx git)
+# its package runners, uv's, the .NET SDK's, and git for the fixture repos.
+required=(node npm npx uv uvx git dotnet)
 
 # The base system, where the utilities a tool's own wrapper script calls live —
 # `sh`, `cat`, `realpath`, `which` itself.
@@ -78,6 +78,7 @@ if [[ $mode == capture ]]; then
   CRANK_CAPTURE_GOLDENS=1 npx vitest run \
     test/scan.test.ts \
     test/py-scan.test.ts \
+    test/cs-scan.test.ts \
     test/sec-scan.test.ts \
     test/mono-scan.test.ts \
     test/pr-scan.test.ts

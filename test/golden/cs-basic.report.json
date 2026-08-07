@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "crankHealth": "0.3.0",
+  "repo": {
+    "path": "<repo>",
+    "commit": "1624281eaabc18eb08af09502955981d65aa1ca4"
+  },
+  "profile": "quick",
+  "mode": "whole-repo",
+  "selected": [
+    "security",
+    "types",
+    "dead-code",
+    "complexity",
+    "duplication",
+    "lint",
+    "format",
+    "test-quality"
+  ],
+  "categories": {
+    "security": {
+      "status": "not-assessed",
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
+    },
+    "types": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    },
+    "dead-code": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    },
+    "complexity": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    },
+    "duplication": {
+      "status": "graded",
+      "grade": "D"
+    },
+    "lint": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    },
+    "format": {
+      "status": "graded",
+      "grade": "C"
+    },
+    "test-quality": {
+      "status": "not-assessed",
+      "reason": "not assessed — run `--deep`"
+    }
+  },
+  "metrics": {
+    "duplication": {
+      "duplicationPercent": 18.38235294117647
+    },
+    "format": {
+      "formattableFiles": 8
+    }
+  },
+  "languages": {
+    "csharp": {
+      "duplication": 2,
+      "format": 1
+    }
+  },
+  "projects": [
+    {
+      "path": ".",
+      "manifests": [
+        "App.csproj"
+      ],
+      "languages": [
+        "csharp"
+      ],
+      "categories": {
+        "security": {
+          "status": "not-assessed",
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+        },
+        "types": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        },
+        "dead-code": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        },
+        "complexity": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        },
+        "duplication": {
+          "status": "graded",
+          "grade": "D"
+        },
+        "lint": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        },
+        "format": {
+          "status": "graded",
+          "grade": "C"
+        },
+        "test-quality": {
+          "status": "not-assessed",
+          "reason": "not assessed — run `--deep`"
+        }
+      },
+      "metrics": {
+        "duplication": {
+          "duplicationPercent": 18.38235294117647
+        },
+        "format": {
+          "formattableFiles": 8
+        }
+      },
+      "toolchain": []
+    }
+  ],
+  "tools": [
+    {
+      "tool": "bandit",
+      "category": "security",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.9.4",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no Python files in this repo, so bandit assessed nothing",
+      "raw": []
+    },
+    {
+      "tool": "gitleaks",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "8.30.1",
+      "detection": null,
+      "state": "not-available",
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "opengrep",
+      "category": "security",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.26.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "osv-scanner",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "2.4.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "zizmor",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.29.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no GitHub Actions workflows or composite actions, so zizmor assessed nothing",
+      "raw": []
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.14",
+      "pinned": "5.0.14",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "dotnet-format",
+      "category": "format",
+      "scope": "csharp",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "repo-config",
+      "version": null,
+      "pinned": "10.0.203",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/dotnet-format.json"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "217060462ce7d7ac",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "dupe-a.cs",
+      "project": ".",
+      "range": {
+        "startLine": 4,
+        "startCol": 1,
+        "endLine": 33,
+        "endCol": 1
+      },
+      "message": "30 lines (100 tokens) duplicated from dupe-b.cs:4-33",
+      "provenance": "default-config",
+      "gradeScope": false,
+      "fixHint": "Extract the duplicated block into a shared function or module"
+    },
+    {
+      "id": "083ca1464cc14e6c",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "dupe-b.cs",
+      "project": ".",
+      "range": {
+        "startLine": 4,
+        "startCol": 1,
+        "endLine": 33,
+        "endCol": 1
+      },
+      "message": "30 lines (100 tokens) duplicated from dupe-a.cs:4-33",
+      "provenance": "default-config",
+      "gradeScope": false,
+      "fixHint": "Extract the duplicated block into a shared function or module"
+    },
+    {
+      "id": "c29dc3476b5d7d99",
+      "category": "format",
+      "tool": "dotnet-format",
+      "rule": "dotnet-format/whitespace",
+      "severity": "warning",
+      "file": "unformatted.cs",
+      "project": ".",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File does not match the repo’s .editorconfig whitespace conventions",
+      "provenance": "repo-config",
+      "gradeScope": true,
+      "fixHint": "dotnet format whitespace . --folder --include <file>"
+    }
+  ],
+  "warnings": []
+}

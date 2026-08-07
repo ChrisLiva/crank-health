@@ -1,6 +1,6 @@
 # crank-health
 
-Deterministic codebase health grades for JS/TS and Python repos.
+Deterministic codebase health grades for JS/TS, Python and C# repos.
 
 `crank-health` runs a fixed set of best-in-class analyzers against a repo — whole-repo or
 PR-vs-base — and reports one A–F grade per category, per project in a monorepo plus a whole-repo
@@ -36,7 +36,9 @@ npx crank-health -i           # pick all of the above through guided prompts
 
 Requires Node ≥ 20 and `git`. Python analysis additionally requires [`uv`](https://docs.astral.sh/uv/)
 on `PATH`; without it the Python categories degrade with an install hint and the rest of the scan
-is unaffected.
+is unaffected. C# analysis additionally requires a
+[.NET SDK](https://dotnet.microsoft.com/download) ≥ 10 on `PATH`; without it the C# categories
+degrade with an install hint and the rest of the scan is unaffected.
 
 ### Options
 
@@ -85,18 +87,22 @@ does: that category was answered for the repo, and the repo's answer is gated in
 
 ## Categories and tools
 
-Eight categories. 24 analyzers run in the quick profile, 3 more in `--deep`.
+Eight categories. 25 analyzers run in the quick profile, 6 more in `--deep`.
 
-| Category                | JS/TS                                            | Python                                                    | Both                                       |
-| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------ |
-| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              |                                            |
-| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     |                                            |
-| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) |                                            |
-| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            |                                            |
-| Complexity              | fallow health · fta                              | complexipy                                                |                                            |
-| Duplication             |                                                  |                                                           | jscpd                                      |
-| Security                |                                                  | bandit · ruff `S` rules                                   | gitleaks · opengrep · zizmor · osv-scanner |
-| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   |                                            |
+| Category                | JS/TS                                            | Python                                                    | C#                                       | Both                                       |
+| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------ |
+| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) |                                            |
+| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     | `dotnet format whitespace`               |                                            |
+| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) | `dotnet build` (CS diagnostics)          |                                            |
+| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            | `roslynator find-symbol --unused`        |                                            |
+| Complexity              | fallow health · fta                              | complexipy                                                | `dotnet build` + NetAnalyzers (CA1502)   |                                            |
+| Duplication             |                                                  |                                                           |                                          | jscpd                                      |
+| Security                |                                                  | bandit · ruff `S` rules                                   |                                          | gitleaks · opengrep · zizmor · osv-scanner |
+| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   | Stryker.NET (repo-owned)                 |                                            |
+
+The build-backed C# categories — lint, types, complexity, dead code — need MSBuild, which executes a
+project's own build logic, so they run only under `--deep`; the quick profile grades C# format and
+duplication and defers the rest honestly.
 
 When several tools cover one category they all run and their findings merge; the tool is part of
 each finding's identity, so two tools flagging the same line are two findings.
@@ -275,7 +281,7 @@ the standby's grade is the one the repo gets, on our config rather than yours, a
 says so (`oxlint: graded lint on its default config because eslint reported error`). Either way the
 provenance is on the record, in the Notes column and in `warnings[]`.
 
-Missing `uv` degrades the Python categories the same way. A tool that crashes or emits unparseable
+Missing `uv` degrades the Python categories the same way, and a missing (or too-old — the floor is 10) .NET SDK degrades the C# categories the same way. A tool that crashes or emits unparseable
 output becomes `error` with its stderr in `raw/`; a tool that overruns its budget (120 s by default,
 `--timeout <secs>` to change it) becomes `not-assessed(timeout)`.
 
@@ -298,6 +304,10 @@ edits the file on disk, runs the suite and restores it — a run killed in betwe
 source in the target. crank-health will not do that to a repo that never asked for it, which is why
 cosmic-ray requires the project to own it. Everything crank-health does control stays outside the
 repo: generated config, session database, and reports all live in scratch.
+
+A repo-owned Stryker.NET run performs the tool's own initial build, which writes the project's
+normal `obj/` and `bin/` directories in the target tree — real .NET repos gitignore them, and
+discovery excludes them either way.
 
 coverage.py runs in the deep tier as context, not as a grade: test quality is graded on the mutation
 score, because a line can be executed by a test that asserts nothing.

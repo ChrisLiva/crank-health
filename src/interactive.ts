@@ -10,9 +10,10 @@ import { ADAPTERS } from './adapters/index.ts'
 import type { CliOptions } from './args.ts'
 import { discoverFiles, partitionProjects, repoDetectContext } from './core/discover.ts'
 import { headCommit, mergeBase, resolveCommit } from './core/git.ts'
-import type { Grade } from './core/types.ts'
-import { CATEGORIES, GRADES } from './core/types.ts'
+import type { Grade, Language } from './core/types.ts'
+import { CATEGORIES, GRADES, LANGUAGES } from './core/types.ts'
 import { DEFAULT_OUTPUT_DIRNAME } from './core/output.ts'
+import { LANGUAGE_LABELS } from './render/display.ts'
 import { resolveRepoRoot } from './run.ts'
 
 /**
@@ -32,8 +33,8 @@ const BASE_BRANCH_CANDIDATES: readonly string[] = ['main', 'master', 'develop', 
 /** What the probe learned about the target; every question keys off this. */
 export interface RepoProbe {
   readonly repoRoot: string
-  readonly jsTsFiles: number
-  readonly pythonFiles: number
+  /** One entry per member of {@link LANGUAGES}, in that order — zero included. */
+  readonly fileCounts: readonly { language: Language; count: number }[]
   /**
    * The discovered projects' repo-relative paths, stable-sorted — what each
    * grade in the report will be about, and what `--project` selects from.
@@ -84,9 +85,9 @@ export interface PromptIO {
  * The security tools crank-health cannot fetch (release binaries; see
  * `adapters/common/system-tool.ts`), with what each one adds to the scan.
  */
-const SYSTEM_TOOLS: readonly { spec: SystemToolSpec; purpose: string }[] = [
+export const SYSTEM_TOOLS: readonly { spec: SystemToolSpec; purpose: string }[] = [
   { spec: GITLEAKS, purpose: 'secrets scanning' },
-  { spec: OPENGREP, purpose: 'SAST rules for JS/TS and Python' },
+  { spec: OPENGREP, purpose: 'SAST rules for JS/TS, Python and C#' },
   { spec: OSV_SCANNER, purpose: 'known-vulnerability scan of dependencies' },
 ]
 
@@ -222,8 +223,10 @@ export async function probeRepo(path: string): Promise<RepoProbe> {
 
   return {
     repoRoot,
-    jsTsFiles: files.byLanguage['js-ts'].length,
-    pythonFiles: files.byLanguage.python.length,
+    fileCounts: LANGUAGES.map((language) => ({
+      language,
+      count: files.byLanguage[language].length,
+    })),
     projects: partitionProjects(files).map((project) => project.path),
     currentBranch: await currentBranch(repoRoot),
     baseCandidates: await viableBases(repoRoot),
@@ -483,7 +486,11 @@ export function equivalentCommand(options: CliOptions): string {
 function sayHeader(probe: RepoProbe, io: PromptIO): void {
   io.say(`${pc.bold('crank-health')} — interactive setup for ${probe.repoRoot}`)
   io.say('')
-  io.say(`  files       ${probe.jsTsFiles} JS/TS · ${probe.pythonFiles} Python`)
+  io.say(
+    `  files       ${probe.fileCounts
+      .map(({ language, count }) => `${count} ${LANGUAGE_LABELS[language]}`)
+      .join(' · ')}`,
+  )
   io.say(`  projects    ${probe.projects.join(', ')}`)
   // Only worth saying where there is something to choose between.
   if (probe.projects.length > 1) {

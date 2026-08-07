@@ -46,7 +46,7 @@ export class CliUsageError extends Error {
   }
 }
 
-export const HELP_TEXT = `crank-health — deterministic codebase health grades for JS/TS and Python repos.
+export const HELP_TEXT = `crank-health — deterministic codebase health grades for JS/TS, Python and C# repos.
 
 Usage:
   npx crank-health [path]               quick scan, whole repo (path defaults to .)

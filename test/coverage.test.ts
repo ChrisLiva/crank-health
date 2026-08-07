@@ -24,6 +24,7 @@ const CONTEXT: RunContext = {
   project: makeProject(['pkg/calc.py']),
   files: ['pkg/calc.py'],
   scratch: '/scratch',
+  runScratch: '/scratch',
   detection: null,
   timeoutMs: 1_000,
   deep: true,

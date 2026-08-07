@@ -23,7 +23,7 @@ import { expectGolden, normalizeMarkdown, readGoldenReport } from './support/rep
  * renderer spells out — and the goldens cover the spelling.
  */
 
-const FIXTURES = ['js-basic', 'mono-js', 'mono-mixed', 'py-basic', 'sec-basic'] as const
+const FIXTURES = ['cs-basic', 'js-basic', 'mono-js', 'mono-mixed', 'py-basic', 'sec-basic'] as const
 
 describe('agent.md goldens', () => {
   it.each(FIXTURES)('matches the golden agent.md for %s', async (name) => {

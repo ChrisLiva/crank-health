@@ -185,6 +185,7 @@ describe('a repo configured through the legacy eslintrc format', () => {
         project: makeProject(['src/a.js']),
         files: ['src/a.js'],
         scratch,
+        runScratch: scratch,
         detection: { reason: 'config', configFiles: ['.eslintrc.json'], installed: false },
         timeoutMs: 5_000,
         deep: false,

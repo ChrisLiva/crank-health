@@ -2,7 +2,11 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { DEEP_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } from '../src/core/orchestrator.ts'
+import {
+  DEEP_TIMEOUT_MS,
+  DEFAULT_TIMEOUT_MS,
+  QUICK_MODE_DEEP_REASON,
+} from '../src/core/orchestrator.ts'
 import type {
   LanguageAdapter,
   RunContext,
@@ -11,7 +15,7 @@ import type {
   ToolRunner,
 } from '../src/core/types.ts'
 import { runPrScan } from '../src/run-pr.ts'
-import { QUICK_MODE_TEST_QUALITY_REASON, scanTree } from '../src/run.ts'
+import { scanTree } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { createHistoryRepo } from './support/history.ts'
@@ -52,9 +56,44 @@ describe('the two profiles', () => {
     // Not "a tool declined": in quick mode no mutation tool is even asked.
     expect(tree.categories['test-quality']).toEqual({
       status: 'not-assessed',
-      reason: QUICK_MODE_TEST_QUALITY_REASON,
+      reason: QUICK_MODE_DEEP_REASON,
+    })
+    // The reason is stamped where the deferral was decided — the scan's own
+    // aggregation, not a downstream override.
+    expect(tree.scan.categories['test-quality']).toEqual({
+      status: 'not-assessed',
+      reason: QUICK_MODE_DEEP_REASON,
     })
     expect(tree.scan.runs).toEqual([])
+  })
+
+  it('records the categories a quick scan deferred, and only those', async () => {
+    const quick = await scanTree({
+      repoRoot: fixture.root,
+      scratch,
+      adapters: [adapter(fakeRunner({}))],
+      only: ['test-quality'],
+    })
+    const deepScan = await scanTree({
+      repoRoot: fixture.root,
+      scratch,
+      adapters: [adapter(fakeRunner({}))],
+      only: ['test-quality'],
+      deep: true,
+    })
+    const unrequested = await scanTree({
+      repoRoot: fixture.root,
+      scratch,
+      adapters: [adapter(fakeRunner({}))],
+      only: ['lint'],
+    })
+
+    expect(quick.scan.deferredCategories).toEqual(['test-quality'])
+    // A deep scan defers nothing: the deep runners actually ran.
+    expect(deepScan.scan.deferredCategories).toEqual([])
+    // `--only lint` dropped the runner as unrequested — an exclusion, not a
+    // deferral, and telling the reader to run `--deep` would not bring it back.
+    expect(unrequested.scan.deferredCategories).toEqual([])
   })
 
   it('grades test quality from the mutation score in a deep scan', async () => {

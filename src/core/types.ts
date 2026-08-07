@@ -271,6 +271,14 @@ export interface RunContext {
    * other's raw output.
    */
   readonly scratch: string
+  /**
+   * Absolute path to the *scan's* root scratch dir — the one every job's
+   * {@link scratch} nests under. Where per-run state shared *between* runners
+   * lives (the C# build memo: three runners, one `dotnet build`): every job in
+   * one scan sees the same value, and it is exactly the path the scan's own
+   * teardown holds — so forgetting by it releases everything the scan cached.
+   */
+  readonly runScratch: string
   /** `null` → run our bundled default config from `scratch`. */
   readonly detection: Detection | null
   readonly timeoutMs: number

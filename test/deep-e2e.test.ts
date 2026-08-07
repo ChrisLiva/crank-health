@@ -4,11 +4,12 @@ import { join } from 'node:path'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { gradeRatio } from '../src/core/grade.ts'
+import { QUICK_MODE_DEEP_REASON } from '../src/core/orchestrator.ts'
 import type { Finding } from '../src/core/types.ts'
 import { buildAgentTasks } from '../src/render/agent-md.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
 import type { HealthScanResult } from '../src/run.ts'
-import { QUICK_MODE_TEST_QUALITY_REASON, runHealthScan, scanTree } from '../src/run.ts'
+import { runHealthScan, scanTree } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 
@@ -162,7 +163,7 @@ describe.runIf(ENABLED)('--deep on a repo with a weak test suite', () => {
     expect(quick.report.profile).toBe('quick')
     expect(quick.report.categories['test-quality']).toEqual({
       status: 'not-assessed',
-      reason: QUICK_MODE_TEST_QUALITY_REASON,
+      reason: QUICK_MODE_DEEP_REASON,
     })
     expect(quick.report.tools).toEqual([])
   })

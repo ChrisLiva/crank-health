@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
@@ -23,7 +23,22 @@ import {
   osvScannerRunner,
 } from '../src/adapters/common/osv-scanner.ts'
 import { zizmorRunner } from '../src/adapters/common/zizmor.ts'
+import { buildInvocationArgs } from '../src/adapters/csharp/build.ts'
+import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
+import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
+import { csharpAdapter } from '../src/adapters/csharp/index.ts'
+import { roslynatorInvocationArgs } from '../src/adapters/csharp/roslynator.ts'
+import {
+  TOOL_RESTORE_ARGS,
+  mutationReportPath,
+  strykerNetInvocationArgs,
+  strykerNetRunner,
+} from '../src/adapters/csharp/stryker-net.ts'
+import { dnxCommand } from '../src/core/exec.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
+import type { RunContext } from '../src/core/types.ts'
+import { categoryRank } from '../src/core/types.ts'
+import { makeProject } from './factories.ts'
 import type { ReportTool } from '../src/render/json.ts'
 import { runHealthScan } from '../src/run.ts'
 
@@ -135,6 +150,167 @@ describe('zero footprint, in the arguments', () => {
     expect(args[args.indexOf('--exit-code') + 1]).toBe('0')
   })
 
+  /**
+   * `--verify-no-changes` is the flag dotnet format cannot be correct without:
+   * without it the run rewrites the target's files in place. `--folder` is what
+   * keeps the run source-text only (no project load, no restore — SDK 10
+   * rejects an explicit `--no-restore` beside it as redundant), and the report
+   * goes to scratch. Excludes: MSBuild output, and each nested project — whose
+   * whitespace is its own run's to measure.
+   */
+  it('builds a read-only, folder-mode dotnet format command reporting into scratch', () => {
+    const args = formatInvocationArgs(
+      join(REPO, 'src'),
+      ['bin', 'obj', 'src/nested'],
+      join(SCRATCH, 'dotnet-format'),
+    )
+
+    expect(args).toEqual([
+      'format',
+      'whitespace',
+      '/repo/src',
+      '--folder',
+      '--verify-no-changes',
+      '--exclude',
+      'bin',
+      'obj',
+      'src/nested',
+      '--report',
+      '/scratch/dotnet-format',
+    ])
+  })
+
+  /**
+   * The build command: SARIF 2.1 into scratch (the `%2C` escape is what keeps
+   * the SDK from silently emitting SARIF 1.0), every MSBuild output property
+   * redirected into scratch (zero footprint under full compilation), our
+   * targets injected, and restore pinned to nuget.org — `dotnet build` has no
+   * `--source` flag, so without `RestoreSources` the scanned repo's
+   * `NuGet.config` would choose which analyzer binary crank-health executes.
+   * No `--no-restore`: the injected analyzer PackageReference must resolve.
+   */
+  it('builds a scratch-confined, nuget.org-pinned dotnet build command', () => {
+    const args = buildInvocationArgs({
+      projectDir: join(REPO, 'svc'),
+      scratch: join(SCRATCH, 'dotnet-build'),
+      sarifPath: join(SCRATCH, 'dotnet-build', 'build.sarif'),
+      targetsPath: join(SCRATCH, 'dotnet-build', 'crank-health.targets'),
+    })
+
+    expect(args.slice(0, 2)).toEqual(['build', '/repo/svc'])
+    expect(args).toContain('-p:ErrorLog=/scratch/dotnet-build/build.sarif%2Cversion=2.1')
+    expect(args).toContain('-p:BaseIntermediateOutputPath=/scratch/dotnet-build/obj/')
+    expect(args).toContain('-p:BaseOutputPath=/scratch/dotnet-build/bin/')
+    expect(args).toContain('-p:MSBuildProjectExtensionsPath=/scratch/dotnet-build/obj/')
+    expect(args).toContain(
+      '-p:CustomAfterMicrosoftCommonTargets=/scratch/dotnet-build/crank-health.targets',
+    )
+    expect(args).toContain('-p:RestoreSources=https://api.nuget.org/v3/index.json')
+    expect(args).not.toContain('--no-restore')
+    // Beyond the project dir itself, every path points into scratch.
+    for (const value of args.slice(2).map((arg) => arg.replace(/^-p:[A-Za-z]+=/, ''))) {
+      if (value.startsWith('/')) expect(value.startsWith('/scratch/')).toBe(true)
+    }
+  })
+
+  /**
+   * The roslynator tail handed to `dnxCommand`: read-only `find-symbol` (the
+   * mutating `--remove` mode is unreachable), and every MSBuild output the
+   * design-time build produces redirected into scratch through `--properties`
+   * (flag spelling surveyed against the 0.12.0 CLI's `find-symbol --help`).
+   */
+  it('builds a read-only roslynator find-symbol command confined to scratch', () => {
+    const args = roslynatorInvocationArgs(join(REPO, 'App.csproj'), join(SCRATCH, 'roslynator'))
+
+    expect(args).toEqual([
+      'find-symbol',
+      '/repo/App.csproj',
+      '--unused',
+      '--properties',
+      'BaseIntermediateOutputPath=/scratch/roslynator/obj/',
+      'BaseOutputPath=/scratch/roslynator/bin/',
+      'MSBuildProjectExtensionsPath=/scratch/roslynator/obj/',
+    ])
+    expect(args).not.toContain('--remove')
+  })
+
+  /**
+   * The exact pin and the exact feed are `dnxCommand`'s (spec §6): `-y`, the
+   * `id@version` form, `--source` nuget.org, and the `--` that keeps every
+   * tool argument out of dnx's own parser.
+   */
+  it('wraps the roslynator tail in the pinned, nuget.org-locked dnx form', () => {
+    const tail = roslynatorInvocationArgs(join(REPO, 'App.csproj'), join(SCRATCH, 'roslynator'))
+    const command = dnxCommand('roslynator.dotnet.cli', tail)
+
+    expect(command.command).toBe('dnx')
+    expect(command.ephemeral).toBe('dnx')
+    expect(command.args.slice(0, 5)).toEqual([
+      '-y',
+      'roslynator.dotnet.cli@0.12.0',
+      '--source',
+      'https://api.nuget.org/v3/index.json',
+      '--',
+    ])
+    expect(command.args.slice(5)).toEqual([...tail])
+  })
+
+  /**
+   * The one builder every C# runner passes to `execTool`: `cwd`, `timeoutMs`
+   * and `env` are decided once here, not in five runner bodies.
+   */
+  it('builds every dotnet spawn’s options from the context, with the pinned env', () => {
+    const ctx: RunContext = {
+      repoRoot: REPO,
+      project: makeProject(['src/A.cs']),
+      files: ['src/A.cs'],
+      scratch: SCRATCH,
+      runScratch: SCRATCH,
+      detection: null,
+      timeoutMs: 12_345,
+      deep: false,
+    }
+
+    expect(dotnetExecOptions(ctx, '/repo/src')).toEqual({
+      cwd: '/repo/src',
+      timeoutMs: 12_345,
+      env: dotnetEnv(),
+    })
+
+    // The dnx-fetched runners work from scratch, with the pinned environment:
+    // NUGET_PACKAGES pinned to the machine cache (zero footprint under a
+    // hostile NuGet.config), diagnostics forced to English (determinism).
+    expect(dotnetExecOptions(ctx, join(SCRATCH, 'roslynator'))).toEqual({
+      cwd: '/scratch/roslynator',
+      timeoutMs: 12_345,
+      env: dotnetEnv(),
+    })
+    expect(dotnetEnv()['NUGET_PACKAGES']).toBe(join(homedir(), '.nuget', 'packages'))
+    expect(dotnetEnv()['DOTNET_CLI_UI_LANGUAGE']).toBe('en')
+  })
+
+  /**
+   * The two commands the Stryker.NET runner spawns, both through the repo's
+   * own restored tool: `tool restore` resolves the manifest's pins into the
+   * NuGet machine cache without evaluating a repo target, and the run itself
+   * sends Stryker's whole output tree (`reports/`, `logs/`) into scratch —
+   * `--output` is what keeps a `StrykerOutput/` from landing beside the code.
+   */
+  it('builds a restore-then-run dotnet stryker pair reporting into scratch', () => {
+    expect(TOOL_RESTORE_ARGS).toEqual(['tool', 'restore'])
+    expect(strykerNetInvocationArgs(join(SCRATCH, 'job'))).toEqual([
+      'stryker',
+      '--output',
+      '/scratch/job/stryker-net',
+      '--reporter',
+      'json',
+    ])
+    // The runner reads the report exactly where `--output` makes Stryker write it.
+    expect(mutationReportPath(join(SCRATCH, 'job'))).toBe(
+      '/scratch/job/stryker-net/reports/mutation-report.json',
+    )
+  })
+
   /** Spec §7's block-list names `osv-scanner fix` explicitly. */
   it('never builds a mutating osv-scanner subcommand', () => {
     const args = osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'))
@@ -220,8 +396,48 @@ describe('osv-scanner degradation', () => {
   })
 })
 
+describe('the C# adapter', () => {
+  /** `LANGUAGES` pins "canonical language order, matching the adapter order". */
+  it('joins the adapter order after python, before common', () => {
+    expect(ADAPTERS.map((adapter) => adapter.language)).toEqual([
+      'js-ts',
+      'python',
+      'csharp',
+      'common',
+    ])
+    expect(csharpAdapter.language).toBe('csharp')
+  })
+
+  /**
+   * A standing check that survives every later insertion: runners are listed in
+   * category order (spec §10's remediation priority), so a later task inserts
+   * by `CATEGORIES` index rather than appending.
+   */
+  it('lists its runners in category order', () => {
+    const categories = csharpAdapter.runners.map((runner) => runner.category)
+    expect(categories).toEqual(categories.toSorted((a, b) => categoryRank(a) - categoryRank(b)))
+    expect(categories).toContain('format')
+    // `dead-code` precedes `complexity` in `CATEGORIES`, so roslynator sits at
+    // index 1 — between the build-backed `types` runner and the rest.
+    expect(categories[1]).toBe('dead-code')
+  })
+
+  /** Task 9 completes the list: `test-quality` is `CATEGORIES`' last member. */
+  it('answers every C# category, stryker-net last', () => {
+    expect(csharpAdapter.runners.map((runner) => runner.category)).toEqual([
+      'types',
+      'dead-code',
+      'complexity',
+      'lint',
+      'format',
+      'test-quality',
+    ])
+    expect(csharpAdapter.runners.at(-1)).toBe(strykerNetRunner)
+  })
+})
+
 describe('the common adapter', () => {
-  it('is registered, after the two language adapters', () => {
+  it('is registered, after the three language adapters', () => {
     expect(ADAPTERS.at(-1)).toBe(commonAdapter)
     expect(commonAdapter.language).toBe('common')
   })

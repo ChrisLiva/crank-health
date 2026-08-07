@@ -171,7 +171,18 @@ export const GRADE_TABLE = {
   security: { shape: 'absolute', b: { warning: 2, info: 10 } },
 } as const satisfies Readonly<Record<Category, GradeRule>>
 
-/** Cognitive-complexity ceiling a function must exceed to count (spec §3). */
+/**
+ * Cognitive-complexity ceiling a function must exceed to count (spec §3).
+ *
+ * One honesty note: the ceiling is documented as **cognitive** complexity, and
+ * that is what the JS/TS and Python tools (fta, complexipy) measure — but C#'s
+ * CA1502 reports **cyclomatic** complexity, and the two metrics are not
+ * interchangeable: cyclomatic counts branches wherever they sit, so it skews
+ * lenient on deeply-nested code that cognitive complexity penalizes extra.
+ * C# grades against this shared ceiling anyway, deliberately, so that one
+ * letter means one thing across a mixed repo; the cost is that a C# function
+ * just under 15 cyclomatic may read harder than the same grade suggests.
+ */
 export const COMPLEXITY_CEILING = 15
 
 /** Weights for the density shape. `critical` shares the error weight. */

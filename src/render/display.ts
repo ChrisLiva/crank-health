@@ -1,5 +1,5 @@
 import { ROOT_PROJECT } from '../core/discover.ts'
-import type { Category, CategoryState, Finding } from '../core/types.ts'
+import type { Category, CategoryState, Finding, Language } from '../core/types.ts'
 import type { ReportProjectMovement, ReportRootShell } from './json.ts'
 
 /**
@@ -18,6 +18,16 @@ export const CATEGORY_LABELS: Readonly<Record<Category, string>> = {
   lint: 'lint',
   format: 'format',
   'test-quality': 'test quality',
+}
+
+/**
+ * Human labels for the wire-format language ids. An exhaustive `Record`, so a
+ * fourth language cannot ship without deciding what to call it.
+ */
+export const LANGUAGE_LABELS: Readonly<Record<Language, string>> = {
+  'js-ts': 'JS/TS',
+  python: 'Python',
+  csharp: 'C#',
 }
 
 /** The marker on a finding that was reported but did not move a grade (spec §1). */

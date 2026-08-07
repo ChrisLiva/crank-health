@@ -206,6 +206,7 @@ describe('react-doctor owned by the repo but not installed', () => {
           project: makeProject(['package.json', ...files]),
           files,
           scratch,
+          runScratch: scratch,
           detection: {
             reason: 'dependency',
             configFiles: [],

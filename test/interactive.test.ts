@@ -1,8 +1,13 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseCliArgs } from '../src/args.ts'
 import type { SystemToolSpec } from '../src/adapters/common/system-tool.ts'
+import { LANGUAGES } from '../src/core/types.ts'
 import {
+  SYSTEM_TOOLS,
   equivalentCommand,
   isPromptCancelled,
   probeRepo,
@@ -128,6 +133,9 @@ describe('interactive session', () => {
       })
       expect(exhausted()).toBe(true)
       expect(text()).toContain('whole-repo scan')
+      // A language with nothing in the tree still gets its count: absence is
+      // rendered, never elided, for every member of LANGUAGES in order.
+      expect(text()).toContain(' JS/TS · 0 Python · 0 C#')
     },
     TEST_TIMEOUT_MS,
   )
@@ -136,8 +144,13 @@ describe('interactive session', () => {
     'the probe reads the repo without leaving a footprint',
     async () => {
       const probe = await probeRepo(fixture.root)
-      expect(probe.jsTsFiles).toBeGreaterThan(0)
-      expect(probe.pythonFiles).toBe(0)
+      expect(probe.fileCounts.map(({ language }) => language)).toEqual([...LANGUAGES])
+      const counts = Object.fromEntries(
+        probe.fileCounts.map(({ language, count }) => [language, count]),
+      )
+      expect(counts['js-ts']).toBeGreaterThan(0)
+      expect(counts['python']).toBe(0)
+      expect(counts['csharp']).toBe(0)
       expect(probe.projects).toEqual(['.'])
       expect(probe.currentBranch).toBe('main')
       expect(probe.baseCandidates).toEqual([])
@@ -437,6 +450,58 @@ describe('security tool walkthrough', () => {
     },
     TEST_TIMEOUT_MS,
   )
+})
+
+describe('the header’s file counts', () => {
+  let root: string
+
+  beforeAll(async () => {
+    // Not a checked-in fixture: the exact counts are the point, so the tree is
+    // built here — two JS files, one C# file, no Python at all.
+    root = await mkdtemp(join(tmpdir(), 'crank-interactive-counts-'))
+    await writeFile(join(root, 'a.js'), 'export const a = 1\n')
+    await writeFile(join(root, 'b.js'), 'export const b = 2\n')
+    await writeFile(join(root, 'c.cs'), 'class C { }\n')
+    const git = (args: string[]) => execa('git', args, { cwd: root, env: COMMIT_IDENTITY })
+    await git(['init', '--quiet', '--initial-branch=main'])
+    await git(['add', '--all'])
+    await git(['commit', '--quiet', '--no-gpg-sign', '--message', 'fixture'])
+  }, TEST_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it(
+    'renders one count per language, dot-separated, in canonical order',
+    async () => {
+      const { io, text } = scriptedIO([ENTER, ENTER, ENTER, ENTER, ENTER])
+      await runInteractiveSession(parseCliArgs([root]), io, ALL_INSTALLED())
+      expect(text()).toContain('2 JS/TS · 0 Python · 1 C#')
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe('the security tool roster', () => {
+  /**
+   * The guided `brew install` walk is exactly the three release-binary security
+   * scanners. Language prerequisites (`uv`, the .NET SDK) are deliberately not
+   * in it — a later hand must not quietly add an SDK to a brew prompt.
+   */
+  it('is exactly the three brew-installable security binaries', () => {
+    expect(SYSTEM_TOOLS.map((tool) => tool.spec.binary)).toEqual([
+      'gitleaks',
+      'opengrep',
+      'osv-scanner',
+    ])
+  })
+
+  it('names all three languages in the opengrep purpose', () => {
+    expect(SYSTEM_TOOLS.find((tool) => tool.spec.binary === 'opengrep')?.purpose).toBe(
+      'SAST rules for JS/TS, Python and C#',
+    )
+  })
 })
 
 describe('equivalentCommand', () => {

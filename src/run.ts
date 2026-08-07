@@ -1,6 +1,7 @@
 import { mkdtemp, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { forgetBuilds } from './adapters/csharp/build.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
 import type { RootShell } from './core/discover.ts'
@@ -45,9 +46,6 @@ import { renderReportMarkdown } from './render/report-md.ts'
  * shell over this, and the fixture tests drive it directly — so what the tests
  * prove is exactly what the CLI does.
  */
-
-/** Spec §5: quick mode grades everything except test quality. */
-export const QUICK_MODE_TEST_QUALITY_REASON = 'not assessed — run `--deep`'
 
 /**
  * Why a project has no state of its own for a category only the repo answered.
@@ -137,6 +135,9 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
       }),
     )
   } finally {
+    // The C# build memo keys on this scratch path; forgetting it here means a
+    // long-lived process (the test suite) never retains a parsed SARIF per scan.
+    forgetBuilds(scratch)
     await rm(scratch, { recursive: true, force: true })
   }
 }
@@ -196,17 +197,14 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   })
 
   const selected = options.only === undefined ? CATEGORIES : options.only
-  const deep = options.deep === true
   return {
     scan,
     selected,
     categories: await gradeAll(
       repo.repoRoot,
       rollupScope(scan, options.projects === undefined ? files : filesOf(scanned)),
-      selected,
-      deep,
     ),
-    projects: await gradeProjects(repo, scan, selected, deep),
+    projects: await gradeProjects(repo, scan, selected),
     ...(discovery.rootShell === undefined ? {} : { rootShell: discovery.rootShell }),
   }
 }
@@ -427,7 +425,6 @@ export async function gradeProjects(
   repo: RepoContext,
   scan: ScanResult,
   selected: readonly Category[],
-  deep: boolean,
 ): Promise<ProjectScan[]> {
   const own = scan.runs.filter((record) => !record.rollupOnly)
   const spanning = own.filter((record) => record.repoWide)
@@ -441,7 +438,13 @@ export async function gradeProjects(
     const scope: GradedScope = {
       files: project.files,
       findings: scan.findings.filter((finding) => finding.project === project.path),
-      categories: withRepoScoped(aggregateCategories(selected, records), records, spanning),
+      // The deferred set is the scan's: a category only `--deep` could answer
+      // was deferred for every project its adapter applies to.
+      categories: withRepoScoped(
+        aggregateCategories(selected, records, scan.deferredCategories),
+        records,
+        spanning,
+      ),
       metrics,
     }
     scans.push({
@@ -449,7 +452,7 @@ export async function gradeProjects(
       // Sequential: each project's KLOC is its own read of its own files, and
       // the file reads inside are already pooled.
       // eslint-disable-next-line no-await-in-loop
-      categories: await gradeAll(repo.repoRoot, scope, selected, deep),
+      categories: await gradeAll(repo.repoRoot, scope),
       metrics,
     })
   }
@@ -508,29 +511,15 @@ function gradedCategories(records: readonly RunRecord[]): Set<Category> {
 async function gradeAll(
   repoRoot: string,
   scope: GradedScope,
-  selected: readonly Category[],
-  deep: boolean,
 ): Promise<Record<Category, CategoryState>> {
   const sourceFiles = LANGUAGES.flatMap((language) => scope.files.byLanguage[language])
   const kloc = (await countPhysicalLines(repoRoot, sourceFiles)) / 1000
 
   const states = {} as Record<Category, CategoryState>
   for (const category of CATEGORIES) {
-    const state = toCategoryState(scope.categories[category], () =>
+    states[category] = toCategoryState(scope.categories[category], () =>
       gradeOne(category, scope, kloc, sourceFiles.length),
     )
-    // Spec §5: in quick mode the reason test quality has no grade is the
-    // profile, whatever the repo contains — no mutation tool was even asked. In
-    // deep mode one was, so the reason it gave (or the orchestrator's, when
-    // there was no tool to ask) is the honest one, and this must not overwrite
-    // it with an instruction to run the flag the user just ran.
-    states[category] =
-      !deep &&
-      category === 'test-quality' &&
-      state.status === 'not-assessed' &&
-      selected.includes(category)
-        ? { status: 'not-assessed', reason: QUICK_MODE_TEST_QUALITY_REASON }
-        : state
   }
   return states
 }

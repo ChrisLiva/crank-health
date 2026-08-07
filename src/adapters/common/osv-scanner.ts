@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
@@ -154,6 +154,9 @@ async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
 
   const analyzed = new Set(ctx.files)
   const version = await systemToolVersion(OSV_SCANNER, ctx.scratch, ctx.timeoutMs)
+  // Only on the `ok` path: a missing osv-scanner already carries its own
+  // `not-available` reason, and overwriting that would hide the real gap.
+  const reason = centralPackageManagementReason(ctx.files)
   return {
     state: 'ok',
     findings: await identify(
@@ -163,8 +166,32 @@ async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
       ),
     ),
     ...(version === undefined ? {} : { toolVersion: version }),
+    ...(reason === undefined ? {} : { reason }),
     rawFiles,
   }
+}
+
+/** NuGet's Central Package Management manifest, matched case-sensitively. */
+const CPM_MANIFEST = 'Directory.Packages.props'
+
+/**
+ * Why a Central Package Management repo's `ok` record still names a gap: with a
+ * `Directory.Packages.props` holding the versions, the `.csproj` files carry
+ * versionless `PackageReference`s that osv-scanner cannot resolve, so NuGet
+ * dependencies silently go unscanned. The sentence keeps that from reading as
+ * "no vulnerable dependencies" (spec §8's honest-degradation shape, criterion
+ * 8). Case-sensitive on the basename because MSBuild's own import is, on
+ * case-sensitive filesystems.
+ *
+ * @param files repo-relative paths, the run's own inventory
+ * @returns the reason to attach, or `undefined` when the repo does not use
+ * Central Package Management
+ */
+export function centralPackageManagementReason(files: readonly string[]): string | undefined {
+  return files.some((file) => basename(file) === CPM_MANIFEST)
+    ? 'Directory.Packages.props manages versions centrally; osv-scanner cannot read ' +
+        'Central Package Management, so NuGet dependencies were not scanned'
+    : undefined
 }
 
 /**

@@ -2,16 +2,19 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
-  SURVIVED_FINDING_LIMIT,
+  STRYKER_TOOL,
   buildStrykerOverrides,
   mutateScope,
-  mutationCounts,
-  parseMutationReport,
   renderStrykerConfig,
   strykerRunner,
-  toPendingFindings,
 } from '../src/adapters/jsts/stryker.ts'
-import type { Mutant } from '../src/adapters/jsts/stryker.ts'
+import {
+  SURVIVED_FINDING_LIMIT,
+  mutationCounts,
+  parseMutationReport,
+  toPendingFindings,
+} from '../src/adapters/mutation-report.ts'
+import type { Mutant } from '../src/adapters/mutation-report.ts'
 import type { RunContext } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 
@@ -29,6 +32,7 @@ const CONTEXT: RunContext = {
   project: makeProject(['src/calc.js', 'src/other.ts', 'test/calc.test.js', 'README.md']),
   files: ['src/calc.js', 'src/other.ts', 'test/calc.test.js', 'README.md'],
   scratch: '/scratch',
+  runScratch: '/scratch',
   detection: null,
   timeoutMs: 1_000,
   deep: true,
@@ -74,9 +78,13 @@ describe('parsing a mutation report', () => {
 
 describe('mutants as findings', () => {
   it('grades survived mutants and keeps the other kinds advisory', async () => {
-    const findings = toPendingFindings(parseMutationReport(await readFile(CAPTURED, 'utf8')))
+    const findings = toPendingFindings(
+      parseMutationReport(await readFile(CAPTURED, 'utf8')),
+      STRYKER_TOOL,
+    )
 
     expect(findings).toHaveLength(18)
+    expect(findings.every((finding) => finding.tool === STRYKER_TOOL)).toBe(true)
     expect(findings.every((finding) => finding.category === 'test-quality')).toBe(true)
     expect(findings.every((finding) => finding.provenance === 'repo-config')).toBe(true)
     expect(findings.every((finding) => finding.rule === 'stryker/survived-mutant')).toBe(true)
@@ -85,23 +93,26 @@ describe('mutants as findings', () => {
   })
 
   it('names the mutator and the replacement, and keeps the message on one line', () => {
-    const [finding] = toPendingFindings([
-      mutant({
-        status: 'Survived',
-        mutatorName: 'ArithmeticOperator',
-        replacement: 'a -\n  b',
-      }),
-    ])
+    const [finding] = toPendingFindings(
+      [
+        mutant({
+          status: 'Survived',
+          mutatorName: 'ArithmeticOperator',
+          replacement: 'a -\n  b',
+        }),
+      ],
+      STRYKER_TOOL,
+    )
     expect(finding?.message).toBe(
       'Mutant survived: ArithmeticOperator replaced this with `a - b` and every test still passed',
     )
   })
 
   it('reports uncovered and timed-out mutants as advisory, never as graded', () => {
-    const findings = toPendingFindings([
-      mutant({ status: 'NoCoverage', startLine: 3 }),
-      mutant({ status: 'Timeout', startLine: 4 }),
-    ])
+    const findings = toPendingFindings(
+      [mutant({ status: 'NoCoverage', startLine: 3 }), mutant({ status: 'Timeout', startLine: 4 })],
+      STRYKER_TOOL,
+    )
     expect(findings.map((finding) => [finding.rule, finding.severity, finding.gradeScope])).toEqual(
       [
         ['stryker/no-coverage-mutant', 'info', false],
@@ -114,7 +125,7 @@ describe('mutants as findings', () => {
     const many = Array.from({ length: SURVIVED_FINDING_LIMIT + 25 }, (_, index) =>
       mutant({ status: 'Survived', startLine: index + 1 }),
     )
-    const findings = toPendingFindings(many)
+    const findings = toPendingFindings(many, STRYKER_TOOL)
     expect(findings).toHaveLength(SURVIVED_FINDING_LIMIT)
     // The cap keeps the first ones by position, so it is the same 50 every run.
     expect(findings.at(-1)?.range.startLine).toBe(SURVIVED_FINDING_LIMIT)

@@ -19,6 +19,13 @@ import type {
 } from './types.ts'
 import { CATEGORIES, REPO_SCOPE, categoryRank } from './types.ts'
 
+/**
+ * Spec §5: why a deferred category has no grade in a quick scan. Whatever the
+ * repo contains, no deep tool was even asked — so the profile is the reason,
+ * not a tool, and the fix is the flag. See {@link ScanResult.deferredCategories}.
+ */
+export const QUICK_MODE_DEEP_REASON = 'not assessed — run `--deep`'
+
 /** How many tools run at once. */
 export const DEFAULT_CONCURRENCY = 4
 
@@ -100,6 +107,15 @@ export interface ScanResult {
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
   /** Non-fatal problems that belong in the report but broke nothing. */
   readonly warnings: readonly string[]
+  /**
+   * Categories this scan deferred to the deep profile: requested, answerable
+   * here — an adapter with a {@link ToolRunner.deepOnly} runner in the category
+   * applies to at least one project — but not asked, because only `--deep` may
+   * run that tier (spec §5). In {@link CATEGORIES} order, deduped; always empty
+   * in a deep scan. A category a `--only` selection excluded is not in it: that
+   * runner was dropped as unrequested, and `--deep` would not bring it back.
+   */
+  readonly deferredCategories: readonly Category[]
 }
 
 /**
@@ -131,7 +147,7 @@ export async function runScan(
   const requested = options.only === undefined ? CATEGORIES : dedupe(options.only)
   const warnings: string[] = []
 
-  const jobs = await plan(repo, adapters, requested, deep, warnings)
+  const { jobs, deferredCategories } = await plan(repo, adapters, requested, deep, warnings)
   const records = await mapLimit(jobs, options.concurrency ?? DEFAULT_CONCURRENCY, (job) =>
     execute(repo, job, budgets, {
       deep,
@@ -143,9 +159,10 @@ export async function runScan(
   return {
     findings: sortFindings(attribute(resolved, repo.projects)),
     runs: resolved,
-    categories: aggregateCategories(requested, resolved),
+    categories: aggregateCategories(requested, resolved, deferredCategories),
     metrics: aggregateMetrics(resolved),
     warnings,
+    deferredCategories,
   }
 }
 
@@ -388,8 +405,9 @@ async function plan(
   requested: readonly Category[],
   deep: boolean,
   warnings: string[],
-): Promise<Job[]> {
+): Promise<PlannedScan> {
   const jobs: Job[] = []
+  const deferred = new Set<Category>()
   const wholeRepo = repoProject(repo.files)
 
   for (const adapter of adapters) {
@@ -399,12 +417,22 @@ async function plan(
       // the profile's own reason rather than with a tool's.
       (runner) => requested.includes(runner.category) && (deep || runner.deepOnly !== true),
     )
-    if (runners.length === 0) continue
+    // …but it is a *deferral* the scan records, when the adapter applies here at
+    // all: the category was requested and only `--deep` may answer it. Not so
+    // for a runner `--only` excluded — that is an exclusion, not a deferral.
+    const deferredRunners = adapter.runners.filter(
+      (runner) => requested.includes(runner.category) && !deep && runner.deepOnly === true,
+    )
+    if (runners.length === 0 && deferredRunners.length === 0) continue
 
     // Which projects this adapter has anything to say about, decided once per
     // project rather than once per runner.
     // eslint-disable-next-line no-await-in-loop
     const targets = await applicableProjects(adapter, repo, warnings)
+    if (targets.length > 0) {
+      for (const runner of deferredRunners) deferred.add(runner.category)
+    }
+    if (runners.length === 0) continue
 
     const candidates: Job[] = []
     for (const runner of runners) {
@@ -418,7 +446,17 @@ async function plan(
     jobs.push(...withoutRedundantDefaults(candidates))
   }
 
-  return jobs
+  return {
+    jobs,
+    deferredCategories: CATEGORIES.filter((category) => deferred.has(category)),
+  }
+}
+
+/** What {@link plan} decided: the jobs to run, and the categories it deferred. */
+interface PlannedScan {
+  readonly jobs: readonly Job[]
+  /** See {@link ScanResult.deferredCategories}; in {@link CATEGORIES} order. */
+  readonly deferredCategories: readonly Category[]
 }
 
 /** One thing a runner is asked about: which project, and on whose behalf. */
@@ -715,6 +753,7 @@ async function execute(
         nestedProjects: nestedProjectsOf(repo, job),
         files: job.files,
         scratch,
+        runScratch: repo.scratch,
         detection: job.detection,
         timeoutMs,
         deep: profile.deep,
@@ -804,7 +843,11 @@ async function run(start: () => Promise<ToolResult>, tool: string): Promise<Tool
  *   on what did run, and the failure is visible in `runs`)
  * - otherwise `error` wins over `timeout` wins over `not-available`, because the
  *   loudest unexplained failure is the one worth reporting
- * - no runner at all → `not-assessed` (that language/tool is not present here)
+ * - no runner at all → `not-assessed`: {@link QUICK_MODE_DEEP_REASON} when the
+ *   scan deferred the category to the deep profile, otherwise that
+ *   language/tool is not present here. A category with any record keeps its
+ *   runners' own reasons — records exist, so the deep tier was not the only
+ *   thing that could have answered.
  *
  * Exported because a project's categories are the same question asked of its
  * own records: one rule, so a per-project state and the rollup's cannot drift.
@@ -812,6 +855,7 @@ async function run(start: () => Promise<ToolResult>, tool: string): Promise<Tool
 export function aggregateCategories(
   requested: readonly Category[],
   records: readonly RunRecord[],
+  deferred: readonly Category[] = [],
 ): Record<Category, CategoryOutcome> {
   const outcomes = {} as Record<Category, CategoryOutcome>
 
@@ -822,7 +866,9 @@ export function aggregateCategories(
     }
     const mine = records.filter((record) => record.category === category)
     if (mine.length === 0) {
-      outcomes[category] = { status: 'not-assessed', reason: 'no tool available for this category' }
+      outcomes[category] = deferred.includes(category)
+        ? { status: 'not-assessed', reason: QUICK_MODE_DEEP_REASON }
+        : { status: 'not-assessed', reason: 'no tool available for this category' }
       continue
     }
     if (mine.some((record) => record.result.state === 'ok')) {
