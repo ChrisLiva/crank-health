@@ -168,6 +168,26 @@ async function installedVersion(
     .find((version) => version !== undefined)
 }
 
+/**
+ * Whether the project — or any ancestor up to the repo root, the same chain
+ * {@link detectNodeTool} walks — names `packageName` in one of the four
+ * dependency blocks. Missing and malformed manifests are skipped, never thrown.
+ */
+export async function declaresDependency(
+  repoRoot: string,
+  projectPath: string,
+  packageName: string,
+): Promise<boolean> {
+  const manifests = await Promise.all(
+    ancestryOf(projectPath).map(async (directory) =>
+      asRecord(await readJson(join(repoRoot, directory, PACKAGE_JSON))),
+    ),
+  )
+  return manifests.some((manifest) =>
+    DEPENDENCY_FIELDS.some((field) => asRecord(manifest?.[field])?.[packageName] !== undefined),
+  )
+}
+
 /** Manifest fields that only a package with a published surface declares. */
 const PUBLISHED_ENTRY_FIELDS: readonly string[] = ['exports', 'module', 'types']
 

@@ -4,7 +4,11 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { NodeToolSpec } from '../src/adapters/jsts/node-package.ts'
-import { detectNodeTool, isLibraryPackage } from '../src/adapters/jsts/node-package.ts'
+import {
+  declaresDependency,
+  detectNodeTool,
+  isLibraryPackage,
+} from '../src/adapters/jsts/node-package.ts'
 import { partitionProjects } from '../src/core/discover.ts'
 import type { DetectContext } from '../src/core/types.ts'
 
@@ -68,6 +72,44 @@ describe('isLibraryPackage', () => {
   ])('classifies the %s fixture as an application', async (name) => {
     const root = fileURLToPath(new URL(`./fixtures/${name}/`, import.meta.url))
     expect(await isLibraryPackage(root)).toBe(false)
+  })
+})
+
+describe('declaresDependency', () => {
+  it.each(['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'])(
+    'is true when the project’s own manifest names the package under %s',
+    async (block) => {
+      const body = `{"${block}":{"react":"^19.0.0"}}`
+      expect(await withManifest(body, (root) => declaresDependency(root, '.', 'react'))).toBe(true)
+    },
+  )
+
+  it('is true when an ancestor manifest declares it — the workspace root’s dependency', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'crank-declares-'))
+    try {
+      const write = async (file: string, body: string) => {
+        await mkdir(dirname(join(root, file)), { recursive: true })
+        await writeFile(join(root, file), body)
+      }
+      await write('package.json', '{"dependencies":{"react":"^19.0.0"}}')
+      await write('packages/a/package.json', '{"name":"a"}')
+      expect(await declaresDependency(root, 'packages/a', 'react')).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    // No package.json anywhere.
+    [undefined],
+    // Manifest present, package not named.
+    ['{"dependencies":{"vue":"^3"}}'],
+    // Malformed manifest: readJson yields undefined and the walk just ends false.
+    ['not json'],
+    // Only the four dependency blocks count — scripts and engines never do.
+    ['{"scripts":{"react":"vite"},"engines":{"react":"19"}}'],
+  ])('is false, never a throw, for manifest %s', async (body) => {
+    expect(await withManifest(body, (root) => declaresDependency(root, '.', 'react'))).toBe(false)
   })
 })
 
