@@ -284,9 +284,194 @@ describe('quick scan of cs-basic with an SDK below the floor', () => {
   })
 })
 
+/**
+ * Every quick-tier finding planted in `test/fixtures/mixed-cs` — see that
+ * fixture's README for the human-readable half. Each language's plants stay in
+ * the project that owns them: the JS pair at the root, the C# pair in `dotnet/`.
+ */
+const MIXED_CS_PLANTED = [
+  {
+    category: 'duplication',
+    tool: 'jscpd',
+    rule: 'jscpd/duplicate-block',
+    file: 'dotnet/dupe-a.cs',
+    project: 'dotnet',
+    startLine: 4,
+    severity: 'warning',
+    gradeScope: false,
+  },
+  {
+    category: 'duplication',
+    tool: 'jscpd',
+    rule: 'jscpd/duplicate-block',
+    file: 'dotnet/dupe-b.cs',
+    project: 'dotnet',
+    startLine: 4,
+    severity: 'warning',
+    gradeScope: false,
+  },
+  {
+    category: 'lint',
+    tool: 'oxlint',
+    rule: 'eslint(no-dupe-keys)',
+    file: 'dupe-keys.js',
+    project: '.',
+    startLine: 2,
+    severity: 'error',
+    gradeScope: true,
+  },
+  {
+    category: 'format',
+    tool: 'dotnet-format',
+    rule: 'dotnet-format/whitespace',
+    file: 'dotnet/unformatted.cs',
+    project: 'dotnet',
+    startLine: 1,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
+    category: 'format',
+    tool: 'prettier',
+    rule: 'prettier/format',
+    file: 'unformatted.js',
+    project: '.',
+    startLine: 1,
+    severity: 'warning',
+    gradeScope: true,
+  },
+] as const
+
+/**
+ * Criteria 4 and 26: a repo whose root is a JS project and whose `dotnet/`
+ * directory holds **two manifests** — `App.csproj` and a `package.json` — but
+ * only C# source. The manifest alone declares `js-ts` into that project's
+ * `languages`, while the JS/TS adapter (which detects on *files*) has nothing
+ * to run there — so the dotnet entry's deep categories keep the quick profile's
+ * deferral reason, and the root entry is the standing guard that the scan-wide
+ * deferral never leaks into a project whose own runners did answer.
+ */
+describe('quick scan of the mixed-cs fixture', () => {
+  let fixture: FixtureRepo
+  let scan: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('mixed-cs')
+    scan = await runHealthScan({ path: fixture.root })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  it('discovers the root JS project and the two-manifest dotnet project', () => {
+    expect(
+      scan.report.projects.map((project) => [project.path, project.languages, project.manifests]),
+    ).toEqual([
+      ['.', ['js-ts'], ['package.json']],
+      // `languages` in canonical `LANGUAGES` order: the `package.json` declares
+      // `js-ts` even though every source file in the directory is C#.
+      ['dotnet', ['js-ts', 'csharp'], ['dotnet/App.csproj', 'dotnet/package.json']],
+    ])
+  })
+
+  it('finds every planted finding, and nothing else', () => {
+    expect(scan.report.findings.filter(fromAlwaysAvailableTool).map(shapeWithProject)).toEqual(
+      MIXED_CS_PLANTED.map((planted) => ({ ...planted })),
+    )
+  })
+
+  /**
+   * The standing guard on the scan-wide deferred set: the C# adapter deferred
+   * `types`/`dead-code`/`complexity`/`lint` to `--deep`, but the root project's
+   * own quick runners (tsc, fallow, knip, fallow-health, fta, oxlint) each
+   * produced a record there — so those categories are graded, never handed the
+   * deep reason. Only `test-quality`, which no quick runner anywhere answers,
+   * keeps it.
+   */
+  it('grades the root project from its own runs, untouched by the C# deferrals', () => {
+    expect(categories('.')).toMatchObject({
+      types: { status: 'graded', grade: 'A' },
+      'dead-code': { status: 'graded', grade: 'A' },
+      complexity: { status: 'graded', grade: 'A' },
+      lint: { status: 'graded', grade: 'F' },
+      format: { status: 'graded', grade: 'C' },
+      duplication: { status: 'graded', grade: 'A' },
+      'test-quality': { status: 'not-assessed', reason: QUICK_MODE_DEEP_REASON },
+    })
+  })
+
+  /**
+   * Criterion 26's other half: every C# category behind a `deepOnly` runner is
+   * deferred with the profile's reason — and the declared-but-fileless `js-ts`
+   * never plants a quick JS record here to contradict that.
+   */
+  it('defers the dotnet project’s deep categories with the quick-mode reason', () => {
+    for (const category of DEFERRED) {
+      expect(categories('dotnet')?.[category]).toEqual({
+        status: 'not-assessed',
+        reason: QUICK_MODE_DEEP_REASON,
+      })
+    }
+    expect(categories('dotnet')).toMatchObject({
+      format: { status: 'graded', grade: 'C' },
+      duplication: { status: 'graded', grade: 'F' },
+    })
+  })
+
+  /** Spec §3's mixed-language rule: one rollup grade over the combined findings. */
+  it('grades the rollup over both projects’ findings', () => {
+    const report = parse(scan.json)
+    expect(Object.keys(report.categories).toSorted()).toEqual([...CATEGORIES].toSorted())
+    expect(report.categories.lint).toEqual({ status: 'graded', grade: 'F' })
+    expect(report.categories.format).toEqual({ status: 'graded', grade: 'C' })
+    expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
+    expect(report.categories.types).toEqual({ status: 'graded', grade: 'A' })
+    // The combined denominator: four formattable files per project, added.
+    expect(report.metrics.format).toEqual({ formattableFiles: 8 })
+    expect(report.categories['test-quality']).toEqual({
+      status: 'not-assessed',
+      reason: QUICK_MODE_DEEP_REASON,
+    })
+    expect(report.categories.security?.status).toBe(GOLDEN_TOOLCHAIN ? 'not-assessed' : 'graded')
+  })
+
+  it('counts both languages into the per-language breakdown', () => {
+    expect(parse(scan.json).languages).toEqual({
+      'js-ts': { lint: 1, format: 1 },
+      csharp: { duplication: 2, format: 1 },
+    })
+  })
+
+  it('leaves the target repo clean', async () => {
+    expect(await fixture.status()).toBe('')
+  })
+
+  it(
+    'produces byte-identical output when run twice on the same commit',
+    async () => {
+      const second = await runHealthScan({ path: fixture.root })
+      expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
+      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+        scan.report.findings.map((finding) => finding.id),
+      )
+    },
+    SCAN_TIMEOUT_MS,
+  )
+
+  function categories(path: string) {
+    return scan.report.projects.find((project) => project.path === path)?.categories
+  }
+})
+
 /** Findings from the tools every machine has, because npx can fetch them. */
 function fromAlwaysAvailableTool(finding: Finding): boolean {
   return !SYSTEM_TOOLS.some((tool) => (tool as string) === finding.tool)
+}
+
+/** {@link shape}, plus the project the finding was attributed to. */
+function shapeWithProject(finding: Finding) {
+  return { ...shape(finding), project: finding.project }
 }
 
 /** The parts of a finding a planted-finding table is about. */
