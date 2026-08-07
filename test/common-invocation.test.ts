@@ -23,6 +23,7 @@ import {
   osvScannerRunner,
 } from '../src/adapters/common/osv-scanner.ts'
 import { zizmorRunner } from '../src/adapters/common/zizmor.ts'
+import { buildInvocationArgs } from '../src/adapters/csharp/build.ts'
 import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
 import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
 import { csharpAdapter } from '../src/adapters/csharp/index.ts'
@@ -169,6 +170,39 @@ describe('zero footprint, in the arguments', () => {
       '--report',
       '/scratch/dotnet-format',
     ])
+  })
+
+  /**
+   * The build command: SARIF 2.1 into scratch (the `%2C` escape is what keeps
+   * the SDK from silently emitting SARIF 1.0), every MSBuild output property
+   * redirected into scratch (zero footprint under full compilation), our
+   * targets injected, and restore pinned to nuget.org — `dotnet build` has no
+   * `--source` flag, so without `RestoreSources` the scanned repo's
+   * `NuGet.config` would choose which analyzer binary crank-health executes.
+   * No `--no-restore`: the injected analyzer PackageReference must resolve.
+   */
+  it('builds a scratch-confined, nuget.org-pinned dotnet build command', () => {
+    const args = buildInvocationArgs({
+      projectDir: join(REPO, 'svc'),
+      scratch: join(SCRATCH, 'dotnet-build'),
+      sarifPath: join(SCRATCH, 'dotnet-build', 'build.sarif'),
+      targetsPath: join(SCRATCH, 'dotnet-build', 'crank-health.targets'),
+    })
+
+    expect(args.slice(0, 2)).toEqual(['build', '/repo/svc'])
+    expect(args).toContain('-p:ErrorLog=/scratch/dotnet-build/build.sarif%2Cversion=2.1')
+    expect(args).toContain('-p:BaseIntermediateOutputPath=/scratch/dotnet-build/obj/')
+    expect(args).toContain('-p:BaseOutputPath=/scratch/dotnet-build/bin/')
+    expect(args).toContain('-p:MSBuildProjectExtensionsPath=/scratch/dotnet-build/obj/')
+    expect(args).toContain(
+      '-p:CustomAfterMicrosoftCommonTargets=/scratch/dotnet-build/crank-health.targets',
+    )
+    expect(args).toContain('-p:RestoreSources=https://api.nuget.org/v3/index.json')
+    expect(args).not.toContain('--no-restore')
+    // Beyond the project dir itself, every path points into scratch.
+    for (const value of args.slice(2).map((arg) => arg.replace(/^-p:[A-Za-z]+=/, ''))) {
+      if (value.startsWith('/')) expect(value.startsWith('/scratch/')).toBe(true)
+    }
   })
 
   /**
