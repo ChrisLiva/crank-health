@@ -62,6 +62,7 @@ describe('isLibraryPackage', () => {
     'js-basic',
     'js-multi-tool',
     'js-owned',
+    'js-react',
     'js-weak-tests',
     'mixed-basic',
     'py-basic',
