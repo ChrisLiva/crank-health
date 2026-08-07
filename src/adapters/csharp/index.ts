@@ -6,6 +6,7 @@ import {
 } from './build.ts'
 import { dotnetFormatRunner } from './dotnet-format.ts'
 import { roslynatorRunner } from './roslynator.ts'
+import { strykerNetRunner } from './stryker-net.ts'
 
 /**
  * The C# language adapter. It answers one question — does this project contain
@@ -26,5 +27,6 @@ export const csharpAdapter: LanguageAdapter = {
     dotnetBuildComplexityRunner,
     dotnetBuildLintRunner,
     dotnetFormatRunner,
+    strykerNetRunner,
   ],
 }

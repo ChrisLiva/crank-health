@@ -1,6 +1,7 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CA1502_SUPPRESSED_REASON } from '../src/adapters/csharp/build.ts'
 import type { HealthScanResult } from '../src/run.ts'
@@ -114,6 +115,20 @@ describe.runIf(ENABLED)('--deep on cs-basic: the compiled trio lights up', () =>
     expect(await fixture.status()).toBe('')
     expect((await readdir(fixture.root)).toSorted()).toEqual(entriesBefore)
   })
+
+  /**
+   * Criterion 20's unowned half: cs-basic has no `.config/dotnet-tools.json`,
+   * and a `repoOwnedOnly` runner the repo did not choose is simply absent —
+   * no job, no record, and the category says why, byte-identically to what a
+   * JS repo without StrykerJS reports under `--deep`.
+   */
+  it('imposes no stryker-net on a repo without a tools manifest', () => {
+    expect(report(deep).tools.every((tool) => tool.tool !== 'stryker-net')).toBe(true)
+    expect(deep.report.categories['test-quality']).toEqual({
+      status: 'not-assessed',
+      reason: 'no tool available for this category',
+    })
+  })
 })
 
 describe.runIf(ENABLED)('--deep on cs-multi-target: per-TFM copies collapse', () => {
@@ -215,12 +230,151 @@ describe.runIf(ENABLED)('--deep on cs-custom-targets: the injection coexists', (
   })
 })
 
+/**
+ * Criterion 20's owned half, on a scratch cs-weak-tests repo built here rather
+ * than checked in: a root library with a deliberately weak xunit suite in
+ * `tests/`, whose tools manifest — inside the test project's directory, the
+ * one `dotnet` itself would find from there — pins dotnet-stryker. Deep mode
+ * runs the real mutation cycle: `dotnet tool restore`, then `dotnet stryker`
+ * building and testing the repo's own code.
+ *
+ * `IsPositive` is tested only at 5, so weakening `>` to `>=` survives — the
+ * same plant the capture was taken from — which pins the score strictly
+ * between 0 and 100.
+ */
+describe.runIf(ENABLED)('--deep on a scratch repo that owns Stryker.NET', () => {
+  let repo: string
+  let out: string
+  let deep: HealthScanResult
+
+  beforeAll(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'crank-cs-weak-'))
+    out = await mkdtemp(join(tmpdir(), 'crank-cs-weak-out-'))
+    await execa('git', ['init', '--quiet'], {
+      cwd: repo,
+      env: { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' },
+      extendEnv: true,
+    })
+    for (const [file, contents] of Object.entries(WEAK_TESTS_TREE)) {
+      // eslint-disable-next-line no-await-in-loop
+      await mkdir(join(repo, dirname(file)), { recursive: true })
+      // eslint-disable-next-line no-await-in-loop
+      await writeFile(join(repo, file), contents, 'utf8')
+    }
+    deep = await runHealthScan({ path: repo, out, deep: true, only: ['test-quality'] })
+  }, DEEP_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await rm(repo, { recursive: true, force: true })
+    await rm(out, { recursive: true, force: true })
+  })
+
+  it('grades test-quality from the real mutation score', () => {
+    expect(deep.report.categories['test-quality']?.status).toBe('graded')
+    const metrics = deep.report.metrics['test-quality']
+    expect(metrics?.mutantsDetected).toBeGreaterThanOrEqual(1)
+    expect(metrics?.mutantsUndetected).toBeGreaterThanOrEqual(1)
+    expect(metrics?.mutationScore).toBeGreaterThan(0)
+    expect(metrics?.mutationScore).toBeLessThan(100)
+  })
+
+  it('records the run against the manifest that owns it', () => {
+    const record = report(deep).tools.find((tool) => tool.tool === 'stryker-net')
+    expect(record?.state).toBe('ok')
+    expect(record?.detection?.ownedVia).toBe('tests/.config/dotnet-tools.json')
+  })
+
+  /** The planted survived mutant, attributed to the mutated file's project. */
+  it('lists the planted survived mutant as evidence', () => {
+    const survived = deep.report.findings.filter(
+      (finding) => finding.rule === 'stryker/survived-mutant',
+    )
+    expect(survived.map((finding) => finding.file)).toContain('Calc.cs')
+    expect(survived.every((finding) => finding.tool === 'stryker-net')).toBe(true)
+  })
+})
+
+/** The scratch repo: `obj/`/`bin/` gitignored, as in every real C# repo. */
+const WEAK_TESTS_TREE: Readonly<Record<string, string>> = {
+  '.gitignore': 'bin/\nobj/\n',
+  'Lib.csproj': [
+    '<Project Sdk="Microsoft.NET.Sdk">',
+    '  <PropertyGroup>',
+    '    <TargetFramework>net10.0</TargetFramework>',
+    '    <Nullable>enable</Nullable>',
+    // The library compiles only its own file; the default `**/*.cs` glob
+    // would otherwise pull the tests in and break the build.
+    '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+    '  </PropertyGroup>',
+    '  <ItemGroup>',
+    '    <Compile Include="Calc.cs" />',
+    '  </ItemGroup>',
+    '</Project>',
+    '',
+  ].join('\n'),
+  'Calc.cs': [
+    'namespace WeakLib;',
+    '',
+    'public static class Calc',
+    '{',
+    '    public static int Add(int a, int b) => a + b;',
+    '',
+    '    public static int Max(int a, int b) => a > b ? a : b;',
+    '',
+    '    public static bool IsPositive(int value) => value > 0;',
+    '}',
+    '',
+  ].join('\n'),
+  'tests/.config/dotnet-tools.json': JSON.stringify(
+    {
+      version: 1,
+      isRoot: true,
+      tools: { 'dotnet-stryker': { version: '4.16.0', commands: ['dotnet-stryker'] } },
+    },
+    null,
+    2,
+  ),
+  'tests/Tests.csproj': [
+    '<Project Sdk="Microsoft.NET.Sdk">',
+    '  <PropertyGroup>',
+    '    <TargetFramework>net10.0</TargetFramework>',
+    '    <Nullable>enable</Nullable>',
+    '    <IsPackable>false</IsPackable>',
+    '  </PropertyGroup>',
+    '  <ItemGroup>',
+    '    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />',
+    '    <PackageReference Include="xunit" Version="2.9.3" />',
+    '    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />',
+    '  </ItemGroup>',
+    '  <ItemGroup>',
+    '    <ProjectReference Include="../Lib.csproj" />',
+    '  </ItemGroup>',
+    '</Project>',
+    '',
+  ].join('\n'),
+  'tests/CalcTests.cs': [
+    'using WeakLib;',
+    'using Xunit;',
+    '',
+    'public class CalcTests',
+    '{',
+    '    [Fact]',
+    '    public void AddsTwoAndTwo() => Assert.Equal(4, Calc.Add(2, 2));',
+    '',
+    '    [Fact]',
+    '    public void FiveIsPositive() => Assert.True(Calc.IsPositive(5));',
+    '}',
+    '',
+  ].join('\n'),
+}
+
 interface ReportShape {
   readonly tools: {
     readonly tool: string
     readonly category: string
     readonly state: string
     readonly raw: readonly string[]
+    readonly detection: { readonly ownedVia: string | null } | null
   }[]
 }
 

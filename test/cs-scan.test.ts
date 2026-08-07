@@ -70,11 +70,13 @@ const PLANTED = [
 /** Files planted deliberately clean; a finding in one of these is a false positive. */
 const CLEAN_FILES = new Set(['clean.cs'])
 
-/** The categories no C# runner in any profile answers at this point of the run. */
-const UNANSWERED: readonly Category[] = ['test-quality']
-
-/** The build-backed trio plus roslynator: deep-only, so a quick scan defers them. */
-const DEFERRED: readonly Category[] = ['types', 'dead-code', 'complexity', 'lint']
+/**
+ * Every deep-only C# category — the build-backed trio, roslynator's dead-code,
+ * and stryker-net's test-quality — so a quick scan defers all five. Stryker is
+ * also `repoOwnedOnly` and cs-basic has no tools manifest, but quick mode never
+ * asks: `deepOnly` alone decides the deferral.
+ */
+const DEFERRED: readonly Category[] = ['types', 'dead-code', 'complexity', 'lint', 'test-quality']
 
 describe('quick scan of the cs-basic fixture', () => {
   let fixture: FixtureRepo
@@ -141,18 +143,12 @@ describe('quick scan of the cs-basic fixture', () => {
     // Flips to `graded` when any of gitleaks/opengrep/osv-scanner is installed:
     // a security tool that ran and found nothing is an honest A.
     expect(report.categories.security?.status).toBe(GOLDEN_TOOLCHAIN ? 'not-assessed' : 'graded')
-    // The compiled trio's and roslynator's runners exist but are deep-only, so
-    // a quick scan defers them; test-quality flips when Task 9 lands its runner.
+    // Every remaining C# category has a runner now, and every one of those
+    // runners is deep-only — so a quick scan defers all five with one reason.
     for (const category of DEFERRED) {
       expect(report.categories[category]).toEqual({
         status: 'not-assessed',
         reason: QUICK_MODE_DEEP_REASON,
-      })
-    }
-    for (const category of UNANSWERED) {
-      expect(report.categories[category]).toEqual({
-        status: 'not-assessed',
-        reason: 'no tool available for this category',
       })
     }
   })

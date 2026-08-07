@@ -28,6 +28,12 @@ import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
 import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
 import { csharpAdapter } from '../src/adapters/csharp/index.ts'
 import { roslynatorInvocationArgs } from '../src/adapters/csharp/roslynator.ts'
+import {
+  TOOL_RESTORE_ARGS,
+  mutationReportPath,
+  strykerNetInvocationArgs,
+  strykerNetRunner,
+} from '../src/adapters/csharp/stryker-net.ts'
 import { dnxCommand } from '../src/core/exec.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
 import type { RunContext } from '../src/core/types.ts'
@@ -283,6 +289,28 @@ describe('zero footprint, in the arguments', () => {
     expect(dotnetEnv()['DOTNET_CLI_UI_LANGUAGE']).toBe('en')
   })
 
+  /**
+   * The two commands the Stryker.NET runner spawns, both through the repo's
+   * own restored tool: `tool restore` resolves the manifest's pins into the
+   * NuGet machine cache without evaluating a repo target, and the run itself
+   * sends Stryker's whole output tree (`reports/`, `logs/`) into scratch —
+   * `--output` is what keeps a `StrykerOutput/` from landing beside the code.
+   */
+  it('builds a restore-then-run dotnet stryker pair reporting into scratch', () => {
+    expect(TOOL_RESTORE_ARGS).toEqual(['tool', 'restore'])
+    expect(strykerNetInvocationArgs(join(SCRATCH, 'job'))).toEqual([
+      'stryker',
+      '--output',
+      '/scratch/job/stryker-net',
+      '--reporter',
+      'json',
+    ])
+    // The runner reads the report exactly where `--output` makes Stryker write it.
+    expect(mutationReportPath(join(SCRATCH, 'job'))).toBe(
+      '/scratch/job/stryker-net/reports/mutation-report.json',
+    )
+  })
+
   /** Spec §7's block-list names `osv-scanner fix` explicitly. */
   it('never builds a mutating osv-scanner subcommand', () => {
     const args = osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'))
@@ -392,6 +420,19 @@ describe('the C# adapter', () => {
     // `dead-code` precedes `complexity` in `CATEGORIES`, so roslynator sits at
     // index 1 — between the build-backed `types` runner and the rest.
     expect(categories[1]).toBe('dead-code')
+  })
+
+  /** Task 9 completes the list: `test-quality` is `CATEGORIES`' last member. */
+  it('answers every C# category, stryker-net last', () => {
+    expect(csharpAdapter.runners.map((runner) => runner.category)).toEqual([
+      'types',
+      'dead-code',
+      'complexity',
+      'lint',
+      'format',
+      'test-quality',
+    ])
+    expect(csharpAdapter.runners.at(-1)).toBe(strykerNetRunner)
   })
 })
 
