@@ -152,6 +152,7 @@ describe('quick scan of the js-basic fixture', () => {
       'fta',
       'jscpd',
       'oxlint',
+      'react-doctor',
       'prettier',
     ])
     expect(report.tools.every((tool) => tool.provenance === 'default-config')).toBe(true)
@@ -162,6 +163,24 @@ describe('quick scan of the js-basic fixture', () => {
       if (tool.version !== null) expect(tool.version).toBe(tool.pinned)
     }
     expect(findings.every((finding) => finding.provenance === 'default-config')).toBe(true)
+  })
+
+  it('gates react-doctor out of a repo with no React, without costing lint its grade', () => {
+    const report = parse(json)
+    // The manifest gate answers before anything runs: no version was ever
+    // produced, only the pin says what would have run.
+    expect(report.tools.find((tool) => tool.tool === 'react-doctor')).toMatchObject({
+      state: 'not-available',
+      reason: 'no React dependency detected',
+      version: null,
+      pinned: '0.9.5',
+      execution: 'ephemeral-pinned',
+      provenance: 'default-config',
+      raw: [],
+    })
+    // Criterion 15: a category is assessed when *any* of its runs is ok, and
+    // oxlint's is — one unavailable complement never un-grades lint.
+    expect(report.categories['lint']).toMatchObject({ status: 'graded', grade: 'F' })
   })
 
   it('grades every category a JS/TS-only repo can reach, and pins the commit', () => {
@@ -638,6 +657,21 @@ describe('quick scan of a repo that owns two linters and a formatter', () => {
     expect(byTool.get('prettier')).toMatchObject({
       state: 'ok',
       reason: 'stood down: format graded by biome-format',
+    })
+  })
+
+  /**
+   * The proof of `complementary: true`: a non-complementary default is dropped
+   * from the plan entirely in a repo that owns ESLint and Biome, so a tool
+   * record existing at all — with the React gate's reason, not a "stood down"
+   * one — means react-doctor survived ownership suppression.
+   */
+  it('keeps react-doctor in the plan even though the repo owns two linters', () => {
+    const byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
+    expect([...byTool.keys()]).toContain('react-doctor')
+    expect(byTool.get('react-doctor')).toMatchObject({
+      state: 'not-available',
+      reason: 'no React dependency detected',
     })
   })
 

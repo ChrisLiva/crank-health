@@ -85,18 +85,18 @@ does: that category was answered for the repo, and the repo's answer is gated in
 
 ## Categories and tools
 
-Eight categories. 23 analyzers run in the quick profile, 3 more in `--deep`.
+Eight categories. 24 analyzers run in the quick profile, 3 more in `--deep`.
 
-| Category                | JS/TS                             | Python                                                    | Both                                       |
-| ----------------------- | --------------------------------- | --------------------------------------------------------- | ------------------------------------------ |
-| Lint                    | oxlint (default) · ESLint · Biome | `ruff check`                                              |                                            |
-| Format                  | Prettier (default) · Biome        | `ruff format --check`                                     |                                            |
-| Types                   | tsc                               | ty → Pyright when a virtualenv exists · mypy (repo-owned) |                                            |
-| Dead code               | fallow · knip                     | vulture (≥90% confidence graded, 60% advisory)            |                                            |
-| Complexity              | fallow health · fta               | complexipy                                                |                                            |
-| Duplication             |                                   |                                                           | jscpd                                      |
-| Security                |                                   | bandit · ruff `S` rules                                   | gitleaks · opengrep · zizmor · osv-scanner |
-| Test quality (`--deep`) | StrykerJS                         | cosmic-ray · coverage.py (context only)                   |                                            |
+| Category                | JS/TS                                            | Python                                                    | Both                                       |
+| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------ |
+| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              |                                            |
+| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     |                                            |
+| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) |                                            |
+| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            |                                            |
+| Complexity              | fallow health · fta                              | complexipy                                                |                                            |
+| Duplication             |                                                  |                                                           | jscpd                                      |
+| Security                |                                                  | bandit · ruff `S` rules                                   | gitleaks · opengrep · zizmor · osv-scanner |
+| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   |                                            |
 
 When several tools cover one category they all run and their findings merge; the tool is part of
 each finding's identity, so two tools flagging the same line are two findings.

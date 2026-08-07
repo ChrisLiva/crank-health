@@ -589,6 +589,34 @@
       ]
     },
     {
+      "tool": "react-doctor",
+      "category": "lint",
+      "scope": "js-ts",
+      "project": "packages/api",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "0.9.5",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no React dependency detected",
+      "raw": []
+    },
+    {
+      "tool": "react-doctor",
+      "category": "lint",
+      "scope": "js-ts",
+      "project": "packages/web",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "0.9.5",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no React dependency detected",
+      "raw": []
+    },
+    {
       "tool": "prettier",
       "category": "format",
       "scope": "js-ts",

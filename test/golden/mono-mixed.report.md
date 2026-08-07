@@ -159,6 +159,7 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | oxlint | ok | [default-config] | 1.77.0 | — |
+| react-doctor | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
 | ruff-lint | ok | [default-config] | 0.16.1 | — |
 
 **Findings** (2)

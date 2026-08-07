@@ -6,6 +6,7 @@ import { ftaRunner } from './fta.ts'
 import { knipRunner } from './knip.ts'
 import { oxlintRunner } from './oxlint.ts'
 import { prettierRunner } from './prettier.ts'
+import { reactDoctorRunner } from './react-doctor.ts'
 import { strykerRunner } from './stryker.ts'
 import { tscRunner } from './tsc.ts'
 
@@ -32,6 +33,7 @@ export const jsTsAdapter: LanguageAdapter = {
     oxlintRunner,
     eslintRunner,
     biomeLintRunner,
+    reactDoctorRunner, // lint (default, complementary)
     prettierRunner,
     biomeFormatRunner,
     strykerRunner,

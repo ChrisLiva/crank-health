@@ -164,6 +164,8 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 | eslint | ok | [repo-config] | 10.8.0 | — |
 | oxlint | ok | [default-config] | 1.77.0 | — |
 | oxlint | ok | [default-config] | 1.77.0 | stood down: lint graded by eslint |
+| react-doctor | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
+| react-doctor | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
 
 **Findings** (2)
 

@@ -387,6 +387,20 @@
       ]
     },
     {
+      "tool": "react-doctor",
+      "category": "lint",
+      "scope": "js-ts",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "0.9.5",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no React dependency detected",
+      "raw": []
+    },
+    {
       "tool": "ruff-lint",
       "category": "lint",
       "scope": "python",

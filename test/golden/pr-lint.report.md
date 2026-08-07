@@ -70,6 +70,8 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 | --- | --- | --- | --- | --- | --- |
 | oxlint | base | ok | [default-config] | 1.77.0 | — |
 | oxlint | head | ok | [default-config] | 1.77.0 | — |
+| react-doctor | base | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
+| react-doctor | head | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
 
 **Findings** (2)
 
