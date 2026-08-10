@@ -37,6 +37,15 @@ import type { Report, ReportDelta, ReportProject } from './json.ts'
 /** Spec §10: "capped at ~20 tasks". */
 export const MAX_TASKS = 20
 
+/**
+ * The vulnerability scanner, whose findings are themed by the lockfile they sit
+ * in rather than by the rule that reported them.
+ *
+ * Kept equal to `OSV_SCANNER_TOOL` in `src/adapters/common/osv-scanner.ts`, and
+ * a test pins the two: a renderer never imports an adapter (spec §10).
+ */
+const OSV_SCANNER_TOOL = 'osv-scanner'
+
 /** Above this many findings a task lists the files rather than the findings. */
 const INLINE_FINDING_LIMIT = 8
 
@@ -369,9 +378,14 @@ function themesOf(category: Category, findings: readonly Finding[]): Theme[] {
 function themeKey(finding: Finding): string {
   switch (finding.category) {
     // One task per scanner rule: a `shell=True` and an unpinned action are not
-    // the same piece of work even though both are security.
+    // the same piece of work even though both are security. The exception is the
+    // vulnerability scanner, whose rule is an advisory id: every CVE in one
+    // lockfile is fixed by upgrading that lockfile, so the file is the work and
+    // twenty advisories in it are one task rather than twenty.
     case 'security':
-      return `${finding.tool} ${finding.rule}`
+      return finding.tool === OSV_SCANNER_TOOL
+        ? `${finding.tool} ${finding.file}`
+        : `${finding.tool} ${finding.rule}`
     case 'dead-code':
       return deadCodeKind(finding.rule)
     // Per file: strengthening the tests for one module is one sitting, and the
@@ -391,10 +405,17 @@ function themeKey(finding: Finding): string {
 
 function themeTitle(category: Category, key: string, findings: readonly Finding[]): string {
   const count = findings.length
-  const rule = findings[0]?.rule ?? key
+  const first = findings[0]
+  const rule = first?.rule ?? key
   switch (category) {
+    // Branched on the theme's tool rather than on its key, whose shape is the
+    // thing that differs: a vulnerability theme's rules are the advisory ids of
+    // one lockfile, and titling it with one of them would name a single CVE as
+    // if it were the work.
     case 'security':
-      return `Fix ${plural(count, `\`${rule}\` finding`)} reported by ${findings[0]?.tool ?? key}`
+      return first?.tool === OSV_SCANNER_TOOL
+        ? `Upgrade ${plural(count, 'vulnerable dependency', 'vulnerable dependencies')} in \`${first.file}\``
+        : `Fix ${plural(count, `\`${rule}\` finding`)} reported by ${first?.tool ?? key}`
     case 'types':
       return `Fix ${plural(count, `\`${rule}\` type error`)}`
     case 'dead-code':

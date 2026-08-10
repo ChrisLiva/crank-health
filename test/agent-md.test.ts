@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { OSV_SCANNER_TOOL } from '../src/adapters/common/osv-scanner.ts'
 import { parseCliArgs } from '../src/args.ts'
 import type { Category, CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES, categoryRank } from '../src/core/types.ts'
@@ -213,22 +214,112 @@ describe('themed grouping', () => {
       'Format 3 files',
     ])
   })
+})
 
-  it('splits security by the tool and rule that reported it', () => {
-    const report = makeReport({
-      categories: { ...allGraded(), security: { status: 'graded', grade: 'D' } },
-      findings: [
-        makeFinding({ id: '1', category: 'security', tool: 'bandit', rule: 'B602' }),
-        makeFinding({ id: '2', category: 'security', tool: 'bandit', rule: 'B602' }),
-        makeFinding({ id: '3', category: 'security', tool: 'zizmor', rule: 'artipacked' }),
-      ],
-    })
-    expect(buildAgentTasks(report).map((task) => task.title)).toEqual([
+/**
+ * Security groups by the rule that reported it — a `shell=True` and an unpinned
+ * action are not the same piece of work — except for the vulnerability scanner,
+ * where the rule is an advisory id and the work is the lockfile: twenty CVEs in
+ * one `pnpm-lock.yaml` are one upgrade sitting, and twenty tasks would fill the
+ * cap with a single file.
+ */
+describe('security themes', () => {
+  /**
+   * The renderer names the tool with a const of its own: `src/render/` imports
+   * nothing from `src/adapters/`, and this is what keeps the two spellings equal.
+   */
+  it('spells the vulnerability scanner the way the adapter does', () => {
+    expect(OSV_SCANNER_TOOL).toBe('osv-scanner')
+  })
+
+  it('makes one task of a lockfile’s CVEs and leaves the other tools split by rule', () => {
+    const tasks = securityTasks([
+      ...Array.from({ length: 20 }, (_, index) => cve(index)),
+      makeFinding({ id: '1', category: 'security', tool: 'bandit', rule: 'B602' }),
+      makeFinding({ id: '2', category: 'security', tool: 'bandit', rule: 'B602' }),
+      makeFinding({ id: '3', category: 'security', tool: 'zizmor', rule: 'artipacked' }),
+    ])
+    expect(tasks).toHaveLength(3)
+    expect(tasks.map((task) => task.findings.length)).toEqual([20, 2, 1])
+    // The two non-osv titles are the ones this repo has always emitted.
+    expect(tasks.map((task) => task.title)).toEqual([
+      'Upgrade 20 vulnerable dependencies in `pnpm-lock.yaml`',
       'Fix 2 `B602` findings reported by bandit',
       'Fix 1 `artipacked` finding reported by zizmor',
     ])
   })
+
+  it('titles the task by the lockfile to upgrade, not by one arbitrary advisory id', () => {
+    expect(securityTasks(Array.from({ length: 20 }, (_, index) => cve(index)))[0]?.title).toBe(
+      'Upgrade 20 vulnerable dependencies in `pnpm-lock.yaml`',
+    )
+    expect(securityTasks([cve(0, 'package-lock.json')])[0]?.title).toBe(
+      'Upgrade 1 vulnerable dependency in `package-lock.json`',
+    )
+  })
+
+  it('counts lockfiles, not advisories', () => {
+    expect(securityTasks(Array.from({ length: 20 }, (_, index) => cve(index)))).toHaveLength(1)
+    expect(securityTasks([cve(0), cve(1, 'packages/api/package-lock.json')])).toHaveLength(2)
+  })
+
+  /** The same advisory in two lockfiles is two upgrades, in two files. */
+  it('keeps one CVE in two lockfiles as two tasks', () => {
+    const other = 'packages/api/package-lock.json'
+    const tasks = securityTasks([
+      { ...cve(7), id: 'here' },
+      { ...cve(7, other), id: 'there', file: other },
+    ])
+    expect(tasks.map((task) => task.title)).toEqual([
+      'Upgrade 1 vulnerable dependency in `packages/api/package-lock.json`',
+      'Upgrade 1 vulnerable dependency in `pnpm-lock.yaml`',
+    ])
+    expect(tasks.map((task) => task.findings.length)).toEqual([1, 1])
+  })
+
+  it('has nothing to say about a report with no findings', () => {
+    expect(securityTasks([])).toEqual([])
+  })
+
+  /**
+   * Only security reads the tool: every other category keys on what makes two of
+   * its findings the same work, and one of them is the rule.
+   */
+  it('leaves every other category’s grouping alone', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+      findings: [
+        makeFinding({ id: 'l1', tool: OSV_SCANNER_TOOL, file: 'src/a.ts' }),
+        makeFinding({ id: 'l2', tool: OSV_SCANNER_TOOL, file: 'src/b.ts' }),
+      ],
+    })
+    expect(buildAgentTasks(report).map((task) => task.title)).toEqual([
+      'Fix 2 `no-unused-vars` findings',
+    ])
+  })
 })
+
+const LOCKFILE = 'pnpm-lock.yaml'
+
+/** A vulnerability in `file`, with its own advisory id. */
+function cve(index: number, file: string = LOCKFILE): Finding {
+  return makeFinding({
+    id: `osv-${file}-${index}`,
+    category: 'security',
+    tool: OSV_SCANNER_TOOL,
+    rule: `GHSA-0000-0000-${String(index).padStart(4, '0')}`,
+    file,
+  })
+}
+
+/** The security tasks of a report whose security category has work in it. */
+function securityTasks(findings: readonly Finding[]): AgentTask[] {
+  const report = makeReport({
+    categories: { ...allGraded(), security: { status: 'graded', grade: 'D' } },
+    findings,
+  })
+  return buildAgentTasks(report).filter((task) => task.category === 'security')
+}
 
 describe('the task cap', () => {
   it('stops at twenty tasks and says how many were left out', () => {
