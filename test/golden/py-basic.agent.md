@@ -32,11 +32,7 @@ Grade impact: dead code · F → A
 
 Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
 
-Verify: `npx crank-health --only dead-code --fail-under A`
-
 ### T3 — Remove 1 unused function
-
-Grade impact: dead code · F → A
 
 - `dead.py:8` `vulture/unused-function` — Unused function `never_called` (60% confidence) [advisory]
 
@@ -62,11 +58,7 @@ Grade impact: lint · F → A
 
 Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
-Verify: `npx crank-health --only lint --fail-under A`
-
 ### T6 — Fix 1 `F401` finding
-
-Grade impact: lint · F → A
 
 - `dead.py:1` `F401` — `os` imported but unused
 

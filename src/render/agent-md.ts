@@ -130,7 +130,7 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
     '## Tasks',
     ...(tasks.length === 0
       ? [delta === undefined ? NOTHING_TO_DO : NOTHING_NEW]
-      : tasks.map((task) => renderTask(task, report.projects.length > 1))),
+      : runsOf(tasks).map((run) => renderRun(run, report.projects.length > 1))),
     ...resolvedSection(delta),
     footer(report, all.length, tasks.length),
   ]
@@ -589,30 +589,88 @@ const NOTHING_TO_DO =
 const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
 
 /**
- * One task. In a monorepo the task names the project it is in: two packages can
- * break the same rule under two configs, and an agent that is not told which
- * package it is working in has to guess from the file paths.
+ * Consecutive tasks that would state the same `Grade impact:` and the same
+ * `Verify:` line, grouped so those two lines are stated once (spec §10).
+ *
+ * Six lint tasks in one package repeat both sentences six times, and an agent
+ * reading the same command under every heading reads it as decoration rather
+ * than as the check it has to run. Both lines are project-dependent, so the key
+ * is the pair itself — a category alone would share a command two packages
+ * cannot both pass — and the run is over **consecutive** tasks only, so the
+ * grouping can never reorder what {@link budgetTasks} emitted.
+ */
+function runsOf(tasks: readonly AgentTask[]): AgentTask[][] {
+  const runs: AgentTask[][] = []
+  let previous: string | undefined
+  for (const task of tasks) {
+    const key = runKey(task)
+    const current = runs.at(-1)
+    if (current === undefined || key !== previous) runs.push([task])
+    else current.push(task)
+    previous = key
+  }
+  return runs
+}
+
+/** What two tasks have to agree on to say the boilerplate once between them. */
+function runKey(task: AgentTask): string {
+  return JSON.stringify([task.category, task.gradeImpact, task.verify])
+}
+
+/**
+ * One run: the first task's grade impact under its heading, then every task's
+ * own heading and body, then the one Verify line the whole run is checked with.
+ *
+ * The tasks are joined with the same separator {@link renderAgentMarkdown} puts
+ * between blocks, so a run of one is byte-identical to a task rendered alone.
+ */
+function renderRun(tasks: readonly AgentTask[], named: boolean): string {
+  const [first, ...rest] = tasks
+  if (first === undefined) return ''
+  return [
+    [
+      ...taskHeading(first, named),
+      `Grade impact: ${first.gradeImpact}`,
+      '',
+      ...taskBody(first),
+    ].join('\n'),
+    ...rest.map((task) => renderTask(task, named)),
+    `Verify: \`npx crank-health ${first.verify.join(' ')}\``,
+  ].join('\n\n')
+}
+
+/** One task, with the boilerplate its run states on its behalf left out. */
+function renderTask(task: AgentTask, named: boolean): string {
+  return [...taskHeading(task, named), ...taskBody(task)].join('\n')
+}
+
+/**
+ * A task's heading, and the project it is in. In a monorepo the task names that
+ * project: two packages can break the same rule under two configs, and an agent
+ * that is not told which package it is working in has to guess from the file
+ * paths.
  *
  * A single-project repo has one answer and states it in the header already, so
  * `named` is false there and the task reads exactly as it always has. So does a
  * task whose findings belong to no project: the files are in the list under it,
  * and a package name it does not live in would be worse than none.
  */
-function renderTask(task: AgentTask, named: boolean): string {
+function taskHeading(task: AgentTask, named: boolean): string[] {
   const project = named ? task.project : undefined
-  const lines = [
+  return [
     `### ${task.id} — ${task.title}${task.directlyActionable ? ` ${TOUCHED_TAG}` : ''}`,
     '',
     ...(project === undefined ? [] : [`Project: ${projectLabel(project)}`, '']),
-    `Grade impact: ${task.gradeImpact}`,
-    '',
-    ...findingBlock(task.findings),
   ]
+}
+
+/** A task's own work: the findings it covers, and the raw output behind them. */
+function taskBody(task: AgentTask): string[] {
+  const lines = [...findingBlock(task.findings)]
   if (task.evidence.length > 0) {
     lines.push('', `Evidence: ${task.evidence.map((path) => `[${path}](${path})`).join(' · ')}`)
   }
-  lines.push('', `Verify: \`npx crank-health ${task.verify.join(' ')}\``)
-  return lines.join('\n')
+  return lines
 }
 
 /**

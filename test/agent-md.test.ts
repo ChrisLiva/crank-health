@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OSV_SCANNER_TOOL } from '../src/adapters/common/osv-scanner.ts'
 import { parseCliArgs } from '../src/args.ts'
-import type { Category, CategoryState, Finding } from '../src/core/types.ts'
+import type { Category, CategoryState, Finding, Grade } from '../src/core/types.ts'
 import { CATEGORIES, categoryRank } from '../src/core/types.ts'
 import type { RunRecord } from '../src/core/orchestrator.ts'
 import type { AgentTask } from '../src/render/agent-md.ts'
@@ -625,6 +625,176 @@ describe('each task', () => {
   })
 })
 
+/**
+ * `Grade impact:` and `Verify:` say the same two things for every task in one
+ * category of one project — six copies of them is five copies of noise between
+ * the agent and the work. They are stated once per run of consecutive tasks
+ * that agree on all three of category, grade impact and verify command, and
+ * consecutive only, so a run can never reorder what the budget emitted.
+ */
+describe('boilerplate per run of identical tasks', () => {
+  it('states the grade impact under the first task and the verify after the last', () => {
+    const markdown = renderAgentMarkdown(manyLintRules(3))
+    expect(headings(markdown)).toHaveLength(3)
+    expect(tasksSection(markdown)).toBe(
+      [
+        '### T1 — Fix 1 `rule-00` finding',
+        '',
+        'Grade impact: lint · F → A',
+        '',
+        '- `src/a.ts:1` `rule-00` — unused variable',
+        '',
+        '### T2 — Fix 1 `rule-01` finding',
+        '',
+        '- `src/a.ts:1` `rule-01` — unused variable',
+        '',
+        '### T3 — Fix 1 `rule-02` finding',
+        '',
+        '- `src/a.ts:1` `rule-02` — unused variable',
+        '',
+        'Verify: `npx crank-health --only lint --fail-under A`',
+      ].join('\n'),
+    )
+  })
+
+  /** The brief's monorepo shape: neither line survives being shared. */
+  it('shares neither line between two packages', () => {
+    const markdown = renderAgentMarkdown(twoLintPackages('C', 'F'))
+    expect(headings(markdown)).toHaveLength(2)
+    expect(boilerplate(markdown, 'Grade impact:')).toEqual([
+      'Grade impact: lint · C → A',
+      'Grade impact: lint · F → A',
+    ])
+    expect(boilerplate(markdown, 'Verify:')).toEqual([
+      'Verify: `npx crank-health --only lint --project packages/api --fail-under A`',
+      'Verify: `npx crank-health --only lint --project packages/web --fail-under A`',
+    ])
+  })
+
+  /**
+   * Each field of the run key on its own. The verify command differs while the
+   * grade impact reads the same in both packages: one field, and the run breaks.
+   */
+  it('breaks a run on the verify command alone', () => {
+    const markdown = renderAgentMarkdown(twoLintPackages('F', 'F'))
+    expect(boilerplate(markdown, 'Grade impact:')).toEqual([
+      'Grade impact: lint · F → A',
+      'Grade impact: lint · F → A',
+    ])
+    expect(boilerplate(markdown, 'Verify:')).toEqual([
+      'Verify: `npx crank-health --only lint --project packages/api --fail-under A`',
+      'Verify: `npx crank-health --only lint --project packages/web --fail-under A`',
+    ])
+  })
+
+  /**
+   * The mirror image: a repo-spanning scanner's check cannot be scoped, so both
+   * packages carry the identical Verify line and only the grades differ.
+   */
+  it('breaks a run on the grade impact alone', () => {
+    const markdown = renderAgentMarkdown(twoSecurityPackages())
+    expect(boilerplate(markdown, 'Grade impact:')).toEqual([
+      'Grade impact: security · F → A',
+      'Grade impact: security · D → A',
+    ])
+    expect(boilerplate(markdown, 'Verify:')).toEqual([
+      'Verify: `npx crank-health --only security --fail-under A`',
+      'Verify: `npx crank-health --only security --fail-under A`',
+    ])
+  })
+
+  /**
+   * The third field is redundant by construction — a category names itself in
+   * both of the other two — so two categories can only ever differ in all
+   * three, and neither line is shared across the boundary.
+   */
+  it('breaks a run on the category', () => {
+    const report = makeReport({
+      categories: {
+        ...allGraded(),
+        'dead-code': { status: 'graded', grade: 'F' },
+        lint: { status: 'graded', grade: 'F' },
+      },
+      findings: [
+        makeFinding({ id: 'd', category: 'dead-code', tool: 'knip', rule: 'knip/unused-exports' }),
+        makeFinding({ id: 'l' }),
+      ],
+    })
+    const markdown = renderAgentMarkdown(report)
+    expect(headings(markdown)).toHaveLength(2)
+    expect(boilerplate(markdown, 'Grade impact:')).toEqual([
+      'Grade impact: dead code · F → A',
+      'Grade impact: lint · F → A',
+    ])
+    expect(boilerplate(markdown, 'Verify:')).toEqual([
+      'Verify: `npx crank-health --only dead-code --fail-under A`',
+      'Verify: `npx crank-health --only lint --fail-under A`',
+    ])
+  })
+
+  /** A run of one is the shape every single-task report has always rendered. */
+  it('renders a run of one exactly as a lone task', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+      findings: [makeFinding({ id: 'a' })],
+    })
+    expect(tasksSection(renderAgentMarkdown(report))).toBe(
+      [
+        '### T1 — Fix 1 `no-unused-vars` finding',
+        '',
+        'Grade impact: lint · F → A',
+        '',
+        '- `src/a.ts:1` `no-unused-vars` — unused variable',
+        '',
+        'Verify: `npx crank-health --only lint --fail-under A`',
+      ].join('\n'),
+    )
+  })
+
+  /** No tasks is no runs: the section is the sentence and nothing else. */
+  it('emits neither line for a report with no tasks', () => {
+    const markdown = renderAgentMarkdown(makeReport({ categories: allGraded() }))
+    expect(headings(markdown)).toEqual([])
+    expect(boilerplate(markdown, 'Grade impact:')).toEqual([])
+    expect(boilerplate(markdown, 'Verify:')).toEqual([])
+  })
+})
+
+/** Two packages breaking one lint rule, each graded in its own right. */
+function twoLintPackages(api: Grade, web: Grade): Report {
+  return makeReport({
+    categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+    projects: [
+      makeProjectScan({ project: projectAt('packages/api'), categories: allGraded(api) }),
+      makeProjectScan({ project: projectAt('packages/web'), categories: allGraded(web) }),
+    ],
+    findings: [
+      makeFinding({ id: 'a', file: 'packages/api/api/main.py', project: 'packages/api' }),
+      makeFinding({ id: 'w', file: 'packages/web/src/a.ts', project: 'packages/web' }),
+    ],
+  })
+}
+
+/**
+ * Two packages holding the same secret, graded differently. The scan spans the
+ * repo, so neither task's check can be scoped and both Verify lines are equal.
+ */
+function twoSecurityPackages(): Report {
+  const secret = { category: 'security', tool: 'gitleaks', rule: 'generic-api-key' } as const
+  return makeReport({
+    categories: { ...allGraded(), security: { status: 'graded', grade: 'F' } },
+    projects: [
+      makeProjectScan({ project: projectAt('packages/api'), categories: allGraded('F') }),
+      makeProjectScan({ project: projectAt('packages/web'), categories: allGraded('D') }),
+    ],
+    findings: [
+      makeFinding({ id: 'a', ...secret, file: 'packages/api/.env', project: 'packages/api' }),
+      makeFinding({ id: 'w', ...secret, file: 'packages/web/.env', project: 'packages/web' }),
+    ],
+    runs: [{ record: spanningRecord('gitleaks', 'security'), raw: [] }],
+  })
+}
+
 /** A dead-code report with one unused-export finding per entry in `files`. */
 function unusedExports(files: readonly string[]): Report {
   return makeReport({
@@ -661,7 +831,17 @@ function lockfileCves(count: number): Report {
 
 /** Task headings, which is how many tasks the rendered file actually has. */
 function headings(markdown: string): string[] {
-  return markdown.split('\n').filter((line) => line.startsWith('### T'))
+  return boilerplate(markdown, '### T')
+}
+
+/** Every line of the file that opens with `prefix`, in the order it reads. */
+function boilerplate(markdown: string, prefix: string): string[] {
+  return markdown.split('\n').filter((line) => line.startsWith(prefix))
+}
+
+/** The `## Tasks` section alone — the header and footer are not this task's. */
+function tasksSection(markdown: string): string {
+  return /## Tasks\n\n(?<tasks>[\s\S]*)\n\n---\n/.exec(markdown)?.groups?.['tasks'] ?? markdown
 }
 
 /** The id each rendered task carries, in the order the file lists them. */

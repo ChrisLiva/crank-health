@@ -22,51 +22,31 @@ Grade impact: security · D → A
 
 Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 
-Verify: `npx crank-health --only security --fail-under A`
-
 ### T2 — Fix 1 `dangerous-triggers` finding reported by zizmor
-
-Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:2` `dangerous-triggers` — Use of fundamentally insecure workflow trigger — pull_request_target is almost always used insecurely (high severity, medium confidence)
 
 Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
-Verify: `npx crank-health --only security --fail-under A`
-
 ### T3 — Fix 1 `artipacked` finding reported by zizmor
-
-Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:8` `artipacked` — Credential persistence through GitHub Actions artifacts — does not set persist-credentials: false (medium severity, low confidence)
 
 Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
-Verify: `npx crank-health --only security --fail-under A`
-
 ### T4 — Fix 1 `excessive-permissions` finding reported by zizmor
-
-Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:5` `excessive-permissions` — Overly broad permissions — default permissions used due to no permissions: block (medium severity, medium confidence)
 
 Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
-Verify: `npx crank-health --only security --fail-under A`
-
 ### T5 — Fix 1 `unpinned-uses` finding reported by zizmor
-
-Grade impact: security · D → A
 
 - `.github/workflows/ci.yml:8` `unpinned-uses` — Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence)
 
 Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
-Verify: `npx crank-health --only security --fail-under A`
-
 ### T6 — Fix 1 `B404` finding reported by bandit
-
-Grade impact: security · D → A
 
 - `src/config.py:3` `B404` — Consider possible security implications associated with the subprocess module. (low severity, high confidence) [advisory]
 
