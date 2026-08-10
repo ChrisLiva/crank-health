@@ -38,7 +38,7 @@ describe('agent.md goldens', () => {
 
   it('carries the header, the ground rules and the pointer to report.json', async () => {
     const markdown = renderAgentMarkdown(await readGoldenReport('sec-basic'))
-    expect(markdown).toContain('crank-health 0.3.0 · quick profile')
+    expect(markdown).toContain('crank-health 0.4.0 · quick profile')
     expect(markdown).toContain('Grades: security D · types A · dead code A')
     expect(markdown).toContain('## Ground rules')
     expect(markdown).toContain('[advisory]')

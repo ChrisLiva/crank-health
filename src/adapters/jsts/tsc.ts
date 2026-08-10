@@ -27,10 +27,11 @@ import { detectNodeTool } from './node-package.ts'
  *    they wrote the strictness settings they are failing.
  * 2. No `tsconfig.json`, but the repo has TypeScript sources → checking them is
  *    still meaningful, so the pinned TypeScript runs against a minimal
- *    {@link DEFAULT_TSCONFIG} materialized in the scratch dir. Unresolved-import
+ *    {@link DEFAULT_TSCONFIG} materialized in the scratch dir. Missing-types
  *    diagnostics stay advisory there ({@link DEFAULT_ADVISORY_CODES}): a repo
  *    with no `tsconfig.json` usually has no installed type declarations either,
- *    and "cannot find module 'react'" says nothing about the code's health.
+ *    and "cannot find module 'react'" — or "install @types/node" for a file
+ *    that imports `node:fs` — says nothing about the code's health.
  * 3. No `tsconfig.json` and no TypeScript sources → the category is not
  *    assessed. Type-checking plain JavaScript against inferred types produces
  *    noise, not signal, and nothing in the repo asked for it.
@@ -73,13 +74,18 @@ export const DEFAULT_TSCONFIG = {
 
 /**
  * Diagnostics that are about the repo's *environment* rather than its code:
- * missing modules and missing declaration files. On the repo's own config these
- * are graded like anything else; on ours they are advisory, because we chose a
- * module-resolution setup the repo never did.
+ * missing modules, missing declaration files, and globals with no ambient
+ * types. On the repo's own config these are graded like anything else; on ours
+ * they are advisory, because we chose the module resolution and the `lib`/
+ * `types` set the repo never did — every one of these says "install a
+ * `@types/*` package", which is a fact about `node_modules`, not about the code.
  */
 export const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
   'TS2307', // Cannot find module '…' or its corresponding type declarations.
   'TS2503', // Cannot find namespace '…'.
+  'TS2580', // Cannot find name 'require'/'module'/'__dirname'. Try `npm i --save-dev @types/node`.
+  'TS2591', // Cannot find name '…'. Do you need to install type definitions for node?
+  'TS2593', // Cannot find name 'describe'/'it'. Do you need to install @types/jest or @types/mocha?
   'TS2688', // Cannot find type definition file for '…'.
   'TS2792', // Cannot find module … Did you mean to set 'moduleResolution' to 'node'?
   'TS7016', // Could not find a declaration file for module '…'.

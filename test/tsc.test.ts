@@ -57,6 +57,7 @@ describe('toPendingFindings', () => {
   const diagnostics = [
     { file: 'src/a.ts', line: 2, column: 9, level: 'error', code: 'TS2322', message: 'x' },
     { file: 'src/a.ts', line: 1, column: 1, level: 'error', code: 'TS2307', message: 'no module' },
+    { file: 'src/a.ts', line: 3, column: 1, level: 'error', code: 'TS2591', message: 'no @types' },
     { file: 'src/a.ts', line: 4, column: 1, level: 'warning', code: 'TS0001', message: 'w' },
   ]
 
@@ -78,9 +79,11 @@ describe('toPendingFindings', () => {
   })
 
   /**
-   * On our bundled tsconfig, "cannot find module" is a fact about the repo's
-   * uninstalled dependencies, not about its code — so it is reported and not
-   * graded.
+   * On our bundled tsconfig, "cannot find module" — and equally "install
+   * @types/node" for a file importing `node:fs` — is a fact about the repo's
+   * uninstalled type declarations, not about its code, so it is reported and
+   * not graded. A hook script or a build helper living outside every package
+   * is the common case, and it must not sink the repo's types grade.
    */
   it('keeps environment-only diagnostics advisory under our own config', () => {
     const graded = new Map(
@@ -91,6 +94,7 @@ describe('toPendingFindings', () => {
     )
     expect(graded.get('TS2322')).toBe(true)
     expect(graded.get('TS2307')).toBe(false)
+    expect(graded.get('TS2591')).toBe(false)
     expect(
       toPendingFindings(diagnostics, false, '/repo').every(
         (finding) => finding.provenance === 'default-config',
@@ -103,7 +107,7 @@ describe('toPendingFindings', () => {
       toPendingFindings(diagnostics, true, '/repo'),
     )
     expect(toPendingFindings(diagnostics, true, '/repo').map((f) => f.range.startLine)).toEqual([
-      1, 2, 4,
+      1, 2, 3, 4,
     ])
   })
 })
