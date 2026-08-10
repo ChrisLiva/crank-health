@@ -321,12 +321,108 @@ function securityTasks(findings: readonly Finding[]): AgentTask[] {
   return buildAgentTasks(report).filter((task) => task.category === 'security')
 }
 
-describe('the task cap', () => {
-  it('stops at twenty tasks and says how many were left out', () => {
-    const report = manyLintRules(40)
-    expect(buildAgentTasks(report)).toHaveLength(40)
+/**
+ * The cap is twenty tasks, and *which* twenty is not the emission order's to
+ * decide. Spec §10's category order is fixed, so a chatty category near the top
+ * would otherwise spend every slot and a category graded F further down would
+ * get a plan with nothing about it in it. The budget is a round robin instead:
+ * every category that produced work contributes one task before any contributes
+ * a second, worst-graded category first.
+ */
+describe('the task budget', () => {
+  it('stops at twenty tasks, spending them worst-graded category first', () => {
+    const report = skewedGrades()
+    expect(buildAgentTasks(report)).toHaveLength(30)
 
+    const kept = kinds(renderAgentMarkdown(report))
+    expect(kept).toHaveLength(MAX_TASKS)
+    // All of the F category and all of the D one; the C category takes the rest.
+    expect(kept.filter((kind) => kind === 'types')).toHaveLength(3)
+    expect(kept.filter((kind) => kind === 'security')).toHaveLength(2)
+    expect(kept.filter((kind) => kind === 'lint')).toHaveLength(15)
+  })
+
+  /**
+   * Round one, one slot at a time: types (F) before security (D) before lint
+   * (C). What comes back is still in emission order — security is rendered
+   * above types — so the round order is only visible in what survives a cut.
+   */
+  it('gives each category a task before any category gets a second', () => {
+    const report = skewedGrades()
+    expect(kinds(renderAgentMarkdown(report, { maxTasks: 1 }))).toEqual(['types'])
+    expect(kinds(renderAgentMarkdown(report, { maxTasks: 2 }))).toEqual(['security', 'types'])
+    expect(kinds(renderAgentMarkdown(report, { maxTasks: 3 }))).toEqual([
+      'security',
+      'types',
+      'lint',
+    ])
+  })
+
+  /**
+   * A rollup state is not always a letter: a package graded F in a category the
+   * rollup could not assess at all still has work in it, and `not-assessed` and
+   * `error` have no grade to rank them by. They go after every graded category,
+   * in the fixed category order.
+   */
+  it('rounds the categories with no rollup grade after the graded ones', () => {
+    const report = ungradedRollup()
+    expect(kinds(renderAgentMarkdown(report, { maxTasks: 1 }))).toEqual(['lint'])
+    // security is `error`, types is `not-assessed`: the tie is categoryRank's.
+    expect(kinds(renderAgentMarkdown(report, { maxTasks: 2 }))).toEqual(['security', 'lint'])
+    expect(kinds(renderAgentMarkdown(report, { maxTasks: 3 }))).toEqual([
+      'security',
+      'types',
+      'lint',
+    ])
+  })
+
+  /**
+   * The failure this is all for: a category graded F that produced a theme
+   * cannot come out of the budget with no task, however much work sits above it.
+   */
+  it('keeps a task for a failing category the chattiest one would have buried', () => {
+    expect(kinds(renderAgentMarkdown(buriedFailure()))).toContain('lint')
+  })
+
+  /** Eight categories, twenty slots: the first round always completes. */
+  it('gives every failing category a task when every category is failing', () => {
+    const markdown = renderAgentMarkdown(everyCategoryFailing(), { maxTasks: CATEGORIES.length })
+    expect(headings(markdown)).toHaveLength(CATEGORIES.length)
+    // Each category's first theme is the one holding its `-first.ts` finding.
+    for (const category of CATEGORIES) expect(markdown).toContain(`src/${category}-first.ts`)
+  })
+
+  /** The budget decides which tasks survive, never the order they are read in. */
+  it('leaves the tasks it keeps in emission order', () => {
+    const ranks = kinds(renderAgentMarkdown(skewedGrades())).map((kind) => categoryRank(kind))
+    expect(ranks).toEqual(ranks.toSorted((a, b) => a - b))
+  })
+
+  /**
+   * A cut leaves no hole. The survivors here are not a prefix — the last task
+   * emitted is the first one chosen — so their pre-budget ordinals had a gap
+   * in them, and those ordinals are only observable when nothing was cut.
+   */
+  it('renumbers the survivors T1…Tn', () => {
+    const report = buriedFailure()
+    expect(buildAgentTasks(report).at(-1)?.id).toBe('T41')
+    expect(taskIds(renderAgentMarkdown(report))).toEqual(
+      Array.from({ length: MAX_TASKS }, (_, index) => `T${index + 1}`),
+    )
+  })
+
+  it('changes nothing about a report that never reaches the cap', () => {
+    const report = manyLintRules(5)
+    const tasks = buildAgentTasks(report)
     const markdown = renderAgentMarkdown(report)
+
+    expect(markdown).toBe(renderAgentMarkdown(report, { maxTasks: MAX_TASKS }))
+    expect(headings(markdown)).toEqual(tasks.map((task) => `### ${task.id} — ${task.title}`))
+    expect(markdown).not.toContain('more tasks were cut')
+  })
+
+  it('says how many tasks were cut', () => {
+    const markdown = renderAgentMarkdown(manyLintRules(40))
     expect(headings(markdown)).toHaveLength(MAX_TASKS)
     expect(markdown).toContain('20 more tasks were cut to keep this list actionable.')
     expect(markdown).toContain('[report.json](report.json)')
@@ -336,6 +432,13 @@ describe('the task cap', () => {
     const markdown = renderAgentMarkdown(makeReport({ categories: allGraded() }))
     expect(headings(markdown)).toEqual([])
     expect(markdown).toContain('No tasks: every assessed category is graded A.')
+  })
+
+  /** A budget of nothing is a budget: it spends no slot and cuts every task. */
+  it('keeps no task at all when there is no room for one', () => {
+    const markdown = renderAgentMarkdown(manyLintRules(40), { maxTasks: 0 })
+    expect(headings(markdown)).toEqual([])
+    expect(markdown).toContain('40 more tasks were cut to keep this list actionable.')
   })
 })
 
@@ -471,6 +574,23 @@ function headings(markdown: string): string[] {
   return markdown.split('\n').filter((line) => line.startsWith('### T'))
 }
 
+/** The id each rendered task carries, in the order the file lists them. */
+function taskIds(markdown: string): string[] {
+  return headings(markdown).map((heading) => /^### (T\d+) /.exec(heading)?.[1] ?? heading)
+}
+
+/**
+ * The category each rendered task belongs to, read off the title the category
+ * gives it — which is all a reader of the file has to go on.
+ */
+function kinds(markdown: string): Category[] {
+  return headings(markdown).map((heading) => {
+    if (heading.includes('type error')) return 'types'
+    if (heading.includes('reported by bandit')) return 'security'
+    return 'lint'
+  })
+}
+
 function impactOf(tasks: readonly AgentTask[], category: Category): string | undefined {
   return tasks.find((task) => task.category === category)?.gradeImpact
 }
@@ -519,6 +639,83 @@ function manyLintRules(count: number): Report {
     findings: Array.from({ length: count }, (_, index) =>
       makeFinding({ id: `r${index}`, rule: `rule-${String(index).padStart(2, '0')}` }),
     ),
+  })
+}
+
+/**
+ * The shape the budget exists for: the category with the most work is not the
+ * category graded worst. Lint is `C` with twenty-five rules, types `F` with
+ * three and security `D` with two — thirty themes for twenty slots.
+ */
+function skewedGrades(): Report {
+  return makeReport({
+    categories: {
+      ...allGraded(),
+      security: { status: 'graded', grade: 'D' },
+      types: { status: 'graded', grade: 'F' },
+      lint: { status: 'graded', grade: 'C' },
+    },
+    findings: [
+      ...manyLintRules(25).findings,
+      ...Array.from({ length: 3 }, (_, index) =>
+        makeFinding({ id: `t${index}`, category: 'types', tool: 'tsc', rule: `TS100${index}` }),
+      ),
+      ...Array.from({ length: 2 }, (_, index) =>
+        makeFinding({ id: `s${index}`, category: 'security', tool: 'bandit', rule: `B60${index}` }),
+      ),
+    ],
+  })
+}
+
+/**
+ * Forty chatty security themes graded `B`, emitted ahead of the one lint theme
+ * this repo is actually failing — the shape a plain truncation loses the F to,
+ * and the one where the survivors are not the first twenty tasks emitted.
+ */
+function buriedFailure(): Report {
+  return makeReport({
+    categories: {
+      ...allGraded(),
+      security: { status: 'graded', grade: 'B' },
+      lint: { status: 'graded', grade: 'F' },
+    },
+    findings: [
+      ...Array.from({ length: 40 }, (_, index) =>
+        makeFinding({
+          id: `s${index}`,
+          category: 'security',
+          tool: 'bandit',
+          rule: `B${String(index).padStart(3, '0')}`,
+        }),
+      ),
+      makeFinding({ id: 'l', rule: 'no-shadow' }),
+    ],
+  })
+}
+
+/**
+ * A package failing three categories the rollup grades in three different ways:
+ * one letter, one `error`, one `not-assessed`. Every one of them produces a
+ * task, so the round order has to place all three states.
+ */
+function ungradedRollup(): Report {
+  const inApi = { file: 'packages/api/api/main.py', project: 'packages/api' }
+  return makeReport({
+    categories: {
+      ...allGraded(),
+      security: { status: 'error', reason: 'bandit crashed' },
+      types: { status: 'not-assessed', reason: 'no type checker ran' },
+      lint: { status: 'graded', grade: 'F' },
+    },
+    projects: [
+      makeProjectScan({ project: projectAt('packages/api'), categories: allGraded('F') }),
+      makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+    ],
+    findings: [
+      makeFinding({ id: 'l', ...inApi }),
+      makeFinding({ id: 's', category: 'security', tool: 'bandit', rule: 'B602', ...inApi }),
+      makeFinding({ id: 't', category: 'types', tool: 'tsc', rule: 'TS1000', ...inApi }),
+    ],
   })
 }
 

@@ -1,5 +1,5 @@
-import { SEVERITY_WEIGHTS } from '../core/grade.ts'
-import type { Category, Finding, Grade } from '../core/types.ts'
+import { SEVERITY_WEIGHTS, compareGrades } from '../core/grade.ts'
+import type { Category, CategoryState, Finding, Grade } from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
 import {
   ADVISORY_TAG,
@@ -26,7 +26,10 @@ import type { Report, ReportDelta, ReportProject } from './json.ts'
  *   list — it is fixed by the spec — so "worst first" applies inside a category:
  *   the theme with the most severe findings, then the largest, comes first.
  * - **Capped.** Twenty tasks, then a pointer to `report.json` for the rest. An
- *   agent that reads a hundred tasks does none of them.
+ *   agent that reads a hundred tasks does none of them. The twenty are spent
+ *   worst-graded category first, a round at a time ({@link budgetTasks}), so a
+ *   chatty category cannot leave the category the repo is failing at with no
+ *   task under it.
  * - **Verifiable.** Every task carries a real crank-health invocation, which
  *   the tests parse with crank-health's own argument parser.
  *
@@ -115,7 +118,7 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
   const limit = options.maxTasks ?? MAX_TASKS
   const delta = options.delta ?? report.delta
   const all = buildAgentTasks(report, delta)
-  const tasks = all.slice(0, limit)
+  const tasks = budgetTasks(all, report, limit)
 
   const blocks: string[] = [
     '# Fix plan',
@@ -181,6 +184,56 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
         compare(a.project ?? '', b.project ?? ''),
     )
     .map((theme, index) => toTask(theme, index + 1, report, evidenceOf, touched))
+}
+
+/**
+ * Spec §10's cap, spent as a round robin over the categories that produced
+ * tasks: every one of them contributes a task before any contributes a second.
+ *
+ * Truncating the emission order instead spends the whole budget on whatever
+ * category the fixed order reaches first, so a repo failing a category further
+ * down gets a plan with nothing about that category in it — the one thing the
+ * grades told it to fix.
+ *
+ * The rounds go worst-graded category first, read off the rollup state: graded
+ * categories worst-first, then the ones carrying no grade at all — nothing
+ * could assess them, or their tool errored — since there is no letter to rank
+ * those by. {@link categoryRank} breaks every tie in both groups, so the cut is
+ * a total order rather than an insertion order.
+ *
+ * What comes back is in emission order — the budget decides *which* tasks
+ * survive, never the order they are read in — renumbered `T1…Tn`, because the
+ * function that makes the cut is the one that owns the gap it would leave.
+ */
+function budgetTasks(tasks: readonly AgentTask[], report: Report, limit: number): AgentTask[] {
+  const byCategory = new Map<Category, AgentTask[]>()
+  for (const task of tasks) {
+    const queue = byCategory.get(task.category)
+    if (queue === undefined) byCategory.set(task.category, [task])
+    else queue.push(task)
+  }
+  const roundOrder = [...byCategory.keys()].toSorted(
+    (a, b) =>
+      worstFirst(report.categories[a], report.categories[b]) || categoryRank(a) - categoryRank(b),
+  )
+  const kept = new Set<AgentTask>()
+  const deepest = Math.max(0, ...[...byCategory.values()].map((queue) => queue.length))
+  for (let round = 0; round < deepest && kept.size < limit; round += 1) {
+    for (const category of roundOrder) {
+      if (kept.size >= limit) break
+      const task = byCategory.get(category)?.[round]
+      if (task !== undefined) kept.add(task)
+    }
+  }
+  return tasks
+    .filter((task) => kept.has(task))
+    .map((task, index) => ({ ...task, id: `T${index + 1}` }))
+}
+
+/** Round order for two categories: worse grade first, no grade at all last. */
+function worstFirst(a: CategoryState, b: CategoryState): number {
+  if (a.status === 'graded' && b.status === 'graded') return compareGrades(b.grade, a.grade)
+  return Number(a.status !== 'graded') - Number(b.status !== 'graded')
 }
 
 /**
