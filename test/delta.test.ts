@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { JSCPD_RULE, JSCPD_TOOL } from '../src/adapters/common/jscpd.ts'
 import {
   PROJECT_ADDED_REASON,
   PROJECT_REMOVED_REASON,
@@ -72,6 +73,28 @@ describe('computeDelta', () => {
 
     expect(delta.newFindings.map((entry) => entry.finding.id)).toEqual([added.id])
     expect(delta.resolvedFindings.map((finding) => finding.id)).toEqual([gone.id])
+    expect(delta.unchangedCount).toBe(1)
+  })
+
+  /**
+   * A clone pair is one finding, so the first delta after an upgrade sees the
+   * dropped twin resolved once — and not the surviving side restated as new,
+   * because a cross-file survivor keeps the id it already carried.
+   */
+  it('resolves the dropped twin of a clone pair without reporting the survivor as new', () => {
+    const clone = {
+      category: 'duplication',
+      tool: JSCPD_TOOL,
+      rule: JSCPD_RULE,
+      gradeScope: false,
+    } as const
+    const survivor = identified({ ...clone, file: 'src/handler.js', anchor: 'src/report.js' })
+    const twin = identified({ ...clone, file: 'src/report.js', anchor: 'src/handler.js' })
+
+    const delta = computeDelta(input({ baseFindings: [survivor, twin], headFindings: [survivor] }))
+
+    expect(delta.resolvedFindings.map((finding) => finding.id)).toEqual([twin.id])
+    expect(delta.newFindings).toEqual([])
     expect(delta.unchangedCount).toBe(1)
   })
 

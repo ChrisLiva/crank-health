@@ -10,7 +10,7 @@
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 19 functions over cognitive complexity 15 (0.0%). 6 advisory findings did not count toward the grade. |
-| duplication | D | 12.7% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade. |
+| duplication | D | 12.7% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | D | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
 | format | B | 1 of 10 checked files fail the formatter (10.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
@@ -41,7 +41,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 7 functions over cognitive complexity 15 (0.0%). |
-| duplication | A | 0.0% of tokens duplicated; the 1 clone below are the evidence, not the grade. 1 advisory finding did not count toward the grade. |
+| duplication | A | 0.0% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
 | format | C | 1 of 5 checked files fail the formatter (20.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
@@ -60,7 +60,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 12 functions over cognitive complexity 15 (0.0%). 6 advisory findings did not count toward the grade. |
-| duplication | A | 0.0% of tokens duplicated; the 1 clone below are the evidence, not the grade. 1 advisory finding did not count toward the grade. |
+| duplication | A | 0.0% of tokens duplicated. |
 | lint | D | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
 | format | A | 0 of 5 checked files fail the formatter (0.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
@@ -133,7 +133,7 @@ Evidence: [raw/packages/api/fallow-health.json](raw/packages/api/fallow-health.j
 
 ## duplication — D
 
-12.7% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade.
+12.7% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade.
 
 Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 
@@ -145,11 +145,9 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | jscpd | ok | [default-config] | 5.0.14 | — |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
-**Advisory findings — reported, not counted toward the grade** (2)
+**Advisory findings — reported, not counted toward the grade** (1)
 
 - warning `packages/api/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11 (jscpd) [default-config] [advisory]
-  - fix: Extract the duplicated block into a shared function or module
-- warning `packages/web/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/api/src/shared.js:1-11 (jscpd) [default-config] [advisory]
   - fix: Extract the duplicated block into a shared function or module
 
 Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.json) · [raw/packages/web/jscpd-report.json](raw/packages/web/jscpd-report.json) · [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json)

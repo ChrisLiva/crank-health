@@ -66,7 +66,7 @@
   "languages": {
     "js-ts": {
       "complexity": 2,
-      "duplication": 2,
+      "duplication": 1,
       "lint": 1
     },
     "python": {
@@ -615,25 +615,6 @@
         "endCol": 1
       },
       "message": "11 lines (111 tokens) duplicated from src/report.js:1-11",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
-      "id": "da0c099f432c5152",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "src/report.js",
-      "project": ".",
-      "range": {
-        "startLine": 1,
-        "startCol": 1,
-        "endLine": 11,
-        "endCol": 1
-      },
-      "message": "11 lines (111 tokens) duplicated from src/handler.js:5-15",
       "provenance": "default-config",
       "gradeScope": false,
       "fixHint": "Extract the duplicated block into a shared function or module"

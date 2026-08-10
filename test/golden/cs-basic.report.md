@@ -10,7 +10,7 @@
 | types | not assessed | not assessed — run `--deep` |
 | dead code | not assessed | not assessed — run `--deep` |
 | complexity | not assessed | not assessed — run `--deep` |
-| duplication | D | 18.4% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade. |
+| duplication | D | 18.4% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | not assessed | not assessed — run `--deep` |
 | format | C | 1 of 8 checked files fail the formatter (12.5%). |
 | test quality | not assessed | not assessed — run `--deep` |
@@ -46,7 +46,7 @@ Not graded: not assessed — run `--deep`
 
 ## duplication — D
 
-18.4% of tokens duplicated; the 2 clones below are the evidence, not the grade. 2 advisory findings did not count toward the grade.
+18.4% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade.
 
 Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 
@@ -56,11 +56,9 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
-**Advisory findings — reported, not counted toward the grade** (2)
+**Advisory findings — reported, not counted toward the grade** (1)
 
 - warning `dupe-a.cs:4` `jscpd/duplicate-block` — 30 lines (100 tokens) duplicated from dupe-b.cs:4-33 (jscpd) [default-config] [advisory]
-  - fix: Extract the duplicated block into a shared function or module
-- warning `dupe-b.cs:4` `jscpd/duplicate-block` — 30 lines (100 tokens) duplicated from dupe-a.cs:4-33 (jscpd) [default-config] [advisory]
   - fix: Extract the duplicated block into a shared function or module
 
 Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)

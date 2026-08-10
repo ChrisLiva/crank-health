@@ -66,7 +66,7 @@
   "languages": {
     "js-ts": {
       "complexity": 6,
-      "duplication": 2,
+      "duplication": 1,
       "lint": 2,
       "format": 1
     }
@@ -772,25 +772,6 @@
         "endCol": 1
       },
       "message": "11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
-      "id": "593386efe99fac36",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "packages/web/src/shared.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 1,
-        "startCol": 1,
-        "endLine": 11,
-        "endCol": 1
-      },
-      "message": "11 lines (124 tokens) duplicated from packages/api/src/shared.js:1-11",
       "provenance": "default-config",
       "gradeScope": false,
       "fixHint": "Extract the duplicated block into a shared function or module"

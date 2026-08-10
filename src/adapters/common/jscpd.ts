@@ -300,9 +300,12 @@ export function parseJscpdReport(document: unknown, repoRoot = ''): JscpdReport 
 }
 
 /**
- * Clone pairs → the core's vocabulary, one finding per *side* of the pair, so
- * that both files carry the evidence and a delta can resolve one of them
- * independently of the other.
+ * Clone pairs → the core's vocabulary, one finding per *pair*: both sides
+ * describe the same duplication, so reporting each of them would say the same
+ * thing twice. The side that carries the finding is the one {@link byLocation}
+ * — the module's one ordering rule — puts first *of those two*, decided within
+ * the pair before the whole list is sorted, and its message names the other
+ * side so nothing the twin said is lost.
  *
  * `gradeScope: false` on every one of them — see the file comment: the grade is
  * the percentage, and counting the clones too would grade the same duplication
@@ -318,21 +321,36 @@ export function toPendingFindings(
   clones: readonly JscpdClone[],
   repoConfig: boolean,
 ): PendingFinding[] {
+  const provenance = repoConfig ? ('repo-config' as const) : ('default-config' as const)
   return clones
-    .flatMap((clone) => [
-      side(clone, clone.firstFile, clone.firstStartLine, clone.firstEndLine, clone.secondFile, {
-        line: clone.secondStartLine,
-        endLine: clone.secondEndLine,
-      }),
-      side(clone, clone.secondFile, clone.secondStartLine, clone.secondEndLine, clone.firstFile, {
-        line: clone.firstStartLine,
-        endLine: clone.firstEndLine,
-      }),
-    ])
-    .map((finding) => ({
-      ...finding,
-      provenance: repoConfig ? ('repo-config' as const) : ('default-config' as const),
-    }))
+    .map((clone) => {
+      const first = {
+        ...side(
+          clone,
+          clone.firstFile,
+          clone.firstStartLine,
+          clone.firstEndLine,
+          clone.secondFile,
+          {
+            line: clone.secondStartLine,
+            endLine: clone.secondEndLine,
+          },
+        ),
+        provenance,
+      }
+      const second = {
+        ...side(
+          clone,
+          clone.secondFile,
+          clone.secondStartLine,
+          clone.secondEndLine,
+          clone.firstFile,
+          { line: clone.firstStartLine, endLine: clone.firstEndLine },
+        ),
+        provenance,
+      }
+      return byLocation(first, second) <= 0 ? first : second
+    })
     .toSorted(byLocation)
 }
 

@@ -61,7 +61,7 @@
   },
   "languages": {
     "csharp": {
-      "duplication": 2,
+      "duplication": 1,
       "format": 1
     }
   },
@@ -244,25 +244,6 @@
         "endCol": 1
       },
       "message": "30 lines (100 tokens) duplicated from dupe-b.cs:4-33",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
-      "id": "083ca1464cc14e6c",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "dupe-b.cs",
-      "project": ".",
-      "range": {
-        "startLine": 4,
-        "startCol": 1,
-        "endLine": 33,
-        "endCol": 1
-      },
-      "message": "30 lines (100 tokens) duplicated from dupe-a.cs:4-33",
       "provenance": "default-config",
       "gradeScope": false,
       "fixHint": "Extract the duplicated block into a shared function or module"

@@ -550,9 +550,12 @@ function ratioBasis(scope: GradeScope, category: Category, graded: readonly Find
       const share = metrics?.duplicationPercent
       const clones = scope.findings.filter((finding) => finding.category === category).length
       if (share === undefined) return `${plural(clones, 'duplicated block')} reported.`
-      return clones === 0
-        ? `${percent(share)} of tokens duplicated.`
-        : `${percent(share)} of tokens duplicated; the ${plural(clones, 'clone')} below are the evidence, not the grade.`
+      // One clone is one finding, so the count reaches 1 — and at 1 the sentence
+      // names the clone rather than counting it.
+      if (clones === 0) return `${percent(share)} of tokens duplicated.`
+      const evidence =
+        clones === 1 ? 'the clone below is' : `the ${plural(clones, 'clone')} below are`
+      return `${percent(share)} of tokens duplicated; ${evidence} the evidence, not the grade.`
     }
     case 'format': {
       const files = metrics?.formattableFiles

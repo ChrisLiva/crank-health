@@ -44,16 +44,8 @@ const PLANTED = [
     file: 'dupe-a.cs',
     startLine: 4,
     severity: 'warning',
-    // The grade is the token percentage; the clones are the evidence.
-    gradeScope: false,
-  },
-  {
-    category: 'duplication',
-    tool: 'jscpd',
-    rule: 'jscpd/duplicate-block',
-    file: 'dupe-b.cs',
-    startLine: 4,
-    severity: 'warning',
+    // The grade is the token percentage; the clones are the evidence, and the
+    // pair is one of them: `dupe-b.cs` is named in this finding's message.
     gradeScope: false,
   },
   {
@@ -199,7 +191,7 @@ describe('quick scan of the cs-basic fixture', () => {
   })
 
   it('counts the .cs findings into the per-language breakdown', () => {
-    expect(parse(json).languages).toEqual({ csharp: { duplication: 2, format: 1 } })
+    expect(parse(json).languages).toEqual({ csharp: { duplication: 1, format: 1 } })
   })
 
   /**
@@ -390,16 +382,6 @@ const MIXED_CS_PLANTED = [
     gradeScope: false,
   },
   {
-    category: 'duplication',
-    tool: 'jscpd',
-    rule: 'jscpd/duplicate-block',
-    file: 'dotnet/dupe-b.cs',
-    project: 'dotnet',
-    startLine: 4,
-    severity: 'warning',
-    gradeScope: false,
-  },
-  {
     category: 'lint',
     tool: 'oxlint',
     rule: 'eslint(no-dupe-keys)',
@@ -528,7 +510,7 @@ describe('quick scan of the mixed-cs fixture', () => {
   it('counts both languages into the per-language breakdown', () => {
     expect(parse(scan.json).languages).toEqual({
       'js-ts': { lint: 1, format: 1 },
-      csharp: { duplication: 2, format: 1 },
+      csharp: { duplication: 1, format: 1 },
     })
   })
 

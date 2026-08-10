@@ -28,19 +28,7 @@ Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.jso
 
 Verify: `npx crank-health --only duplication --project packages/api --fail-under A`
 
-### T2 — De-duplicate 1 copied block
-
-Project: packages/web
-
-Grade impact: duplication · A → A
-
-- `packages/web/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/api/src/shared.js:1-11 [advisory]
-
-Evidence: [raw/packages/web/jscpd-report.json](raw/packages/web/jscpd-report.json) · [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json)
-
-Verify: `npx crank-health --only duplication --project packages/web --fail-under A`
-
-### T3 — Fix 1 `eslint(no-const-assign)` finding
+### T2 — Fix 1 `eslint(no-const-assign)` finding
 
 Project: packages/api
 
@@ -52,7 +40,7 @@ Evidence: [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.jso
 
 Verify: `npx crank-health --only lint --project packages/api --fail-under A`
 
-### T4 — Fix 1 `no-unused-vars` finding
+### T3 — Fix 1 `no-unused-vars` finding
 
 Project: packages/web
 
@@ -64,7 +52,7 @@ Evidence: [raw/packages/web/eslint.json](raw/packages/web/eslint.json)
 
 Verify: `npx crank-health --only lint --project packages/web --fail-under A`
 
-### T5 — Format 1 file
+### T4 — Format 1 file
 
 Project: packages/api
 
@@ -78,4 +66,4 @@ Verify: `npx crank-health --only format --project packages/api --fail-under A`
 
 ---
 
-Full findings (11) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
+Full findings (10) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).

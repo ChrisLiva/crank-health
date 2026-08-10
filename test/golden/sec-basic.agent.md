@@ -74,12 +74,11 @@ Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T7 — De-duplicate 2 copied blocks
+### T7 — De-duplicate 1 copied block
 
 Grade impact: duplication · F → A
 
 - `src/handler.js:5` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/report.js:1-11 [advisory]
-- `src/report.js:1` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/handler.js:5-15 [advisory]
 
 Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
@@ -97,4 +96,4 @@ Verify: `npx crank-health --only lint --fail-under A`
 
 ---
 
-Full findings (11) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
+Full findings (10) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).

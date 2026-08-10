@@ -11,6 +11,7 @@ import {
   makeFinding,
   makeProjectScan,
   makeReport,
+  noMetrics,
   projectAt,
 } from './factories.ts'
 import { expectGolden, normalizeMarkdown, readGoldenReport } from './support/report.ts'
@@ -40,6 +41,24 @@ function section(markdown: string, heading: string): string {
 function projectBlock(markdown: string, heading: string): string {
   const [, rest = ''] = markdown.split(heading)
   return rest.split('\n### ')[0]?.split('\n## ')[0] ?? ''
+}
+
+/** A graded duplication category measured at 12.5%, with `clones` clones under it. */
+function evidence(clones: number): string {
+  return renderReportMarkdown(
+    makeReport({
+      categories: { ...allNotAssessed(), duplication: { status: 'graded', grade: 'C' } },
+      metrics: { ...noMetrics(), duplication: { duplicationPercent: 12.5 } },
+      findings: Array.from({ length: clones }, (_, index) =>
+        makeFinding({
+          id: `clone-${index}`,
+          category: 'duplication',
+          file: `src/dupe${index}.ts`,
+          gradeScope: false,
+        }),
+      ),
+    }),
+  )
 }
 
 describe('renderReportMarkdown', () => {
@@ -106,6 +125,20 @@ describe('renderReportMarkdown', () => {
     expect(markdown).toContain('| gitleaks | not available |')
     expect(markdown).toContain('brew install gitleaks')
     expect(markdown).toContain('| bandit | ok |')
+  })
+
+  /**
+   * The clones under a duplication grade are its evidence, and one clone is one
+   * finding — so the sentence has to read as well at one as at seven.
+   */
+  it('counts the clones under the duplication grade, grammatical at every count', () => {
+    expect(evidence(0)).toContain('12.5% of tokens duplicated.')
+    expect(evidence(1)).toContain(
+      '12.5% of tokens duplicated; the clone below is the evidence, not the grade.',
+    )
+    expect(evidence(7)).toContain(
+      '12.5% of tokens duplicated; the 7 clones below are the evidence, not the grade.',
+    )
   })
 
   it('reports the measurement that drove each ratio grade', async () => {

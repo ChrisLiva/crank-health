@@ -83,17 +83,8 @@ const MONO_JS_PLANTED = [
     project: 'packages/api',
     startLine: 1,
     severity: 'warning',
-    // Duplication grades on the percentage, so its findings are always evidence.
-    gradeScope: false,
-  },
-  {
-    category: 'duplication',
-    tool: 'jscpd',
-    rule: 'jscpd/duplicate-block',
-    file: 'packages/web/src/shared.js',
-    project: 'packages/web',
-    startLine: 1,
-    severity: 'warning',
+    // Duplication grades on the percentage, so its findings are always evidence
+    // — and the cross-package pair is one of them, named from this side.
     gradeScope: false,
   },
   {

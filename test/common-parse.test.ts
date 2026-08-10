@@ -13,8 +13,10 @@ import {
   parseGitleaksReport,
   toPendingFindings as toGitleaksFindings,
 } from '../src/adapters/common/gitleaks.ts'
+import type { JscpdClone } from '../src/adapters/common/jscpd.ts'
 import {
   JSCPD_RULE,
+  JSCPD_TOOL,
   parseJscpdReport,
   toPendingFindings as toJscpdFindings,
 } from '../src/adapters/common/jscpd.ts'
@@ -34,8 +36,9 @@ import {
   parseZizmorJson,
   toPendingFindings as toZizmorFindings,
 } from '../src/adapters/common/zizmor.ts'
+import { computeAnchors } from '../src/core/fingerprint.ts'
 import { gradeAbsolute } from '../src/core/grade.ts'
-import type { Finding } from '../src/core/types.ts'
+import type { Finding, PendingFinding } from '../src/core/types.ts'
 
 /**
  * Per-wrapper parse tests against checked-in captured output (plan M6 checks).
@@ -513,6 +516,64 @@ describe('parseOsvReport', () => {
   })
 })
 
+/** One clone pair; override only what the assertion is about. */
+function jscpdClone(overrides: Partial<JscpdClone> = {}): JscpdClone {
+  return {
+    firstFile: 'src/a.ts',
+    firstStartLine: 5,
+    firstEndLine: 15,
+    secondFile: 'src/b.ts',
+    secondStartLine: 30,
+    secondEndLine: 40,
+    lines: 11,
+    tokens: 111,
+    format: 'typescript',
+    ...overrides,
+  }
+}
+
+/**
+ * A clone as two findings, one per side — what the pair looks like when each
+ * side carries its own identity. Run through {@link computeAnchors} it yields
+ * the ids a side has on its own, which is what the collapsed finding is
+ * measured against.
+ */
+function bothSides(clone: JscpdClone): PendingFinding[] {
+  const oneSide = (
+    file: string,
+    startLine: number,
+    endLine: number,
+    twinFile: string,
+  ): PendingFinding => ({
+    category: 'duplication',
+    tool: JSCPD_TOOL,
+    rule: JSCPD_RULE,
+    severity: 'warning',
+    file,
+    range: { startLine, startCol: 1, endLine, endCol: 1 },
+    message: `${clone.lines} lines (${clone.tokens} tokens) duplicated from ${twinFile}`,
+    provenance: 'default-config',
+    gradeScope: false,
+    anchor: twinFile,
+  })
+  return [
+    oneSide(clone.firstFile, clone.firstStartLine, clone.firstEndLine, clone.secondFile),
+    oneSide(clone.secondFile, clone.secondStartLine, clone.secondEndLine, clone.firstFile),
+  ]
+}
+
+/** Each finding's start line beside the occurrence index identity gave it. */
+function numbering(findings: readonly Finding[]): (number | undefined)[][] {
+  return findings.map((finding) => [finding.range.startLine, finding.identity?.occurrence])
+}
+
+/** The id of the finding at `file`, or at `startLine` where the file repeats. */
+function idAt(findings: readonly Finding[], where: string | number): string | undefined {
+  return findings.find((finding) =>
+    typeof where === 'string' ? finding.file === where : finding.range.startLine === where,
+  )?.id
+}
+
 describe('parseJscpdReport', () => {
   it('reads clone pairs and the token percentage from a real report', async () => {
     const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
@@ -538,18 +599,115 @@ describe('parseJscpdReport', () => {
 
   /**
    * The grade is the percentage; the clones are the evidence. Counting them
-   * too would grade one duplication twice — see `jscpd.ts`.
+   * too would grade one duplication twice — see `jscpd.ts`. One clone is one
+   * finding: both sides describe the same duplication, and the side that
+   * carries it is the one `byLocation` orders first of the two.
    */
-  it('reports both sides of a clone as advisory findings anchored on the twin', async () => {
+  it('reports a clone pair as one advisory finding anchored on the twin', async () => {
     const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
     const findings = toJscpdFindings(report.clones, false)
     expect(findings.map((finding) => [finding.file, finding.anchor])).toEqual([
       ['src/handler.js', 'src/report.js'],
-      ['src/report.js', 'src/handler.js'],
     ])
     expect(findings.every((finding) => finding.gradeScope === false)).toBe(true)
     expect(findings.every((finding) => finding.rule === JSCPD_RULE)).toBe(true)
     expect(findings.every((finding) => finding.category === 'duplication')).toBe(true)
+  })
+
+  it('reports nothing for a report with no clones in it', () => {
+    expect(toJscpdFindings([], false)).toEqual([])
+  })
+
+  /** The pair is one finding, so the survivor has to carry the twin's location. */
+  it('names the twin’s file and line range in the surviving finding’s message', async () => {
+    const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
+    const [finding] = toJscpdFindings(report.clones, false)
+    expect(finding?.message).toBe('11 lines (111 tokens) duplicated from src/report.js:1-11')
+  })
+
+  /**
+   * Identity is range-free (spec §2), so collapsing a cross-file pair drops the
+   * twin's id and leaves the survivor's exactly as it was — the delta after an
+   * upgrade sees one finding resolved, not two findings replaced by one.
+   */
+  it('keeps a cross-file survivor’s id byte-identical to the id that side carried alone', async () => {
+    const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
+    const clone = report.clones.at(0)
+    if (clone === undefined) throw new Error('the capture holds no clone')
+
+    const before = computeAnchors(bothSides(clone), new Map())
+    const after = computeAnchors(toJscpdFindings(report.clones, false), new Map())
+
+    const twinId = idAt(before, 'src/report.js')
+    expect(new Set(before.map((finding) => finding.id)).size).toBe(2)
+    expect(new Set(after.map((finding) => finding.id))).toEqual(
+      new Set(before.map((finding) => finding.id).filter((id) => id !== twinId)),
+    )
+    expect(idAt(after, 'src/handler.js')).toBe(idAt(before, 'src/handler.js'))
+  })
+
+  /**
+   * The one identity churn the collapse causes, and it takes a file that
+   * duplicates itself twice to see it: both sides of a same-file clone share
+   * one `(category, tool, rule, file, anchor)` group, so dropping the twins
+   * closes the gaps in `occurrence` and the second survivor renumbers.
+   */
+  it('renumbers the second survivor when one file holds two clones of itself', () => {
+    const clones = [
+      jscpdClone({
+        firstFile: 'src/a.ts',
+        firstStartLine: 5,
+        firstEndLine: 15,
+        secondFile: 'src/a.ts',
+        secondStartLine: 30,
+        secondEndLine: 40,
+      }),
+      jscpdClone({
+        firstFile: 'src/a.ts',
+        firstStartLine: 50,
+        firstEndLine: 60,
+        secondFile: 'src/a.ts',
+        secondStartLine: 80,
+        secondEndLine: 90,
+      }),
+    ]
+    const before = computeAnchors(clones.flatMap(bothSides), new Map())
+    const after = computeAnchors(toJscpdFindings(clones, false), new Map())
+
+    expect(numbering(before)).toEqual([
+      [5, 0],
+      [30, 1],
+      [50, 2],
+      [80, 3],
+    ])
+    expect(numbering(after)).toEqual([
+      [5, 0],
+      [50, 1],
+    ])
+    expect(idAt(after, 5)).toBe(idAt(before, 5))
+    expect(idAt(after, 50)).not.toBe(idAt(before, 50))
+  })
+
+  /** Collapsing the pair must not collapse two pairs into one another. */
+  it('keeps two clones between the same two files apart, as two occurrences', () => {
+    const clones = [
+      jscpdClone(),
+      jscpdClone({
+        firstStartLine: 100,
+        firstEndLine: 110,
+        secondStartLine: 200,
+        secondEndLine: 210,
+      }),
+    ]
+    const pending = toJscpdFindings(clones, false)
+    expect(pending.map((finding) => [finding.file, finding.anchor])).toEqual([
+      ['src/a.ts', 'src/b.ts'],
+      ['src/a.ts', 'src/b.ts'],
+    ])
+
+    const findings = computeAnchors(pending, new Map())
+    expect(findings.map((finding) => finding.identity?.occurrence)).toEqual([0, 1])
+    expect(new Set(findings.map((finding) => finding.id)).size).toBe(2)
   })
 })
 

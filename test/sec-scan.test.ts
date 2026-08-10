@@ -100,16 +100,8 @@ const PLANTED = [
     file: 'src/handler.js',
     startLine: 5,
     severity: 'warning',
-    // The grade is the token percentage; the clones are the evidence.
-    gradeScope: false,
-  },
-  {
-    category: 'duplication',
-    tool: 'jscpd',
-    rule: 'jscpd/duplicate-block',
-    file: 'src/report.js',
-    startLine: 1,
-    severity: 'warning',
+    // The grade is the token percentage; the clones are the evidence, and the
+    // pair is one of them: `src/report.js` is named in this finding's message.
     gradeScope: false,
   },
 ] as const
