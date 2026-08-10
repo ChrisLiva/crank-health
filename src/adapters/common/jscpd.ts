@@ -50,6 +50,19 @@ export const JSCPD_TOOL = 'jscpd'
 /** npm package and command name coincide. */
 const JSCPD_PACKAGE = 'jscpd'
 
+/**
+ * The config artifacts that make jscpd repo-owned — detected, and never
+ * applied. jscpd resolves a config from its *working directory*, which is the
+ * scratch dir by design ({@link runJscpd}): a flag we got wrong cannot then
+ * write into the target. The config it does read is ours, and has to be — it
+ * carries {@link ignoreGlobs}, so a repo's own file in its place would lapse
+ * the hidden-scope and anchoring rules and hand a repo `minTokens`, the one
+ * knob that tunes a duplication grade to A.
+ *
+ * So detection decides which *binary* runs (the repo's installed jscpd over the
+ * ephemeral one) and is reported under `Detection.ownedVia`, while every run
+ * says `configOwned: false` — the settings that produced the number were ours.
+ */
 export const JSCPD_CONFIG_FILES: readonly string[] = ['.jscpd.json', '.jscpd.jsonc']
 
 /** The one rule id every clone reports under. */
@@ -174,6 +187,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       state: 'not-available',
       findings: [],
       rawFiles: [],
+      configOwned: false,
       // See `bandit.ts`'s `NOTHING_TO_SCAN`: a repo with no source in it has no
       // duplication percentage, and "0%" would be a grade nobody measured.
       reason: 'no JavaScript, TypeScript, Python or C# files, so jscpd measured nothing',
@@ -216,6 +230,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       state: execution.failure.state,
       findings: [],
       rawFiles,
+      configOwned: false,
       reason: execution.failure.reason,
     }
   }
@@ -226,6 +241,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
+      configOwned: false,
       // The filtered stderr: jscpd's config echo is line 1 of every run, and
       // reporting it here would state the flag we passed instead of why the
       // run failed — with a scratch path that changes on every run.
@@ -244,6 +260,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
+      configOwned: false,
       reason: `could not parse jscpd output: ${error instanceof Error ? error.message : String(error)}`,
     }
   }
@@ -253,14 +270,13 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
     state: 'ok',
     findings: await identify(
       ctx.repoRoot,
-      toPendingFindings(report.clones, ctx.detection !== null).filter((finding) =>
-        analyzed.has(finding.file),
-      ),
+      toPendingFindings(report.clones).filter((finding) => analyzed.has(finding.file)),
     ),
     ...(ctx.detection?.version === undefined
       ? { toolVersion: pinnedVersion(JSCPD_PACKAGE) }
       : { toolVersion: ctx.detection.version }),
     rawFiles,
+    configOwned: false,
     metrics: { duplicationPercent: report.duplicationPercent },
   }
 }
@@ -395,12 +411,13 @@ export function parseJscpdReport(document: unknown, repoRoot = ''): JscpdReport 
  * range, which would put a line number back into an identity spec §2 defines as
  * range-free. A clone is identified by what it duplicates; a second clone
  * between the same two files is a second occurrence, which the core numbers.
+ *
+ * `provenance` is the constant `default-config` and takes no parameter: the
+ * scratch config always wins (see {@link JSCPD_CONFIG_FILES}), so a seam here
+ * could only ever be set wrong.
  */
-export function toPendingFindings(
-  clones: readonly JscpdClone[],
-  repoConfig: boolean,
-): PendingFinding[] {
-  const provenance = repoConfig ? ('repo-config' as const) : ('default-config' as const)
+export function toPendingFindings(clones: readonly JscpdClone[]): PendingFinding[] {
+  const provenance = 'default-config' as const
   return clones
     .map((clone) => {
       const first = {

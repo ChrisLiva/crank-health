@@ -605,7 +605,7 @@ describe('parseJscpdReport', () => {
    */
   it('reports a clone pair as one advisory finding anchored on the twin', async () => {
     const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
-    const findings = toJscpdFindings(report.clones, false)
+    const findings = toJscpdFindings(report.clones)
     expect(findings.map((finding) => [finding.file, finding.anchor])).toEqual([
       ['src/handler.js', 'src/report.js'],
     ])
@@ -615,13 +615,13 @@ describe('parseJscpdReport', () => {
   })
 
   it('reports nothing for a report with no clones in it', () => {
-    expect(toJscpdFindings([], false)).toEqual([])
+    expect(toJscpdFindings([])).toEqual([])
   })
 
   /** The pair is one finding, so the survivor has to carry the twin's location. */
   it('names the twin’s file and line range in the surviving finding’s message', async () => {
     const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
-    const [finding] = toJscpdFindings(report.clones, false)
+    const [finding] = toJscpdFindings(report.clones)
     expect(finding?.message).toBe('11 lines (111 tokens) duplicated from src/report.js:1-11')
   })
 
@@ -636,7 +636,7 @@ describe('parseJscpdReport', () => {
     if (clone === undefined) throw new Error('the capture holds no clone')
 
     const before = computeAnchors(bothSides(clone), new Map())
-    const after = computeAnchors(toJscpdFindings(report.clones, false), new Map())
+    const after = computeAnchors(toJscpdFindings(report.clones), new Map())
 
     const twinId = idAt(before, 'src/report.js')
     expect(new Set(before.map((finding) => finding.id)).size).toBe(2)
@@ -672,7 +672,7 @@ describe('parseJscpdReport', () => {
       }),
     ]
     const before = computeAnchors(clones.flatMap(bothSides), new Map())
-    const after = computeAnchors(toJscpdFindings(clones, false), new Map())
+    const after = computeAnchors(toJscpdFindings(clones), new Map())
 
     expect(numbering(before)).toEqual([
       [5, 0],
@@ -699,7 +699,7 @@ describe('parseJscpdReport', () => {
         secondEndLine: 210,
       }),
     ]
-    const pending = toJscpdFindings(clones, false)
+    const pending = toJscpdFindings(clones)
     expect(pending.map((finding) => [finding.file, finding.anchor])).toEqual([
       ['src/a.ts', 'src/b.ts'],
       ['src/a.ts', 'src/b.ts'],

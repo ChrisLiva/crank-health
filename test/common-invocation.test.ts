@@ -42,7 +42,7 @@ import { ADAPTERS } from '../src/adapters/index.ts'
 import type { RunContext } from '../src/core/types.ts'
 import { categoryRank } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
-import type { ReportTool } from '../src/render/json.ts'
+import type { Report, ReportTool } from '../src/render/json.ts'
 import { runHealthScan } from '../src/run.ts'
 
 /**
@@ -483,7 +483,7 @@ describe('zero footprint, in the arguments', () => {
 })
 
 /** A throwaway git repo (hermetic identity), scanned with `--out` kept outside. */
-async function scanTemp(files: Readonly<Record<string, string>>): Promise<ReportTool[]> {
+async function scanTemp(files: Readonly<Record<string, string>>): Promise<Report> {
   const repo = await mkdtemp(join(tmpdir(), 'crank-jscpd-cs-'))
   const out = await mkdtemp(join(tmpdir(), 'crank-jscpd-cs-out-'))
   try {
@@ -497,12 +497,20 @@ async function scanTemp(files: Readonly<Record<string, string>>): Promise<Report
       await writeFile(join(repo, file), contents, 'utf8')
     }
     const scan = await runHealthScan({ path: repo, out })
-    return scan.report.tools.filter((tool) => tool.tool === JSCPD_TOOL)
+    return scan.report
   } finally {
     await rm(repo, { recursive: true, force: true })
     await rm(out, { recursive: true, force: true })
   }
 }
+
+/**
+ * Every jscpd record in a report: one per project, plus the repo-wide pass in a
+ * repo with more than one project for a clone to be *between*. The single-
+ * project trees below therefore yield exactly one.
+ */
+const jscpdRuns = (report: Report): readonly ReportTool[] =>
+  report.tools.filter((tool) => tool.tool === JSCPD_TOOL)
 
 describe('jscpd on a C#-only tree', () => {
   /** Roomy: a cold npx cache fetches the pinned jscpd first. */
@@ -511,7 +519,9 @@ describe('jscpd on a C#-only tree', () => {
   it(
     'measures a tree of only .cs files instead of standing down',
     async () => {
-      const runs = await scanTemp({ 'Program.cs': 'class Program { static void Main() {} }\n' })
+      const runs = jscpdRuns(
+        await scanTemp({ 'Program.cs': 'class Program { static void Main() {} }\n' }),
+      )
 
       expect(runs.length).toBeGreaterThan(0)
       expect(runs.map((run) => run.state)).not.toContain('not-available')
@@ -522,7 +532,7 @@ describe('jscpd on a C#-only tree', () => {
   it(
     'names all four languages when there is nothing to measure',
     async () => {
-      const runs = await scanTemp({ 'README.md': '# nothing to measure\n' })
+      const runs = jscpdRuns(await scanTemp({ 'README.md': '# nothing to measure\n' }))
 
       expect(runs.length).toBeGreaterThan(0)
       for (const run of runs) {
@@ -530,6 +540,113 @@ describe('jscpd on a C#-only tree', () => {
         expect(run.reason).toBe(
           'no JavaScript, TypeScript, Python or C# files, so jscpd measured nothing',
         )
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
+})
+
+/**
+ * jscpd resolves its config from its working directory, which is the scratch
+ * dir, and is handed our `--config` besides — so a repo's own `.jscpd.json` is
+ * definitively unread. Detection still finds that file, and must not be what
+ * decides provenance: a repo that tuned `minTokens` is graded as though it had
+ * not, so every run says `default-config` and the report says so too.
+ */
+describe('whose config decided a duplication grade', () => {
+  const SCAN_TIMEOUT_MS = 180_000
+
+  /** The `.jscpd.json` a repo would tune its duplication grade with. */
+  const TUNED = `${JSON.stringify({ minTokens: 5000 }, null, 2)}\n`
+
+  /**
+   * The path that returns before jscpd is ever spawned, and the one a full
+   * scan cannot reach with detection non-null. `configOwned` has to be answered
+   * on every return: left off, `provenanceOf` (`src/render/json.ts:439-440`)
+   * falls back to detection and the record claims `repo-config`.
+   */
+  it('says default-config even where it stood down without running', async () => {
+    const result = await jscpdRunner.run({
+      repoRoot: REPO,
+      project: makeProject(['README.md']),
+      files: ['README.md'],
+      scratch: SCRATCH,
+      runScratch: SCRATCH,
+      detection: {
+        reason: 'config',
+        configFiles: ['.jscpd.json'],
+        ownedVia: '.jscpd.json',
+        installed: false,
+      },
+      timeoutMs: 1000,
+      deep: false,
+    })
+
+    expect(result.state).toBe('not-available')
+    expect(result.configOwned).toBe(false)
+  })
+
+  it(
+    'reports default-config on the tool record and every clone, on a repo owning .jscpd.json',
+    async () => {
+      const fixture = join(import.meta.dirname, 'fixtures', 'sec-basic', 'src')
+      const [handler, report] = await Promise.all([
+        readFile(join(fixture, 'handler.js'), 'utf8'),
+        readFile(join(fixture, 'report.js'), 'utf8'),
+      ])
+
+      const scanned = await scanTemp({ 'a.js': handler, 'b.js': report, '.jscpd.json': TUNED })
+
+      const runs = jscpdRuns(scanned)
+      expect(runs.length).toBeGreaterThan(0)
+      // Detection still saw the file — this is not a test of detection going blind.
+      expect(runs.some((run) => run.detection !== null)).toBe(true)
+      expect(runs.map((run) => run.provenance)).toEqual(runs.map(() => 'default-config'))
+
+      const clones = scanned.findings.filter((finding) => finding.tool === JSCPD_TOOL)
+      // Without this the clause below is vacuously true of an empty list.
+      expect(clones.length).toBeGreaterThan(0)
+      expect(clones.map((clone) => clone.provenance)).toEqual(clones.map(() => 'default-config'))
+    },
+    SCAN_TIMEOUT_MS,
+  )
+
+  /**
+   * The honest end-to-end statement of the same fact, against the real binary:
+   * `minTokens: 5000` would suppress every clone in this tree if jscpd read it.
+   * The percentages are identical because it never does — a characterization
+   * test, not a discriminator, and the reason `default-config` is the truth
+   * rather than a simplification.
+   */
+  it(
+    'measures the same percentage whether or not the tree carries a .jscpd.json',
+    async () => {
+      const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-config-'))
+      try {
+        const tuned = join(base, 'tuned')
+        const plain = join(base, 'plain')
+        // A scratch dir each: the two runs share a config file name and a
+        // report path, so one working directory would have them overwrite
+        // each other's answer.
+        const tunedScratch = join(base, 'scratch-tuned')
+        const plainScratch = join(base, 'scratch-plain')
+        await Promise.all([
+          mkdir(tunedScratch, { recursive: true }),
+          mkdir(plainScratch, { recursive: true }),
+          plantDuplicates(tuned),
+          plantDuplicates(plain),
+        ])
+        await writeFile(join(tuned, '.jscpd.json'), TUNED, 'utf8')
+
+        const [withConfig, without] = await Promise.all([
+          measureDuplication(tuned, tunedScratch),
+          measureDuplication(plain, plainScratch),
+        ])
+
+        expect(withConfig.percentage).toBeGreaterThan(0)
+        expect(withConfig.percentage).toBe(without.percentage)
+      } finally {
+        await rm(base, { recursive: true, force: true })
       }
     },
     SCAN_TIMEOUT_MS,
