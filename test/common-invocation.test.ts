@@ -34,6 +34,7 @@ import {
   strykerNetInvocationArgs,
   strykerNetRunner,
 } from '../src/adapters/csharp/stryker-net.ts'
+import { EXCLUDED_SEGMENTS } from '../src/core/discover.ts'
 import { dnxCommand } from '../src/core/exec.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
 import type { RunContext } from '../src/core/types.ts'
@@ -88,6 +89,12 @@ describe('the license rule', () => {
 })
 
 describe('zero footprint, in the arguments', () => {
+  /** jscpd's `--ignore` value, read by flag name rather than by position. */
+  const ignoreOf = (nested: readonly string[] = []) => {
+    const args = jscpdArgs(REPO, SCRATCH, nested)
+    return args[args.indexOf('--ignore') + 1] ?? ''
+  }
+
   /** jscpd's default reporter writes `report/` into the working directory. */
   it('redirects jscpd’s report into the scratch dir', () => {
     const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'))
@@ -97,11 +104,36 @@ describe('zero footprint, in the arguments', () => {
   })
 
   it('keeps jscpd out of .git and dependency directories', () => {
-    const args = jscpdArgs(REPO, SCRATCH)
-    const ignore = args[args.indexOf('--ignore') + 1] ?? ''
+    const ignore = ignoreOf()
     for (const excluded of ['.git', 'node_modules', '.venv', '__pycache__']) {
       expect(ignore).toContain(excluded)
     }
+  })
+
+  /**
+   * The list is discovery's, not a hand-maintained twin of it: every segment
+   * discovery never scans is a glob here, so the two file sets cannot drift
+   * apart as one of them grows.
+   */
+  it('derives jscpd’s ignore list from discovery’s excluded segments', () => {
+    const entries = ignoreOf().split(',')
+    for (const segment of EXCLUDED_SEGMENTS) {
+      expect(entries).toContain(`**/${segment}/**`)
+    }
+  })
+
+  /**
+   * Discovery drops every hidden directory but the root `.github/`, and jscpd
+   * walks the tree itself, so this glob is the only thing applying that rule to
+   * the duplication measurement. A glob list has no negation, so the exemption
+   * cannot come back: `.github/scripts/` is excluded too, and that is the
+   * approximation stated on the constant.
+   */
+  it('keeps jscpd out of hidden directories, with no way to carve .github back in', () => {
+    const entries = ignoreOf().split(',')
+    expect(entries).toContain('**/.*/**')
+    expect(entries.filter((entry) => entry.startsWith('!'))).toEqual([])
+    expect(entries.filter((entry) => entry.includes('.github'))).toEqual([])
   })
 
   /**
@@ -110,16 +142,13 @@ describe('zero footprint, in the arguments', () => {
    * measurement is the repo-wide pass's, and only the rollup grades on it.
    */
   it('leaves a parent project’s nested projects to the nested projects', () => {
-    const ignoreOf = (nested: readonly string[]) => {
-      const args = jscpdArgs(REPO, SCRATCH, nested)
-      return args[args.indexOf('--ignore') + 1] ?? ''
-    }
-
     const ignore = ignoreOf(['packages/api', 'packages/web'])
     expect(ignore).toContain('**/packages/api/**')
     expect(ignore).toContain('**/packages/web/**')
     // …and the repo-wide pass, which passes none, still sees every package.
-    expect(ignoreOf([])).not.toContain('packages')
+    const entries = ignoreOf().split(',')
+    expect(entries).not.toContain('**/packages/api/**')
+    expect(entries).not.toContain('**/packages/web/**')
   })
 
   it('asks jscpd for exactly the graded languages, C# included', () => {
@@ -135,8 +164,7 @@ describe('zero footprint, in the arguments', () => {
    * measurement.
    */
   it('keeps jscpd out of C# build output directories', () => {
-    const args = jscpdArgs(REPO, SCRATCH)
-    const ignore = args[args.indexOf('--ignore') + 1] ?? ''
+    const ignore = ignoreOf()
     expect(ignore).toContain('**/bin/**')
     expect(ignore).toContain('**/obj/**')
   })

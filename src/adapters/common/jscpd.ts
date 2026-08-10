@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { EXCLUDED_SEGMENTS } from '../../core/discover.ts'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
@@ -64,16 +65,32 @@ const FORMATS = 'javascript,jsx,typescript,tsx,python,csharp'
 /**
  * Directories excluded regardless of what the repo's `.gitignore` says. jscpd
  * honors `.gitignore` natively, which is most of spec §7's requirement; these
- * are the dependency and VCS directories a repo may have forgotten to ignore.
+ * are the dependency and VCS directories a repo may have forgotten to ignore —
+ * {@link EXCLUDED_SEGMENTS}, the same list discovery keeps out of the
+ * inventory, so the measured set and the graded set cannot drift apart.
  *
- * `bin/` and `obj/` are MSBuild output. Unlike discovery's C#-only file rule,
- * these two are language-blind — jscpd walks the tree itself instead of taking
- * our inventory, so it cannot ask what language a file is before descending.
- * That is the accepted trade: a JS package's `bin/cli.js` stays in the
- * inventory but out of the duplication measurement.
+ * A dot-directory glob carries discovery's hidden-scope rule across too, and
+ * carries it further than discovery does: a glob list has no negation, so the
+ * root `.github/` discovery allows back in cannot be carved back in here.
+ * Duplication inside `.github/scripts/` is therefore neither measured nor
+ * reported — the percentage and the clones come from this one list, so the
+ * report never shows a clone the percentage did not count — while discovery
+ * still grades those files for every other category. That is the same class of
+ * approximation {@link invocationArgs} records for jscpd's own walk.
+ *
+ * `bin/` and `obj/` are MSBuild output, and stay literal because discovery
+ * covers them with a C#-only file rule rather than a segment. Here they are
+ * language-blind — jscpd walks the tree itself instead of taking our
+ * inventory, so it cannot ask what language a file is before descending. That
+ * is the accepted trade: a JS package's `bin/cli.js` stays in the inventory but
+ * out of the duplication measurement.
  */
-const IGNORE_GLOBS =
-  '**/.git/**,**/node_modules/**,**/.venv/**,**/venv/**,**/__pycache__/**,**/bin/**,**/obj/**'
+const IGNORE_GLOBS: readonly string[] = [
+  ...EXCLUDED_SEGMENTS.map((segment) => `**/${segment}/**`),
+  '**/.*/**',
+  '**/bin/**',
+  '**/obj/**',
+]
 
 /** Where jscpd's own report lands, under the scratch dir. */
 const REPORT_DIRECTORY = 'jscpd'
@@ -222,7 +239,7 @@ export function invocationArgs(
     '--format',
     FORMATS,
     '--ignore',
-    [IGNORE_GLOBS, ...nested.map((project) => `**/${project}/**`)].join(','),
+    [...IGNORE_GLOBS, ...nested.map((project) => `**/${project}/**`)].join(','),
     // Absolute names in the report; with relative ones jscpd resolves them
     // against its own cwd, which is the scratch dir, not the repo.
     '--absolute',

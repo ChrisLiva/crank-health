@@ -317,6 +317,30 @@ describe('quick scan of the mono-js fixture', () => {
   })
 
   /**
+   * jscpd walks a directory of its own rather than taking the inventory, so the
+   * ignore list it is invoked with is the only thing keeping a hidden directory
+   * out of the token percentage the duplication grade reads. That one list
+   * decides both numbers, so the file is absent from jscpd's own report as well
+   * as from the findings: the grade counts no token the evidence cannot show.
+   */
+  it('measures duplication over a tree the hidden directory is not in', async () => {
+    const raw = scan.report.tools
+      .filter((tool) => tool.tool === 'jscpd')
+      .flatMap((tool) => tool.raw)
+    expect(raw.length).toBeGreaterThan(0)
+
+    const reports = await Promise.all(
+      raw.map((path) => readFile(join(scan.outputDir, path), 'utf8')),
+    )
+    for (const report of reports) expect(report).not.toContain(MONO_JS_HIDDEN_FILE)
+    expect(
+      scan.report.findings
+        .filter((finding) => finding.tool === 'jscpd')
+        .map((finding) => finding.file),
+    ).not.toContain(MONO_JS_HIDDEN_FILE)
+  })
+
+  /**
    * …and it says so once, in the report's own warnings channel, so a reader who
    * wonders why the tree looks smaller than it is has the answer beside the
    * grades rather than having to diff a file list.
