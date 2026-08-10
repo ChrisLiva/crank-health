@@ -567,7 +567,97 @@ describe('each task', () => {
       '- `src/a.ts:5` `jscpd/duplicate-block` — 11 lines duplicated from src/b.ts:1-11 [advisory]',
     )
   })
+
+  /**
+   * Twenty CVEs in one lockfile are twenty upgrades to make. Collapsing them to
+   * `- \`pnpm-lock.yaml\` (20 findings)` repeats the file the task title already
+   * names and hides every advisory id the agent has to look up, so a task whose
+   * findings share one file lists the findings however many there are.
+   */
+  it('lists a single file’s findings inline however many there are', () => {
+    const markdown = renderAgentMarkdown(lockfileCves(20))
+    expect(markdown).toContain('- `pnpm-lock.yaml:1` `GHSA-0000-0000-0000` — unused variable')
+    expect(markdown).not.toContain('- `pnpm-lock.yaml` (20 findings)')
+    expect(markdown).not.toContain('20 findings across 1 file:')
+  })
+
+  /**
+   * An inline list defers to `report.json` at the same length a file list does,
+   * with a sentence that counts what it left out: the file-worded one would be
+   * a lie under a list of findings.
+   */
+  it('caps an inline list at fifteen findings and says how many it left out', () => {
+    const capped = renderAgentMarkdown(lockfileCves(20))
+    expect(inlineFindings(capped)).toHaveLength(15)
+    expect(capped).toContain('- … 5 more findings in `report.json`.')
+    expect(capped).not.toContain('`GHSA-0000-0000-0015`')
+
+    const short = renderAgentMarkdown(lockfileCves(8))
+    expect(inlineFindings(short)).toHaveLength(8)
+    expect(short).not.toContain('more findings in `report.json`')
+  })
+
+  /**
+   * A long task spread over files is still a list of files: the count per file
+   * is what says where the work is concentrated, and past fifteen files the
+   * sentence counts the files it left out.
+   */
+  it('counts per file when a long task spans more than one, and defers past fifteen', () => {
+    const perFile = { a: 3, b: 2, c: 2, d: 2, e: 1, f: 1, g: 1, h: 1, i: 1 }
+    const nine = renderAgentMarkdown(
+      unusedExports(
+        Object.entries(perFile).flatMap(([name, count]) =>
+          Array.from({ length: count }, () => `src/${name}.ts`),
+        ),
+      ),
+    )
+    expect(nine).toContain('14 findings across 9 files:')
+    expect(nine).toContain('- `src/a.ts` (3 findings)')
+    expect(nine).toContain('- `src/e.ts` (1 finding)')
+    expect(nine).not.toContain('more files in `report.json`')
+
+    const twenty = renderAgentMarkdown(
+      unusedExports(Array.from({ length: 20 }, (_, index) => `src/f${String(index)}.ts`)),
+    )
+    expect(twenty).toContain('20 findings across 20 files:')
+    expect(fileRows(twenty)).toHaveLength(15)
+    expect(twenty).toContain('- … 5 more files in `report.json`.')
+  })
 })
+
+/** A dead-code report with one unused-export finding per entry in `files`. */
+function unusedExports(files: readonly string[]): Report {
+  return makeReport({
+    categories: { ...allGraded(), 'dead-code': { status: 'graded', grade: 'F' } },
+    findings: files.map((file, index) =>
+      makeFinding({
+        id: `d${index}`,
+        category: 'dead-code',
+        tool: 'knip',
+        rule: 'knip/unused-exports',
+        file,
+      }),
+    ),
+  })
+}
+
+/** The `- \`file\` (n findings)` rows a task rendered instead of its findings. */
+function fileRows(markdown: string): string[] {
+  return markdown.split('\n').filter((line) => /^- `[^`]+` \(\d+ findings?\)$/.test(line))
+}
+
+/** The `- \`file\` \`rule\` — message` lines a lockfile task rendered inline. */
+function inlineFindings(markdown: string): string[] {
+  return markdown.split('\n').filter((line) => line.startsWith(`- \`${LOCKFILE}:1\` \``))
+}
+
+/** A report whose one security task is `count` CVEs in the same lockfile. */
+function lockfileCves(count: number): Report {
+  return makeReport({
+    categories: { ...allGraded(), security: { status: 'graded', grade: 'F' } },
+    findings: Array.from({ length: count }, (_, index) => cve(index)),
+  })
+}
 
 /** Task headings, which is how many tasks the rendered file actually has. */
 function headings(markdown: string): string[] {

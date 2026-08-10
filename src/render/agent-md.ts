@@ -615,15 +615,27 @@ function renderTask(task: AgentTask, named: boolean): string {
   return lines.join('\n')
 }
 
-/** Findings inline while the list is short enough to act on; files after that. */
+/**
+ * Findings inline while the list is short enough to act on; files after that.
+ *
+ * A task whose findings all sit in one file lists them however many there are:
+ * the file list would be that one file, which the task title already names, and
+ * a count in place of twenty advisory ids is a number where the work is. Either
+ * way the list stops at {@link FILE_LIST_LIMIT} entries and leaves the rest to
+ * `report.json`.
+ */
 function findingBlock(findings: readonly Finding[]): string[] {
-  if (findings.length <= INLINE_FINDING_LIMIT) {
-    return findings.map((finding) => {
+  if (findings.length <= INLINE_FINDING_LIMIT || fileCount(findings) === 1) {
+    const lines = findings.slice(0, FILE_LIST_LIMIT).map((finding) => {
       const advisory = finding.gradeScope ? '' : ` ${ADVISORY_TAG}`
       const touched =
         'touchedLine' in finding && finding.touchedLine === true ? ` ${TOUCHED_TAG}` : ''
       return `- \`${location(finding)}\` \`${finding.rule}\` — ${finding.message}${advisory}${touched}`
     })
+    if (findings.length > FILE_LIST_LIMIT) {
+      lines.push(`- … ${findings.length - FILE_LIST_LIMIT} more findings in \`report.json\`.`)
+    }
+    return lines
   }
   const counts = new Map<string, number>()
   for (const finding of findings) counts.set(finding.file, (counts.get(finding.file) ?? 0) + 1)
