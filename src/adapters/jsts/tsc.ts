@@ -91,6 +91,24 @@ export const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
   'TS7016', // Could not find a declaration file for module '…'.
 ])
 
+/**
+ * The same fact stated in the message rather than in the code. A general code
+ * carries the environment diagnosis only in its wording — TS2304 is plain
+ * "cannot find name", and only "Try `npm i --save-dev @types/node`" says the
+ * name is a node global we never installed types for.
+ *
+ * This sits *under* {@link DEFAULT_ADVISORY_CODES}, not instead of it: the
+ * codes are TypeScript's stable contract and the wording is not, so a compiler
+ * rewording loses only the diagnostics the codes never named — today's grade —
+ * where a message-only net would let the whole rule lapse. Both are read, and
+ * either one alone is enough to make a diagnostic advisory.
+ *
+ * No `g` flag: `.test` would otherwise carry `lastIndex` between diagnostics
+ * and classify the same message differently depending on emission order, which
+ * is a determinism bug (spec §7).
+ */
+const ADVISORY_MESSAGE = /@types\/|install type definitions/
+
 const SEVERITY_BY_LEVEL: Readonly<Record<string, Severity>> = {
   error: 'error',
   warning: 'warning',
@@ -263,8 +281,9 @@ export function parseDiagnostics(stdout: string): TscDiagnostic[] {
 
 /**
  * Diagnostics → the core's vocabulary. On the repo's own `tsconfig.json`
- * everything is graded; on ours the environment-only codes stay advisory (see
- * {@link DEFAULT_ADVISORY_CODES}).
+ * everything is graded; on ours the environment-only diagnostics stay advisory,
+ * recognized by code ({@link DEFAULT_ADVISORY_CODES}) or by wording
+ * ({@link ADVISORY_MESSAGE}).
  */
 export function toPendingFindings(
   diagnostics: readonly TscDiagnostic[],
@@ -286,7 +305,10 @@ export function toPendingFindings(
       },
       message: diagnostic.message,
       provenance: repoConfig ? ('repo-config' as const) : ('default-config' as const),
-      gradeScope: repoConfig || !DEFAULT_ADVISORY_CODES.has(diagnostic.code),
+      gradeScope:
+        repoConfig ||
+        (!DEFAULT_ADVISORY_CODES.has(diagnostic.code) &&
+          !ADVISORY_MESSAGE.test(diagnostic.message)),
     }))
     .toSorted(byLocation)
 }

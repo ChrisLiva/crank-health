@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
+import {
+  DEFAULT_ADVISORY_CODES,
+  parseDiagnostics,
+  toPendingFindings,
+  tscRunner,
+} from '../src/adapters/jsts/tsc.ts'
 import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext, Detection } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
@@ -59,7 +64,34 @@ describe('toPendingFindings', () => {
     { file: 'src/a.ts', line: 1, column: 1, level: 'error', code: 'TS2307', message: 'no module' },
     { file: 'src/a.ts', line: 3, column: 1, level: 'error', code: 'TS2591', message: 'no @types' },
     { file: 'src/a.ts', line: 4, column: 1, level: 'warning', code: 'TS0001', message: 'w' },
+    {
+      file: 'src/a.ts',
+      line: 5,
+      column: 1,
+      level: 'error',
+      code: 'TS2304',
+      message:
+        "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.",
+    },
+    {
+      file: 'src/a.ts',
+      line: 6,
+      column: 1,
+      level: 'error',
+      code: 'TS2345',
+      message: "Argument of type 'string' is not assignable to parameter of type 'number'.",
+    },
+    { file: 'src/a.ts', line: 7, column: 1, level: 'error', code: 'TS2571', message: '' },
   ]
+
+  /** Rule → `gradeScope`, so no assertion addresses a finding by position. */
+  const gradedByRule = (repoConfig: boolean): Map<string, boolean> =>
+    new Map(
+      toPendingFindings(diagnostics, repoConfig, '/repo').map((finding) => [
+        finding.rule,
+        finding.gradeScope,
+      ]),
+    )
 
   it('maps tsc levels onto the severity vocabulary', () => {
     const severities = new Map(
@@ -102,12 +134,62 @@ describe('toPendingFindings', () => {
     ).toBe(true)
   })
 
+  /**
+   * The code list cannot name every diagnostic that means "a `@types` package is
+   * missing" — TS2304 is plain "cannot find name", and only its message says the
+   * name is a node global. Under our own config that is a fact about
+   * `node_modules`, so the wording is read too.
+   */
+  it('reads a missing @types package out of the message as well as the code', () => {
+    const graded = gradedByRule(false)
+    expect(graded.get('TS2304')).toBe(false)
+    expect(graded.get('TS2345')).toBe(true)
+  })
+
+  it('grades the same @types-worded diagnostic on the repo’s own tsconfig', () => {
+    expect(gradedByRule(true).get('TS2304')).toBe(true)
+  })
+
+  it('reads an empty message as ordinary code, not as an environment fact', () => {
+    expect(gradedByRule(false).get('TS2571')).toBe(true)
+  })
+
+  /**
+   * The message rule sits under the code list, so it can only move a diagnostic
+   * out of grade scope — never back in. Anything still graded is a code the list
+   * does not name.
+   */
+  it('can only add advisories, never restore one to grade scope', () => {
+    for (const finding of toPendingFindings(diagnostics, false, '/repo')) {
+      if (finding.gradeScope) expect(DEFAULT_ADVISORY_CODES.has(finding.rule)).toBe(false)
+    }
+  })
+
+  /**
+   * Determinism (spec §7): the message test carries no state, so the same
+   * wording classifies the same way however many diagnostics precede it. A
+   * `g`-flagged regex would alternate on repeats and make the grade depend on
+   * emission order.
+   */
+  it('classifies repeats of one message identically', () => {
+    const environment = diagnostics.filter((diagnostic) => diagnostic.code === 'TS2304')
+    const repeated = [1, 2, 3].flatMap((line) =>
+      environment.map((diagnostic) => ({ ...diagnostic, line })),
+    )
+    expect(
+      toPendingFindings(repeated, false, '/repo').map((finding) => finding.gradeScope),
+    ).toEqual([false, false, false])
+    expect(toPendingFindings(diagnostics, false, '/repo')).toEqual(
+      toPendingFindings(diagnostics, false, '/repo'),
+    )
+  })
+
   it('sorts by location so identity never depends on tsc’s emission order', () => {
     expect(toPendingFindings(diagnostics.toReversed(), true, '/repo')).toEqual(
       toPendingFindings(diagnostics, true, '/repo'),
     )
     expect(toPendingFindings(diagnostics, true, '/repo').map((f) => f.range.startLine)).toEqual([
-      1, 2, 3, 4,
+      1, 2, 3, 4, 5, 6, 7,
     ])
   })
 })
