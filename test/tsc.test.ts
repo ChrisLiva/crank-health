@@ -69,9 +69,12 @@ describe('toPendingFindings', () => {
       line: 5,
       column: 1,
       level: 'error',
-      code: 'TS2304',
+      code: 'TS2592',
+      // Verbatim from the pinned compiler. TypeScript has one of these per
+      // ambient library and `DEFAULT_ADVISORY_CODES` does not name this one,
+      // so the wording is the only thing that makes it advisory.
       message:
-        "Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.",
+        "Cannot find name '$'. Do you need to install type definitions for jQuery? Try `npm i --save-dev @types/jquery` and then add 'jquery' to the types field in your tsconfig.",
     },
     {
       file: 'src/a.ts',
@@ -79,7 +82,11 @@ describe('toPendingFindings', () => {
       column: 1,
       level: 'error',
       code: 'TS2345',
-      message: "Argument of type 'string' is not assignable to parameter of type 'number'.",
+      // An ordinary assignability error that happens to name a declaration
+      // file: tsc prints fully-qualified `node_modules/@types/…` paths inside
+      // types it has no shorter name for.
+      message:
+        "Argument of type 'import(\"/repo/node_modules/@types/react/index\").ReactNode' is not assignable to parameter of type 'string'.",
     },
     { file: 'src/a.ts', line: 7, column: 1, level: 'error', code: 'TS2571', message: '' },
   ]
@@ -135,19 +142,26 @@ describe('toPendingFindings', () => {
   })
 
   /**
-   * The code list cannot name every diagnostic that means "a `@types` package is
-   * missing" — TS2304 is plain "cannot find name", and only its message says the
-   * name is a node global. Under our own config that is a fact about
-   * `node_modules`, so the wording is read too.
+   * The code list cannot name every diagnostic that means "a `@types` package
+   * is missing" — TypeScript has one per ambient library and TS2592 (jQuery) is
+   * absent from `DEFAULT_ADVISORY_CODES`, so only its message says the missing
+   * name is a library we never installed types for. Under our own config that
+   * is a fact about `node_modules`, so the wording is read too.
+   *
+   * What is read is the *instruction to install* one, not the substring
+   * `@types/`: TS2345 here is an ordinary assignability error whose only
+   * `@types` mention is a path inside a type name, and a path is not an
+   * environment fact. Demoting it would drop a real type error out of the
+   * grade on nothing but where a declaration file happens to live.
    */
   it('reads a missing @types package out of the message as well as the code', () => {
     const graded = gradedByRule(false)
-    expect(graded.get('TS2304')).toBe(false)
+    expect(graded.get('TS2592')).toBe(false)
     expect(graded.get('TS2345')).toBe(true)
   })
 
   it('grades the same @types-worded diagnostic on the repo’s own tsconfig', () => {
-    expect(gradedByRule(true).get('TS2304')).toBe(true)
+    expect(gradedByRule(true).get('TS2592')).toBe(true)
   })
 
   it('reads an empty message as ordinary code, not as an environment fact', () => {
@@ -172,7 +186,7 @@ describe('toPendingFindings', () => {
    * emission order.
    */
   it('classifies repeats of one message identically', () => {
-    const environment = diagnostics.filter((diagnostic) => diagnostic.code === 'TS2304')
+    const environment = diagnostics.filter((diagnostic) => diagnostic.code === 'TS2592')
     const repeated = [1, 2, 3].flatMap((line) =>
       environment.map((diagnostic) => ({ ...diagnostic, line })),
     )

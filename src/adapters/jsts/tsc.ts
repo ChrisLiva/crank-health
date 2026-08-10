@@ -92,10 +92,11 @@ export const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * The same fact stated in the message rather than in the code. A general code
- * carries the environment diagnosis only in its wording — TS2304 is plain
- * "cannot find name", and only "Try `npm i --save-dev @types/node`" says the
- * name is a node global we never installed types for.
+ * The same fact stated in the message rather than in the code. TypeScript has
+ * a "do you need to install type definitions" diagnostic per ambient library
+ * and {@link DEFAULT_ADVISORY_CODES} cannot name them all: TS2592 (jQuery) is
+ * the one it misses today, and only that diagnostic's wording says the missing
+ * name is a library we never installed types for rather than a typo.
  *
  * This sits *under* {@link DEFAULT_ADVISORY_CODES}, not instead of it: the
  * codes are TypeScript's stable contract and the wording is not, so a compiler
@@ -103,11 +104,20 @@ export const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
  * where a message-only net would let the whole rule lapse. Both are read, and
  * either one alone is enough to make a diagnostic advisory.
  *
+ * Both alternatives are *instructions to install*, not the substring `@types/`:
+ * tsc prints fully-qualified `node_modules/@types/…` paths inside ordinary
+ * assignability errors, and a bare-substring net would demote those out of the
+ * grade on nothing but where a declaration file happens to live. The narrower
+ * `npm i --save-dev @types/` is kept rather than dropped, because a lone
+ * `install type definitions` would *be* the wording this rule exists to
+ * outlive — one alternative that is the phrase it guards against is no net at
+ * all. No path can contain either phrase.
+ *
  * No `g` flag: `.test` would otherwise carry `lastIndex` between diagnostics
  * and classify the same message differently depending on emission order, which
  * is a determinism bug (spec §7).
  */
-const ADVISORY_MESSAGE = /@types\/|install type definitions/
+const ADVISORY_MESSAGE = /npm i --save-dev @types\/|install type definitions/
 
 const SEVERITY_BY_LEVEL: Readonly<Record<string, Severity>> = {
   error: 'error',
