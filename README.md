@@ -136,6 +136,9 @@ a project — recorded as `rootShell` in `report.json`, not graded as eight empt
 Workspace globs (npm/pnpm/yarn/uv) corroborate that classification and never decide which projects
 exist, so an unlisted or unbuilt package is still scanned. There is no mode flag: one project
 behaves exactly as it always has, and more than one produces per-project output automatically.
+Hidden directories are not scanned — a repo's `.crank/`, `.next/` or agent scratch directory is
+tooling scope, not its source — with the root `.github/` the one exception, so CI workflows stay in
+scope; each skipped scope is named in `warnings[]`.
 
 Each project is detected, run and graded on its own terms — its own config, its own installed
 binaries, its own KLOC and file-count denominators — with ownership inheriting from ancestors, so a
@@ -251,7 +254,8 @@ written. This is a hard contract, tested on every fixture:
 - Repo-mutating commands (`osv-scanner fix`, `trunk init`, `pre-commit install`, …) are never
   invoked.
 - Discovery is `git ls-files`-based, so `.gitignore` is respected — including by the tools that
-  ignore it natively, which get explicit exclusion flags.
+  ignore it natively, which get explicit exclusion flags — and files under hidden directories are
+  left out, the root `.github/` excepted.
 
 The quick profile never executes your code; it only reads it. `--deep` is the exception, and it says
 so below.
