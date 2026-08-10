@@ -71,20 +71,26 @@ export interface FileScan {
 export async function discoverFiles(repoRoot: string): Promise<FileScan> {
   const listed = await gitListFiles(repoRoot)
 
-  const inScope = [...new Set(listed)].filter(
-    (file) => file.length > 0 && !isExcluded(file) && !isCsharpBuildOutput(file),
-  )
-  const candidates = inScope.filter((file) => !isHiddenScope(file)).toSorted(compareFiles)
+  // One pass decides both sides: a path is a candidate or it is what the
+  // hidden-scope rule dropped. Only that rule's drops are collected — a path a
+  // nearer rule already removed was never this rule's to explain, and naming
+  // `node_modules/` in the warning would tell a repo its dependencies were
+  // skipped for being hidden (spec §8, §10).
+  const kept: string[] = []
+  const hidden: string[] = []
+  for (const file of new Set(listed)) {
+    if (file.length === 0 || isExcluded(file) || isCsharpBuildOutput(file)) continue
+    if (isHiddenScope(file)) hidden.push(file)
+    else kept.push(file)
+  }
+  const candidates = kept.toSorted(compareFiles)
 
   const existing = await mapLimit(candidates, FS_CONCURRENCY, (file) =>
     isRegularFile(repoRoot, file),
   )
   return {
     files: inventoryOf(candidates.filter((_, index) => existing[index] === true)),
-    // Only what the hidden-scope rule dropped: a path a nearer rule already
-    // removed was never this rule's to explain, and naming `node_modules/` here
-    // would tell a repo its dependencies were skipped for being hidden.
-    warnings: scanScopeWarnings(inScope.filter((file) => isHiddenScope(file))),
+    warnings: scanScopeWarnings(hidden),
   }
 }
 
