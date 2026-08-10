@@ -113,6 +113,24 @@ const MONO: RepoContext = {
   projects: partitionProjects(MONO_FILES),
 }
 
+/**
+ * A JS-only sibling of {@link MONO}: the same shape — a root project with
+ * sources of its own and one package — and no Python anywhere in it.
+ */
+const JS_ONLY_FILES: FileInventory = inventoryOf([
+  'package.json',
+  'packages/web/package.json',
+  'packages/web/src/app.ts',
+  'src/root.ts',
+])
+
+const JS_ONLY: RepoContext = {
+  repoRoot: '/repo',
+  files: JS_ONLY_FILES,
+  scratch: SCRATCH,
+  projects: partitionProjects(JS_ONLY_FILES),
+}
+
 /** A language adapter that applies where the *project's* inventory has its language. */
 function languageAdapter(language: Language, runners: readonly ToolRunner[]): LanguageAdapter {
   return {
@@ -196,6 +214,67 @@ describe('runScan planning across projects', () => {
       ['opengrep', 'packages/web'],
     ])
     expect((gitleaks as FakeRunner).calls[0]?.files).toEqual(MONO_FILES.all)
+  })
+
+  /**
+   * The two runners that name their languages, as the `common` adapter carries
+   * them: bandit reads Python, opengrep reads JavaScript, TypeScript and Python.
+   */
+  function declaring(): { bandit: ToolRunner; opengrep: ToolRunner } {
+    return {
+      bandit: {
+        ...fakeRunner('bandit', 'security', async () => ok()),
+        languages: ['python'],
+        complementary: true,
+      },
+      opengrep: {
+        ...fakeRunner('opengrep', 'security', async () => ok()),
+        languages: ['js-ts', 'python'],
+        complementary: true,
+      },
+    }
+  }
+
+  it('runs a runner whose languages the repo has none of once over the whole repo', async () => {
+    const { bandit, opengrep } = declaring()
+
+    const result = await runScan(JS_ONLY, [commonAdapter([bandit, opengrep])])
+
+    // No Python anywhere, so bandit answers about the repo — one row, not one
+    // per package. opengrep's js-ts is here, so it is planned as ever.
+    expect(matrix(result)).toEqual([
+      ['bandit', 'repo'],
+      ['opengrep', '.'],
+      ['opengrep', 'packages/web'],
+    ])
+  })
+
+  it('plans a declaring runner per project when the repo has one of its languages', async () => {
+    const { bandit, opengrep } = declaring()
+
+    const result = await runScan(MONO, [commonAdapter([bandit, opengrep])])
+
+    // `packages/api` is the only project with Python in it, and the declaration
+    // changes nothing: the repo has the language, so every project is asked.
+    expect(matrix(result)).toEqual([
+      ['bandit', '.'],
+      ['bandit', 'packages/api'],
+      ['bandit', 'packages/web'],
+      ['opengrep', '.'],
+      ['opengrep', 'packages/api'],
+      ['opengrep', 'packages/web'],
+    ])
+  })
+
+  it('plans nothing for a declaring runner whose adapter applies to no project', async () => {
+    const { bandit } = declaring()
+
+    // The Python adapter detects on each project's own inventory, and no
+    // project here has Python — so the absence branch has nobody to speak for,
+    // exactly as the repo-scoped branch above it has none.
+    const result = await runScan(JS_ONLY, [languageAdapter('python', [bandit])])
+
+    expect(matrix(result)).toEqual([])
   })
 
   /** Spec §1's exclusive branches, decided per project rather than per repo. */

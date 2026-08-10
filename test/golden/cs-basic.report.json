@@ -20,7 +20,7 @@
   "categories": {
     "security": {
       "status": "not-assessed",
-      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; no JavaScript, TypeScript or Python files, so opengrep assessed nothing; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
     },
     "types": {
       "status": "not-assessed",
@@ -77,7 +77,7 @@
       "categories": {
         "security": {
           "status": "not-assessed",
-          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+          "reason": "no tool available for this category"
         },
         "types": {
           "status": "not-assessed",
@@ -124,7 +124,8 @@
       "tool": "bandit",
       "category": "security",
       "scope": "common",
-      "project": ".",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -153,14 +154,15 @@
       "tool": "opengrep",
       "category": "security",
       "scope": "common",
-      "project": ".",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
       "pinned": "1.26.0",
       "detection": null,
       "state": "not-available",
-      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "reason": "no JavaScript, TypeScript or Python files, so opengrep assessed nothing",
       "raw": []
     },
     {

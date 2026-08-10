@@ -478,6 +478,15 @@ function unitsFor(
     return targets.length === 0 ? [] : [{ project: wholeRepo, repoWide: true, rollupOnly: false }]
   }
 
+  // A runner whose languages the repo has none of answers about the repo, not
+  // about each project: N identical "nothing to scan" rows say it N times.
+  if (
+    runner.languages !== undefined &&
+    runner.languages.every((language) => wholeRepo.files.byLanguage[language].length === 0)
+  ) {
+    return targets.length === 0 ? [] : [{ project: wholeRepo, repoWide: true, rollupOnly: false }]
+  }
+
   const perProject = targets.map((project) => ({
     project,
     repoWide: false,

@@ -37,7 +37,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
+| security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 7 functions over cognitive complexity 15 (0.0%). |
@@ -56,7 +56,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
+| security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 12 functions over cognitive complexity 15 (0.0%). 6 advisory findings did not count toward the grade. |
@@ -76,7 +76,6 @@ Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or se
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files in this repo, so bandit assessed nothing |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files in this repo, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |

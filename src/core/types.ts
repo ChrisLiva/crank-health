@@ -410,6 +410,18 @@ export interface ToolRunner {
    */
   readonly repoScoped?: boolean
   /**
+   * Set when this runner only has meaning for the languages it names — bandit
+   * reads Python, opengrep reads JavaScript, TypeScript and Python. A repo
+   * holding none of them gets one repo-spanning run saying so, rather than the
+   * same "nothing to scan" sentence once per project: that a repo has no Python
+   * is a fact about the repo, not about each of its packages.
+   *
+   * A repo holding one of them anywhere is planned per project exactly as an
+   * undeclared runner is — the package without Python beside the package with it
+   * still gets its own answer.
+   */
+  readonly languages?: readonly Language[]
+  /**
    * Set when this runner measures something whose whole-repo value cannot be
    * assembled from its per-project ones — duplication being the case: a clone
    * *between* two packages is in neither package's measurement. Such a runner is

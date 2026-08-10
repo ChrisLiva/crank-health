@@ -165,6 +165,31 @@ describe('quick scan of the js-basic fixture', () => {
     expect(findings.every((finding) => finding.provenance === 'default-config')).toBe(true)
   })
 
+  /**
+   * That this repo has no Python is a fact about the repo, not about each of
+   * its packages: bandit is asked once, over the repo, and the row says what it
+   * did not scan rather than repeating that sentence per project.
+   */
+  it('asks bandit once, about the repo, when the repo has no Python at all', () => {
+    expect(
+      parse(json)
+        .tools.filter((tool) => tool.tool === 'bandit')
+        .map((tool) => ({
+          project: tool.project,
+          repoWide: tool.repoWide,
+          state: tool.state,
+          reason: tool.reason,
+        })),
+    ).toEqual([
+      {
+        project: 'repo',
+        repoWide: true,
+        state: 'not-available',
+        reason: 'no Python files in this repo, so bandit assessed nothing',
+      },
+    ])
+  })
+
   it('gates react-doctor out of a repo with no React, without costing lint its grade', () => {
     const report = parse(json)
     // The manifest gate answers before anything runs: no version was ever
@@ -987,6 +1012,10 @@ interface ReportShape {
   readonly metrics: Record<string, Record<string, number>>
   readonly tools: {
     readonly tool: string
+    readonly project: string
+    readonly repoWide?: boolean
+    readonly state: string
+    readonly reason: string | null
     readonly execution: string
     readonly provenance: string
     readonly version: string | null

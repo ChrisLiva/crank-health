@@ -4,6 +4,7 @@ import { languageOf } from '../../core/discover.ts'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
+  Language,
   PendingFinding,
   RunContext,
   Severity,
@@ -54,6 +55,14 @@ export const OPENGREP: SystemToolSpec = {
   install: 'brew install opengrep, or see https://github.com/opengrep/opengrep#installation',
 }
 
+/**
+ * The languages the bundled ruleset is written for — the one place that answers
+ * "can opengrep read this file?", for the runner's declaration and for the file
+ * list a run is handed alike. A `.cs` file is neither, so pointing opengrep at
+ * one would be a scan with no rule that could match.
+ */
+const OPENGREP_LANGUAGES: readonly Language[] = ['js-ts', 'python']
+
 /** Where the bundled ruleset is materialized, under the scratch dir. */
 const RULES_DIRECTORY = 'opengrep'
 const RULES_FILE = 'crank-health-rules.yaml'
@@ -77,6 +86,9 @@ export const opengrepRunner: ToolRunner = {
   // A SAST engine, a secrets scanner and a dependency scanner do not substitute
   // for one another; see `ToolRunner.complementary`.
   complementary: true,
+  // A repo with none of these is told so once, about itself; see
+  // `ToolRunner.languages`.
+  languages: OPENGREP_LANGUAGES,
   // Always our ruleset, so always `default-config`. A repo that carries its own
   // semgrep/opengrep rules keeps running them itself — adopting them here would
   // mean grading a repo against rules crank-health never validated, and is the
@@ -86,7 +98,10 @@ export const opengrepRunner: ToolRunner = {
 }
 
 async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
-  const sources = ctx.files.filter((file) => languageOf(file) !== undefined)
+  const sources = ctx.files.filter((file) => {
+    const language = languageOf(file)
+    return language !== undefined && OPENGREP_LANGUAGES.includes(language)
+  })
   if (sources.length === 0) {
     return {
       state: 'not-available',

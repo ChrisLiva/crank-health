@@ -118,6 +118,9 @@ export const banditRunner: ToolRunner = {
   // Python SAST does not substitute for a secrets or dependency scan; see
   // `ToolRunner.complementary`.
   complementary: true,
+  // A repo with no Python is told `NOTHING_TO_SCAN` once, about itself, rather
+  // than once per package; see `ToolRunner.languages`.
+  languages: ['python'],
   detect: (ctx: DetectContext): Promise<Detection | null> =>
     detectPythonTool(ctx, {
       configFiles: BANDIT_CONFIG_FILES,

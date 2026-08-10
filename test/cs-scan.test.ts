@@ -7,7 +7,7 @@ import { QUICK_MODE_DEEP_REASON } from '../src/core/orchestrator.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import type { Category, Finding } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
-import { runHealthScan } from '../src/run.ts'
+import { REPO_SCOPED_REASON, runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { pathFarm } from './support/path-farm.ts'
@@ -125,6 +125,79 @@ describe('quick scan of the cs-basic fixture', () => {
     expect(csharp.map((tool) => tool.tool)).toEqual(['dotnet-format'])
   })
 
+  /**
+   * opengrep's ruleset reads JavaScript, TypeScript and Python, so a C#-only
+   * tree gives it nothing to scan — and it says so, whatever this machine has
+   * installed, instead of pointing a ruleless scan at the `.cs` files.
+   */
+  it('gives opengrep nothing to scan on a C#-only tree, and asks it once', () => {
+    expect(toolRows('opengrep')).toEqual([
+      {
+        project: 'repo',
+        repoWide: true,
+        state: 'not-available',
+        reason: 'no JavaScript, TypeScript or Python files, so opengrep assessed nothing',
+      },
+    ])
+  })
+
+  /** bandit's half of the same rule: no Python here either. */
+  it('gives bandit nothing to scan on a C#-only tree, and asks it once', () => {
+    expect(toolRows('bandit')).toEqual([
+      {
+        project: 'repo',
+        repoWide: true,
+        state: 'not-available',
+        reason: 'no Python files in this repo, so bandit assessed nothing',
+      },
+    ])
+  })
+
+  /**
+   * Every security runner here spans the repo — neither of the two that name
+   * their languages finds one in this tree — so the project has no security run
+   * of its own and never gets a grade for one.
+   *
+   * Which reason it carries is a fact about the machine, not about the repo:
+   * the repo-spanning scanners are release binaries this one may not have, and
+   * `repo-scoped` is what the repo having *graded* the category looks like.
+   */
+  it('gives the project no security state its own runs did not earn', () => {
+    const security = scan.report.projects[0]?.categories.security
+    expect(security?.status).toBe('not-assessed')
+
+    const spanningGraded = parse(json).tools.some(
+      (tool) => tool.repoWide === true && tool.category === 'security' && tool.state === 'ok',
+    )
+    expect(security).toMatchObject(
+      spanningGraded
+        ? { reason: REPO_SCOPED_REASON }
+        : { reason: 'no tool available for this category' },
+    )
+  })
+
+  /**
+   * The rollup is still told why security has no grade, runner by runner: one
+   * clause per security runner, in the order the report carries them. Asserted
+   * per clause rather than as one string, so a reword in another runner's
+   * message cannot pass for this one.
+   */
+  it.runIf(GOLDEN_TOOLCHAIN)('names every security runner in the rollup’s reason', () => {
+    const security = parse(json).categories.security
+    expect(security?.status).toBe('not-assessed')
+    const reason = security?.reason ?? ''
+    const clauses = [
+      'gitleaks is not on PATH',
+      'no JavaScript, TypeScript or Python files, so opengrep assessed nothing',
+      'no GitHub Actions workflows or composite actions, so zizmor assessed nothing',
+      'no Python files in this repo, so bandit assessed nothing',
+      'osv-scanner is not on PATH',
+    ]
+    for (const clause of clauses) expect(reason).toContain(clause)
+    const positions = clauses.map((clause) => reason.indexOf(clause))
+    expect(positions).toEqual([...positions].toSorted((a, b) => a - b))
+  })
+
   it('counts the .cs findings into the per-language breakdown', () => {
     expect(parse(json).languages).toEqual({ csharp: { duplication: 2, format: 1 } })
   })
@@ -185,6 +258,18 @@ describe('quick scan of the cs-basic fixture', () => {
     },
     SCAN_TIMEOUT_MS,
   )
+
+  /** One tool's `tools[]` rows, in the fields planning decides. */
+  function toolRows(tool: string) {
+    return parse(json)
+      .tools.filter((entry) => entry.tool === tool)
+      .map((entry) => ({
+        project: entry.project,
+        repoWide: entry.repoWide,
+        state: entry.state,
+        reason: entry.reason,
+      }))
+  }
 })
 
 /**
@@ -501,6 +586,9 @@ interface ReportShape {
   readonly projects: readonly { readonly path: string; readonly languages: readonly string[] }[]
   readonly tools: {
     readonly tool: string
+    readonly category: string
+    readonly project: string
+    readonly repoWide?: boolean
     readonly scope: string
     readonly state: string
     readonly reason: string | null

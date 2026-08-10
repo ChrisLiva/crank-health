@@ -83,7 +83,7 @@
       "categories": {
         "security": {
           "status": "not-assessed",
-          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected"
         },
         "types": {
           "status": "not-assessed",
@@ -149,7 +149,7 @@
       "categories": {
         "security": {
           "status": "not-assessed",
-          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected"
         },
         "types": {
           "status": "not-assessed",
@@ -226,21 +226,8 @@
       "tool": "bandit",
       "category": "security",
       "scope": "common",
-      "project": "packages/api",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": null,
-      "pinned": "1.9.4",
-      "detection": null,
-      "state": "not-available",
-      "reason": "no Python files in this repo, so bandit assessed nothing",
-      "raw": []
-    },
-    {
-      "tool": "bandit",
-      "category": "security",
-      "scope": "common",
-      "project": "packages/web",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,

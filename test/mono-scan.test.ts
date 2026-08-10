@@ -379,6 +379,46 @@ describe('quick scan of the mono-js fixture', () => {
     expect(await fixture.status()).toBe('')
   })
 
+  /**
+   * Neither package holds Python and neither does the workspace around them, so
+   * that is one fact about the repo rather than two about its packages: bandit
+   * is asked once, over the repo, and says so once.
+   */
+  it('asks bandit once about a workspace with no Python in it', () => {
+    expect(
+      scan.report.tools
+        .filter((tool) => tool.tool === 'bandit')
+        .map((tool) => ({
+          project: tool.project,
+          repoWide: tool.repoWide,
+          state: tool.state,
+          reason: tool.reason,
+        })),
+    ).toEqual([
+      {
+        project: 'repo',
+        repoWide: true,
+        state: 'not-available',
+        reason: 'no Python files in this repo, so bandit assessed nothing',
+      },
+    ])
+  })
+
+  /**
+   * And no package is told about it. Which reason each package's security state
+   * carries is a fact about this machine — the repo-spanning scanners are
+   * release binaries it may not have — but bandit's sentence is not among them
+   * either way, because bandit was never asked about a package.
+   */
+  it('keeps bandit’s sentence out of every package’s security reason', () => {
+    for (const project of scan.report.projects) {
+      expect(project.categories.security).toMatchObject({ status: 'not-assessed' })
+      expect(project.categories.security).not.toMatchObject({
+        reason: expect.stringContaining('bandit') as unknown as string,
+      })
+    }
+  })
+
   function categories(path: string) {
     return scan.report.projects.find((project) => project.path === path)?.categories
   }
