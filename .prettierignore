@@ -5,3 +5,5 @@ package-lock.json
 test/fixtures/
 test/captured/
 test/golden/
+.claude/
+.crank/
