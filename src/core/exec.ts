@@ -81,6 +81,18 @@ export function ephemeralCommand(
  * `uvx --from <dist>==<version> <command>` is the form for the other case, and
  * is what `binary` selects.
  *
+ * `--quiet` is a determinism flag, not a cosmetic one (spec §7). uv narrates
+ * the install it does on a cold cache — `Downloading pygments (1.2MiB)`,
+ * `Installed 28 packages in 25ms` — and says nothing on every run afterwards,
+ * so without it the same commit scanned twice on one machine wrote a
+ * `<tool>.stderr.txt` of evidence the first time and none the second. Not even
+ * stable between two cold runs: `Downloaded` is printed in completion order.
+ * It silences uv's own progress only — the tool's stderr passes through
+ * untouched, and so do uv's errors: the two {@link OFFLINE_MARKERS} wordings
+ * verified against `--quiet` are `No solution found when resolving tool
+ * dependencies` (an unsatisfiable pin) and the `network was disabled` hint
+ * under `UV_OFFLINE=1`.
+ *
  * @param tool PyPI distribution name from the manifest
  * @param binary the command inside that distribution, when it differs
  */
@@ -93,8 +105,8 @@ export function uvxCommand(
     command: 'uvx',
     args:
       binary === undefined
-        ? [pinnedPythonSpec(tool), ...args]
-        : ['--from', `${tool}==${pinnedPythonVersion(tool)}`, binary, ...args],
+        ? ['--quiet', pinnedPythonSpec(tool), ...args]
+        : ['--quiet', '--from', `${tool}==${pinnedPythonVersion(tool)}`, binary, ...args],
     ephemeral: 'uvx',
   }
 }
@@ -111,6 +123,22 @@ export function uvxCommand(
  * of dnx's own (`--source`, `--version`, `--prerelease`, …) never reaches dnx's
  * parser.
  *
+ * `-v quiet` is the .NET side's determinism flag (spec §7), though it bites
+ * differently from uv's `--quiet`. On a cold NuGet cache dnx prints `Skipping
+ * NuGet package signature verification.` on *stdout*, ahead of the tool's own
+ * output, and prints nothing once the package is cached. `roslynator.ts` stages
+ * that stream unconditionally, so no evidence file appears and disappears the
+ * way uv's did — what moves is the staged file's *contents*, and the failure
+ * reason at `roslynator.ts:267`, which falls back to `firstLine(stdout)` when
+ * stderr is empty and would otherwise quote NuGet's line as the tool's.
+ *
+ * It is MSBuild's verbosity floor rather than a filter for that one line, so
+ * what matters is what survives it: an unreachable feed still reaches stderr as
+ * `Unable to load the service index` ({@link OFFLINE_MARKERS}), and an
+ * unresolvable pin still reaches it as `is not found in NuGet feeds` — which
+ * `roslynator.ts` classifies itself, deliberately outside those markers. It
+ * sits before the `--` because it is dnx's own flag, not the tool's.
+ *
  * @param tool NuGet tool-package id from the manifest
  */
 export function dnxCommand(tool: PinnedDotnetTool, args: readonly string[]): ToolCommand {
@@ -121,6 +149,8 @@ export function dnxCommand(tool: PinnedDotnetTool, args: readonly string[]): Too
       pinnedDotnetSpec(tool),
       '--source',
       'https://api.nuget.org/v3/index.json',
+      '-v',
+      'quiet',
       '--',
       ...args,
     ],

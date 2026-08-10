@@ -11,6 +11,7 @@ import {
   uvxCommand,
   writeScratchRaw,
 } from '../src/core/exec.ts'
+import type { ToolCommand } from '../src/core/exec.ts'
 import { pinnedDotnetVersion, verifiedRepoVersion, verifiedVersion } from '../src/manifest.ts'
 
 /**
@@ -84,7 +85,7 @@ describe('uvxCommand', () => {
   it('pins an exact version of a Python tool the same way', () => {
     expect(uvxCommand('ruff', ['check'])).toEqual({
       command: 'uvx',
-      args: ['ruff@0.16.1', 'check'],
+      args: ['--quiet', 'ruff@0.16.1', 'check'],
       ephemeral: 'uvx',
     })
   })
@@ -93,7 +94,7 @@ describe('uvxCommand', () => {
   it('names the command explicitly when it differs from the distribution', () => {
     expect(uvxCommand('ruff', ['--version'], 'ruff-lsp')).toEqual({
       command: 'uvx',
-      args: ['--from', 'ruff==0.16.1', 'ruff-lsp', '--version'],
+      args: ['--quiet', '--from', 'ruff==0.16.1', 'ruff-lsp', '--version'],
       ephemeral: 'uvx',
     })
   })
@@ -142,6 +143,8 @@ describe('dnxCommand', () => {
         'roslynator.dotnet.cli@0.12.0',
         '--source',
         'https://api.nuget.org/v3/index.json',
+        '-v',
+        'quiet',
         '--',
         'find-symbol',
       ],
@@ -228,6 +231,61 @@ describe('dnx classification', () => {
     expect(execution.exitCode).toBe(1)
     expect(execution.failure).toBeUndefined()
   })
+})
+
+/**
+ * A cold cache must not change a report. Both fetchers narrate the install they
+ * do the first time and say nothing on every run afterwards, so the same commit
+ * scanned twice on one machine staged evidence the first time and not the
+ * second — the determinism contract (spec §7), broken in a way a warm machine
+ * can never reproduce. Measured before the flags went in: a cold-cache scan of
+ * `test/fixtures/py-basic` produced six `<tool>.stderr.txt` files that the
+ * second scan did not.
+ *
+ * Each fetcher's own switch does this rather than a filter over its output: a
+ * pattern that has to keep matching uv's wording is a filter that can go
+ * quietly dead, and nothing running on a warm machine would notice.
+ */
+describe('cold-cache quieting', () => {
+  /**
+   * The property itself, not the flag that implements it — so a cold cache is
+   * forced (`UV_CACHE_DIR` into a fresh directory, which `ExecOptions.env`
+   * passes through) and the unquieted command is run beside it as the control.
+   * Without the control this test would pass on a machine where uv happened to
+   * be silent for some other reason.
+   *
+   * Downloads the pinned ruff twice, once per cache, hence the budget.
+   *
+   * dnx has no twin here: its cold-cache line is pinned by the command-shape
+   * assertion in `dnxCommand` above, because forcing a cold NuGet cache means
+   * re-fetching the SDK's whole restore graph for one line of output.
+   */
+  it('leaves a cold uv cache silent, where the same command unquieted narrates', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'crank-cold-'))
+    try {
+      const coldRun = async (command: ToolCommand, cache: string) =>
+        execTool(command, {
+          cwd: base,
+          timeoutMs: 240_000,
+          env: { UV_CACHE_DIR: join(base, cache) },
+        })
+
+      const quieted = uvxCommand('ruff', ['--version'])
+      const unquieted = { ...quieted, args: quieted.args.filter((arg) => arg !== '--quiet') }
+
+      const narrating = await coldRun(unquieted, 'loud')
+      const silent = await coldRun(quieted, 'quiet')
+
+      // The control: a cold cache really does narrate, so the assertion below
+      // is about the flag rather than about a cache that was warm all along.
+      expect(narrating.stderr).not.toBe('')
+      expect(silent.stderr).toBe('')
+      // And the silence costs nothing the tool said.
+      expect(silent.stdout).toBe(narrating.stdout)
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
+  }, 300_000)
 })
 
 describe('the dotnet pins', () => {

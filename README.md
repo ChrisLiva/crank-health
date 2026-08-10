@@ -339,9 +339,10 @@ removed is labeled as such — so deleting a package never reads as the best wor
 
 Same crank-health version + same commit + same repo toolchain ⇒ byte-identical `report.json`, apart
 from the `timings` block and the repo's absolute path. Every ephemeral tool is pinned to an exact
-version in a per-release manifest (`npx --yes oxlint@1.77.0`, `uvx ruff@0.16.1`) — never `@latest`,
-never a range. Repo-owned tools run at your installed version, and every resolved version is
-recorded in the report. No AI, no sampling, stable sort everywhere.
+version in a per-release manifest (`npx --yes oxlint@1.77.0`, `uvx --quiet ruff@0.16.1`) — never
+`@latest`, never a range. Repo-owned tools run at your installed version, and every resolved version
+is recorded in the report. The fetchers are told to stay quiet, so the first run on a cold tool
+cache records the same evidence as every run after it. No AI, no sampling, stable sort everywhere.
 
 ## Platform support
 

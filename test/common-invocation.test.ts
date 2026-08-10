@@ -398,8 +398,9 @@ describe('zero footprint, in the arguments', () => {
 
   /**
    * The exact pin and the exact feed are `dnxCommand`'s (spec §6): `-y`, the
-   * `id@version` form, `--source` nuget.org, and the `--` that keeps every
-   * tool argument out of dnx's own parser.
+   * `id@version` form, `--source` nuget.org, `-v quiet` so a cold NuGet cache
+   * cannot narrate itself into this runner's stdout, and the `--` that keeps
+   * every tool argument out of dnx's own parser.
    */
   it('wraps the roslynator tail in the pinned, nuget.org-locked dnx form', () => {
     const tail = roslynatorInvocationArgs(join(REPO, 'App.csproj'), join(SCRATCH, 'roslynator'))
@@ -407,14 +408,16 @@ describe('zero footprint, in the arguments', () => {
 
     expect(command.command).toBe('dnx')
     expect(command.ephemeral).toBe('dnx')
-    expect(command.args.slice(0, 5)).toEqual([
+    expect(command.args.slice(0, 7)).toEqual([
       '-y',
       'roslynator.dotnet.cli@0.12.0',
       '--source',
       'https://api.nuget.org/v3/index.json',
+      '-v',
+      'quiet',
       '--',
     ])
-    expect(command.args.slice(5)).toEqual([...tail])
+    expect(command.args.slice(7)).toEqual([...tail])
   })
 
   /**
