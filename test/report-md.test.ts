@@ -559,3 +559,112 @@ describe('renderReportMarkdown projects', () => {
     )
   })
 })
+
+/**
+ * A `--only` run (spec §9): the seven categories nobody asked about are one
+ * sentence, not seven table rows and seven "not assessed" sections. The
+ * categories a run *did* ask about keep everything they had, degraded state and
+ * reason included — that is the difference between "nobody looked" and "nothing
+ * to measure".
+ */
+describe('renderReportMarkdown under --only', () => {
+  const NOTE =
+    'Not assessed: not selected by `--only` — security, types, dead code, complexity, ' +
+    'duplication, format, test quality'
+
+  const report = makeReport({
+    selected: ['lint'],
+    categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'B' } },
+  })
+  const markdown = renderReportMarkdown(report)
+
+  it('grades only the categories the run was asked about', () => {
+    expect(gradeRows(section(markdown, '## Grades'))).toEqual([
+      '| lint | B | Nothing counted toward the grade. |',
+    ])
+  })
+
+  it('gives the categories it left out no section of their own', () => {
+    expect(categoryHeadings(markdown)).toEqual(['## lint — B'])
+  })
+
+  it('names them once, in one line, in place of their rows', () => {
+    expect(markdown.split('\n').filter((line) => line === NOTE)).toEqual([NOTE])
+  })
+
+  it('puts that line under the grades table and above the scan notes', () => {
+    const noted = renderReportMarkdown(
+      makeReport({
+        selected: ['lint'],
+        categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'B' } },
+        warnings: ['oxlint: graded lint on its default config'],
+      }),
+    )
+    expect(noted.indexOf(NOTE)).toBeGreaterThan(noted.indexOf('| lint | B |'))
+    expect(noted.indexOf(NOTE)).toBeLessThan(noted.indexOf('**Scan notes.**'))
+  })
+
+  it('leaves the same categories out of every project’s table', () => {
+    const mono = renderReportMarkdown(
+      makeReport({
+        selected: ['lint'],
+        categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'B' } },
+        projects: [
+          makeProjectScan({
+            project: projectAt('packages/web'),
+            categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'F' } },
+          }),
+          makeProjectScan({
+            project: projectAt('packages/api'),
+            categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'A' } },
+          }),
+        ],
+      }),
+    )
+    expect(gradeRows(projectBlock(mono, '### packages/web'))).toEqual([
+      '| lint | F | Nothing counted toward the grade. |',
+    ])
+    expect(gradeRows(projectBlock(mono, '### packages/api'))).toEqual([
+      '| lint | A | Nothing counted toward the grade. |',
+    ])
+  })
+
+  it('says nothing about --only when every category was selected', () => {
+    const all = renderReportMarkdown(makeReport({ categories: allGraded() }))
+    expect(all).not.toContain('not selected by `--only`')
+    expect(categoryHeadings(all)).toHaveLength(CATEGORIES.length)
+  })
+
+  /**
+   * A category nothing could assess is not a category nobody asked about: it
+   * keeps its row, its section and the reason it gives, verbatim.
+   */
+  it('keeps a selected category nothing assessed, reason and all', () => {
+    const deferred = renderReportMarkdown(
+      makeReport({
+        categories: {
+          ...allGraded(),
+          'test-quality': { status: 'not-assessed', reason: 'not assessed — run `--deep`' },
+        },
+      }),
+    )
+    expect(deferred).toContain('## test quality — not assessed')
+    expect(deferred).toContain('Not graded: not assessed — run `--deep`')
+    expect(gradeRows(section(deferred, '## Grades'))).toContain(
+      '| test quality | not assessed | not assessed — run `--deep` |',
+    )
+  })
+})
+
+/** The data rows of the grades table inside `block`, header and separator dropped. */
+function gradeRows(block: string): string[] {
+  const [, rest = ''] = block.split('| Category | Grade | Basis |\n')
+  const [body = ''] = rest.split('\n\n')
+  return body.split('\n').filter((line) => !line.startsWith('| --- |'))
+}
+
+/** Every `## <category> — <state>` heading, in the order the report prints them. */
+function categoryHeadings(markdown: string): string[] {
+  const headings = CATEGORIES.map((category) => `## ${CATEGORY_LABELS[category]} — `)
+  return markdown.split('\n').filter((line) => headings.some((heading) => line.startsWith(heading)))
+}

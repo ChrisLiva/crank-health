@@ -3,7 +3,7 @@ import type { RunRecord } from '../src/core/orchestrator.ts'
 import { sortFindings } from '../src/core/orchestrator.ts'
 import type { CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
-import { collapseToolRows } from '../src/render/display.ts'
+import { collapseToolRows, notSelectedNote, unselectedCategories } from '../src/render/display.ts'
 import type { ReportTool } from '../src/render/json.ts'
 import { buildReport, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
@@ -47,6 +47,16 @@ describe('buildReport', () => {
       status: 'not-assessed',
       reason: 'no tool available for this category',
     })
+  })
+
+  /**
+   * `--only` is a rendering question, not a data one: the contract still
+   * answers for all eight categories, and says which ones were asked about.
+   */
+  it('still reports all eight states under --only, and which were selected', () => {
+    const report = buildReport(input({ selected: ['lint'] }))
+    expect(Object.keys(report.categories)).toEqual([...CATEGORIES])
+    expect(report.selected).toEqual(['lint'])
   })
 
   it('rebuilds findings with a fixed key order, whatever the adapter used', () => {
@@ -511,6 +521,60 @@ describe('collapseToolRows', () => {
   })
 })
 
+/**
+ * What `--only` left out, as the renderers ask it: read off `report.selected`,
+ * never off the reason the orchestrator wrote into the states it skipped.
+ */
+describe('unselectedCategories', () => {
+  it('names the categories --only left out, in priority order', () => {
+    expect(unselectedCategories(buildReport(input({ selected: ['lint'] })))).toEqual([
+      'security',
+      'types',
+      'dead-code',
+      'complexity',
+      'duplication',
+      'format',
+      'test-quality',
+    ])
+  })
+
+  it('names none when every category was selected', () => {
+    expect(unselectedCategories(buildReport(input()))).toEqual([])
+  })
+
+  /**
+   * Structural, not textual: a state whose reason says something else is still
+   * unselected, and one that only *reads* like a skip is not.
+   */
+  it('reads the selection, not the reason a category went ungraded', () => {
+    const report = buildReport(
+      input({
+        selected: ['lint', 'security'],
+        categories: {
+          ...allNotAssessed(),
+          security: { status: 'not-assessed', reason: 'not selected by --only' },
+        },
+      }),
+    )
+    expect(unselectedCategories(report)).not.toContain('security')
+  })
+
+  it('names them under one fixed lead, in the same order', () => {
+    expect(notSelectedNote(unselectedCategories(buildReport(input({ selected: ['lint'] }))))).toBe(
+      'Not assessed: not selected by `--only` — security, types, dead code, complexity, ' +
+        'duplication, format, test quality',
+    )
+  })
+
+  /** The `--only types` selection of the same rule: a different sentence. */
+  it('names lint among them when lint is the one left out', () => {
+    expect(notSelectedNote(unselectedCategories(buildReport(input({ selected: ['types'] }))))).toBe(
+      'Not assessed: not selected by `--only` — security, dead code, complexity, ' +
+        'duplication, lint, format, test quality',
+    )
+  })
+})
+
 describe('renderTerminal', () => {
   const report = buildReport(
     input({
@@ -614,6 +678,57 @@ describe('renderTerminal', () => {
     expect(renderTerminal(report, paths, { color: true })).toContain('\u001B[')
   })
 })
+
+/**
+ * The glance under `--only` (spec §9): the categories nobody asked about are
+ * one line under the ones that were, not seven rows of "not assessed" pushing
+ * the findings off the screen.
+ */
+describe('renderTerminal under --only', () => {
+  const paths = { markdown: '/out/report.md', agent: '/out/agent.md', json: '/out/report.json' }
+  const NOTE =
+    '  Not assessed: not selected by `--only` — security, types, dead code, complexity, ' +
+    'duplication, format, test quality'
+
+  const onlyLint = buildReport(
+    input({
+      selected: ['lint'],
+      categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'B' } },
+    }),
+  )
+
+  it('lists the selected categories and names the rest in one line under them', () => {
+    const block = categoryBlock(renderTerminal(onlyLint, paths, { color: false }))
+    expect(block).toHaveLength(2)
+    expect(block.at(0)).toMatch(/^ {2}lint\s+B\s+no findings$/)
+    expect(block.at(-1)).toBe(NOTE)
+  })
+
+  /** Dimmed, with the indent inside the dim: the {@link rootShellNote} precedent. */
+  it('dims that line, and emits no escape sequences when colour is off', () => {
+    expect(renderTerminal(onlyLint, paths, { color: false })).not.toContain(CSI)
+    expect(renderTerminal(onlyLint, paths, { color: true })).toContain(`${CSI}2m${NOTE}${CSI}22m`)
+  })
+
+  it('says nothing about --only when every category was selected', () => {
+    const text = renderTerminal(buildReport(input({ categories: allGraded() })), paths, {
+      color: false,
+    })
+    expect(categoryBlock(text)).toHaveLength(CATEGORIES.length)
+    expect(text).not.toContain('not selected by `--only`')
+  })
+})
+
+/** The ANSI control sequence introducer, the mark of a coloured cell. */
+const CSI = `${String.fromCodePoint(27)}[`
+
+/** The category block of the glance: the lines between the header and the next blank. */
+function categoryBlock(text: string): string[] {
+  const lines = text.split('\n')
+  const start = lines.findIndex((line) => line.includes('crank-health')) + 2
+  const end = lines.indexOf('', start)
+  return lines.slice(start, end)
+}
 
 /**
  * The glance in a monorepo: the rollup as it always was, then the projects

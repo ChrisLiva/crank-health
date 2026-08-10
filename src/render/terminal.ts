@@ -6,11 +6,13 @@ import {
   collapseToolRows,
   hasProjectMovement,
   movedCategories,
+  notSelectedNote,
   percent,
   plural,
   projectLabel,
   rootShellNote,
   stateLabel,
+  unselectedCategories,
 } from './display.ts'
 import type { Report, ReportDelta, ReportProject, ReportProjectMovement } from './json.ts'
 
@@ -53,9 +55,14 @@ export function renderTerminal(
   const limit = options.maxFindings ?? DEFAULT_MAX_FINDINGS
   const lines: string[] = ['', header(report, color), '']
 
+  // The categories `--only` left out are one line under the ones it kept, not a
+  // line each: rows saying "nobody asked" are what a `--only` run came here to
+  // skip past (spec §9).
+  const omit = unselectedCategories(report)
   for (const category of CATEGORIES) {
-    lines.push(categoryLine(report, category, color))
+    if (!omit.includes(category)) lines.push(categoryLine(report, category, color))
   }
+  if (omit.length > 0) lines.push(color.dim(`  ${notSelectedNote(omit)}`))
 
   const projects = projectLines(report, color)
   if (projects.length > 0) lines.push('', ...projects)

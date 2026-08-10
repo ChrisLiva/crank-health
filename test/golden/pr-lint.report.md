@@ -6,14 +6,9 @@
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | not selected by --only |
-| types | not assessed | not selected by --only |
-| dead code | not assessed | not selected by --only |
-| complexity | not assessed | not selected by --only |
-| duplication | not assessed | not selected by --only |
 | lint | F | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). This change: 1 new, 1 resolved. |
-| format | not assessed | not selected by --only |
-| test quality | not assessed | not selected by --only |
+
+Not assessed: not selected by `--only` — security, types, dead code, complexity, duplication, format, test quality
 
 ## PR delta
 
@@ -38,26 +33,6 @@ Against `main`, merge-base `<short>`. 1 new finding (1 on lines this change touc
 
 - error `src/fixed.js:2` `eslint(no-const-assign)` — Unexpected re-assignment of `const` variable limit. (oxlint) [default-config]
 
-## security — not assessed
-
-Not graded: not selected by --only
-
-## types — not assessed
-
-Not graded: not selected by --only
-
-## dead code — not assessed
-
-Not graded: not selected by --only
-
-## complexity — not assessed
-
-Not graded: not selected by --only
-
-## duplication — not assessed
-
-Not graded: not selected by --only
-
 ## lint — F
 
 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). This change: 1 new, 1 resolved.
@@ -79,13 +54,5 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 - error `src/renamed.js:2` `eslint(no-dupe-keys)` — Duplicate key 'x' (oxlint) [default-config]
 
 Evidence: [raw/base/root/oxlint.sarif.json](raw/base/root/oxlint.sarif.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
-
-## format — not assessed
-
-Not graded: not selected by --only
-
-## test quality — not assessed
-
-Not graded: not selected by --only
 
 ---

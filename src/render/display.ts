@@ -1,6 +1,7 @@
 import { ROOT_PROJECT } from '../core/discover.ts'
 import type { Category, CategoryState, Finding, Language } from '../core/types.ts'
-import type { ReportProjectMovement, ReportRootShell, ReportTool } from './json.ts'
+import { CATEGORIES } from '../core/types.ts'
+import type { Report, ReportProjectMovement, ReportRootShell, ReportTool } from './json.ts'
 
 /**
  * The vocabulary every renderer shares: how a category, a grade state and a
@@ -97,6 +98,31 @@ export function collapseToolRows(tools: readonly ReportTool[]): readonly ReportT
     seen.add(key)
     return true
   })
+}
+
+/**
+ * The categories this run was never asked to assess: everything `--only` left
+ * out, in {@link CATEGORIES} order (spec §9).
+ *
+ * Read off {@link Report.selected} rather than off the reason the skipped
+ * states carry, so the renderers depend on what the run was asked for and not
+ * on a sentence anyone could reword. `report.json` still carries all eight
+ * states either way — this hides rendered lines, never a state.
+ */
+export function unselectedCategories(report: Report): readonly Category[] {
+  return CATEGORIES.filter((category) => !report.selected.includes(category))
+}
+
+/**
+ * The one line that stands in for the categories {@link unselectedCategories}
+ * returned: a row each, all saying the same thing, is the noise a `--only` run
+ * should not have to read past.
+ *
+ * Only emitted where there is something to name; an empty list has no sentence.
+ */
+export function notSelectedNote(categories: readonly Category[]): string {
+  const labels = categories.map((category) => CATEGORY_LABELS[category]).join(', ')
+  return `Not assessed: not selected by \`--only\` — ${labels}`
 }
 
 /** `lint B → F` for each of a project's categories whose state is not the one it was. */

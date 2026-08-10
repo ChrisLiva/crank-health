@@ -21,11 +21,13 @@ import {
   hasProjectMovement,
   location,
   movedCategories,
+  notSelectedNote,
   percent,
   plural,
   projectLabel,
   rootShellNote,
   stateLabel,
+  unselectedCategories,
 } from './display.ts'
 import type {
   Report,
@@ -74,17 +76,23 @@ const DEFAULT_MAX_FINDINGS = 20
 export function renderReportMarkdown(report: Report, options: ReportMarkdownOptions = {}): string {
   const limit = options.maxFindingsPerCategory ?? DEFAULT_MAX_FINDINGS
   const delta = options.delta ?? report.delta
+  // Computed once and threaded down: the rollup's table, every project's table
+  // and the category sections have to leave out the same categories.
+  const omit = unselectedCategories(report)
   const blocks: string[] = [
     '# Codebase health',
     subtitle(report, delta),
     '## Grades',
-    gradesTable(report.categories, rollupScope(report), delta),
+    gradesTable(report.categories, rollupScope(report), delta, omit),
+    ...(omit.length === 0 ? [] : [notSelectedNote(omit)]),
     ...scanNotes(report),
     ...languageBreakdown(report),
     ...measurements(report),
     ...deltaSection(delta, options.maxDeltaFindings ?? DEFAULT_MAX_FINDINGS),
-    ...projectsSection(report),
-    ...CATEGORIES.flatMap((category) => categorySection(report, category, limit, delta)),
+    ...projectsSection(report, omit),
+    ...CATEGORIES.filter((category) => !omit.includes(category)).flatMap((category) =>
+      categorySection(report, category, limit, delta),
+    ),
     trailer(report),
   ]
   return `${blocks.join('\n\n')}\n`
@@ -228,12 +236,20 @@ function short(sha: string): string {
 
 /* -------------------------------------------------------------- the summary */
 
+/**
+ * The grades, one row per category, minus the ones in `omit` — the categories
+ * `--only` left out, which the note under the table names in one line instead.
+ *
+ * `omit` is required rather than defaulted so that every call site has to say
+ * what it leaves out: the rollup's table and each project's must not disagree.
+ */
 function gradesTable(
   states: Readonly<Record<Category, CategoryState>>,
   scope: GradeScope,
   delta: ReportDelta | undefined,
+  omit: readonly Category[],
 ): string {
-  const rows = CATEGORIES.map((category) => {
+  const rows = CATEGORIES.filter((category) => !omit.includes(category)).map((category) => {
     const state = states[category]
     const basis = state.status === 'graded' ? gradeBasis(scope, category, delta) : state.reason
     return row([CATEGORY_LABELS[category], stateLabel(state), basis])
@@ -350,7 +366,7 @@ function measurements(report: Report): string[] {
  * project, or where the root turned out to be a workspace shell: a one-package
  * workspace has a fact about its root that belongs nowhere else.
  */
-function projectsSection(report: Report): string[] {
+function projectsSection(report: Report, omit: readonly Category[]): string[] {
   if (report.projects.length < 2 && report.rootShell === undefined) return []
   const count = report.projects.length
   const blocks = [
@@ -361,7 +377,7 @@ function projectsSection(report: Report): string[] {
       'audits, workflow checks — so it is graded once, above, and not per project.',
   ]
   if (report.rootShell !== undefined) blocks.push(rootShellNote(report.rootShell))
-  return [...blocks, ...report.projects.flatMap((project) => projectBlock(report, project))]
+  return [...blocks, ...report.projects.flatMap((project) => projectBlock(report, project, omit))]
 }
 
 /**
@@ -379,13 +395,13 @@ function rollupCoverage(report: Report): string {
     .join(', ')})`
 }
 
-function projectBlock(report: Report, project: ReportProject): string[] {
+function projectBlock(report: Report, project: ReportProject, omit: readonly Category[]): string[] {
   const manifests = project.manifests.map((manifest) => `\`${manifest}\``)
   const languages = project.languages.length === 0 ? [] : [project.languages.join(', ')]
   return [
     `### ${projectLabel(project.path)}`,
     [...manifests, ...languages].join(' · '),
-    gradesTable(project.categories, projectScope(report, project), undefined),
+    gradesTable(project.categories, projectScope(report, project), undefined, omit),
     ...(project.toolchain.length === 0
       ? ['This project declares no tool of its own: it was analyzed on crank-health’s defaults.']
       : [projectToolTable(project.toolchain)]),

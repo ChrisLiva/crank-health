@@ -421,6 +421,21 @@ describe('the PR goldens', () => {
       normalizePrMarkdown(result.agentMarkdown, result.report.repo.path),
     )
   })
+
+  /**
+   * The `--only lint` run through the real pipeline: `report.md` says what it
+   * was not asked to look at once instead of seven times, while `report.json`
+   * and the agent's roll-call still answer for all eight categories.
+   */
+  it('says what --only left out once, and still answers for all eight elsewhere', () => {
+    expect(result.markdown).toContain(
+      'Not assessed: not selected by `--only` — security, types, dead code, complexity, ' +
+        'duplication, format, test quality',
+    )
+    expect(result.markdown).not.toContain('## security — not assessed')
+    expect(Object.keys(result.report.categories)).toHaveLength(8)
+    expect(result.agentMarkdown).toContain('Grades: security not assessed · types not assessed')
+  })
 })
 
 /**
