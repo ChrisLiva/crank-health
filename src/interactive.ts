@@ -202,7 +202,9 @@ export function createTerminalIO(): PromptIO & { close(): void } {
  */
 export async function probeRepo(path: string): Promise<RepoProbe> {
   const repoRoot = await resolveRepoRoot(path)
-  const files = await discoverFiles(repoRoot)
+  // The interview is about what the repo holds, so the scan-scope warnings are
+  // the scan's to report, not a question's to ask.
+  const { files } = await discoverFiles(repoRoot)
   const detectContext = repoDetectContext(repoRoot, files)
 
   const ownedTools: string[] = []

@@ -153,9 +153,12 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
         // and, when a base tool failed, why a "resolved" count is not a promise.
         runs: [...baseRuns, ...(await adoptRawFiles(out, headScan.scan, 'head'))],
         findings: headScan.scan.findings,
+        // Each side's own scope and its own tools, in one list. The head side
+        // speaks for the report, so it is bare; the base side is marked, or a
+        // reader cannot tell which of the two trees a note is about.
         warnings: [
-          ...headScan.scan.warnings,
-          ...baseScan.scan.warnings.map((warning) => `base scan: ${warning}`),
+          ...headScan.warnings,
+          ...baseScan.warnings.map((warning) => `base scan: ${warning}`),
         ],
         generatedAt: new Date().toISOString(),
         durationMs: Date.now() - startedAt,

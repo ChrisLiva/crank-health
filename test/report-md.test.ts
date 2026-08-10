@@ -126,6 +126,41 @@ describe('renderReportMarkdown', () => {
     expect(await render('js-basic')).not.toContain('### Findings by language')
   })
 
+  /**
+   * A grade is read against what was measured, so what the scan did not look at
+   * belongs beside the grades — and the sentences are the run's own, quoted
+   * verbatim rather than composed a second time here.
+   */
+  it('notes the scan’s scope under the grades, above the language breakdown', () => {
+    const scope =
+      'scan scope: 1 file under .crank/ was not scanned ' +
+      '(hidden directories other than .github/ are not source)'
+    const standby = 'lint graded by oxlint: the repo’s own ESLint could not run'
+    const markdown = renderReportMarkdown(
+      makeReport({
+        warnings: [scope, standby],
+        findings: [
+          makeFinding({ id: 'a', file: 'src/a.ts' }),
+          makeFinding({ id: 'b', file: 'src/b.py' }),
+        ],
+      }),
+    )
+
+    // `buildReport` sorts the warnings, so the block is asserted by membership.
+    expect(markdown).toContain('**Scan notes.**\n\n- ')
+    expect(markdown).toContain(`- ${scope}\n`)
+    expect(markdown).toContain(`- ${standby}\n`)
+    expect(markdown.split('**Scan notes.**')).toHaveLength(2)
+    expect(markdown.indexOf('**Scan notes.**')).toBeGreaterThan(markdown.indexOf('## Grades'))
+    expect(markdown.indexOf('**Scan notes.**')).toBeLessThan(
+      markdown.indexOf('### Findings by language'),
+    )
+  })
+
+  it('renders no scan-notes block when the run had nothing to note', () => {
+    expect(renderReportMarkdown(makeReport({ warnings: [] }))).not.toContain('**Scan notes.**')
+  })
+
   it('gives a whole-file finding no line number to go looking at', async () => {
     const markdown = await render('js-basic')
     expect(markdown).toContain('`src/unformatted.js` `prettier/format`')

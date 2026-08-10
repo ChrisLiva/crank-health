@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `c9952e2668536835a75bd276ac900737de0573bb` · crank-health 0.4.0 · quick profile
+`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.4.0 · quick profile
 
 ## Grades
 
@@ -14,6 +14,10 @@
 | lint | D | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
 | format | B | 1 of 10 checked files fail the formatter (10.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
+
+**Scan notes.**
+
+- scan scope: 1 file under .crank/ was not scanned (hidden directories other than .github/ are not source)
 
 ### Measurements
 

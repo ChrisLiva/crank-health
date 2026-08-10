@@ -45,6 +45,13 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, Language>> = {
 /** How many files we stat/read at once. */
 const FS_CONCURRENCY = 32
 
+/** What one discovery found, and what it says about what it left out. */
+export interface FileScan {
+  readonly files: FileInventory
+  /** Fixed sentences for the run's warnings; empty when nothing was dropped. */
+  readonly warnings: readonly string[]
+}
+
 /**
  * The one file discovery per scan. Uses `git ls-files --cached --others
  * --exclude-standard`, so it is gitignore-true and includes untracked files
@@ -61,20 +68,24 @@ const FS_CONCURRENCY = 32
  * @param repoRoot absolute path to the repo root
  * @throws {Error} when `git` is unavailable or `repoRoot` is not a work tree
  */
-export async function discoverFiles(repoRoot: string): Promise<FileInventory> {
+export async function discoverFiles(repoRoot: string): Promise<FileScan> {
   const listed = await gitListFiles(repoRoot)
 
-  const candidates = [...new Set(listed)]
-    .filter(
-      (file) =>
-        file.length > 0 && !isExcluded(file) && !isCsharpBuildOutput(file) && !isHiddenScope(file),
-    )
-    .toSorted(compareFiles)
+  const inScope = [...new Set(listed)].filter(
+    (file) => file.length > 0 && !isExcluded(file) && !isCsharpBuildOutput(file),
+  )
+  const candidates = inScope.filter((file) => !isHiddenScope(file)).toSorted(compareFiles)
 
   const existing = await mapLimit(candidates, FS_CONCURRENCY, (file) =>
     isRegularFile(repoRoot, file),
   )
-  return inventoryOf(candidates.filter((_, index) => existing[index] === true))
+  return {
+    files: inventoryOf(candidates.filter((_, index) => existing[index] === true)),
+    // Only what the hidden-scope rule dropped: a path a nearer rule already
+    // removed was never this rule's to explain, and naming `node_modules/` here
+    // would tell a repo its dependencies were skipped for being hidden.
+    warnings: scanScopeWarnings(inScope.filter((file) => isHiddenScope(file))),
+  }
 }
 
 /** Repo-relative posix path of the root project — its own identity, not a prefix. */
@@ -376,12 +387,42 @@ const GITHUB_DIRECTORY = '.github'
  * `packages/web/.eslintrc.cjs` all stay.
  */
 export function isHiddenScope(file: string): boolean {
-  return file
-    .split('/')
-    .slice(0, -1)
-    .some(
-      (segment, index) => segment.startsWith('.') && !(index === 0 && segment === GITHUB_DIRECTORY),
-    )
+  return hiddenScopeRoot(file) !== undefined
+}
+
+/**
+ * The hidden directory a path is out of scope under, repo-relative and with a
+ * trailing slash — the *shallowest* hidden segment, so a whole tree is named
+ * once (`packages/web/.next/`, never `packages/web/.next/cache/`).
+ * `undefined` for a path that is in scope.
+ */
+function hiddenScopeRoot(file: string): string | undefined {
+  const segments = file.split('/')
+  for (let index = 0; index < segments.length - 1; index++) {
+    const segment = segments[index] ?? ''
+    if (segment.startsWith('.') && !(index === 0 && segment === GITHUB_DIRECTORY)) {
+      return `${segments.slice(0, index + 1).join('/')}/`
+    }
+  }
+  return undefined
+}
+
+/**
+ * What the hidden-scope rule left out, as the one sentence the terminal,
+ * `report.md` and `agent.md` all quote verbatim. The count is of files; the
+ * directories are each dropped path's shallowest hidden segment, de-duplicated
+ * and in the report's byte-wise order. Nothing dropped says nothing at all.
+ */
+function scanScopeWarnings(dropped: readonly string[]): readonly string[] {
+  if (dropped.length === 0) return []
+  const directories = [...new Set(dropped.flatMap((file) => hiddenScopeRoot(file) ?? []))].toSorted(
+    compareFiles,
+  )
+  const [noun, verb] = dropped.length === 1 ? ['file', 'was'] : ['files', 'were']
+  return [
+    `scan scope: ${dropped.length} ${noun} under ${directories.join(', ')} ${verb} not scanned ` +
+      `(hidden directories other than ${GITHUB_DIRECTORY}/ are not source)`,
+  ]
 }
 
 /**

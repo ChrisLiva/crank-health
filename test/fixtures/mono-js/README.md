@@ -34,6 +34,12 @@ Everything else is deliberately clean. `src/index.js` is each package's entry
 point (`package.json#main`), which is what keeps the dead-code tools from
 calling the other modules unreachable.
 
+`.crank/hooks/hook.ts` is tooling scope under a hidden directory, and it is
+broken twice over — an implicitly-`any` parameter and an unused local — so a
+scan that reached it would report a types finding and a lint finding. Nothing
+in any artifact names it, which is what makes the scan-scope rule an assertion
+rather than an empty promise.
+
 `node_modules` is gitignored here because the hoisted-install test plants one:
 crank-health must run the binary the workspace root installed rather than its own
 pinned copy, and the only honest way to assert that is a real installed binary.

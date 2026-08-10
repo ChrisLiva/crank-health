@@ -158,6 +158,42 @@ describe('a change that resolves a finding', () => {
 })
 
 /**
+ * A `--pr` run is two scans, and each one has its own scope to account for. The
+ * head side speaks for the report as a whole, so it is bare; the base side is
+ * marked, because a reader comparing two grades needs to know which tree a note
+ * is about.
+ */
+describe('a change in a repo whose hidden directories are out of scope', () => {
+  let repo: HistoryRepo
+  let result: HealthScanResult
+
+  beforeAll(async () => {
+    repo = await createHistoryRepo({
+      base: {
+        'src/a.js': CLEAN,
+        '.crank/hooks/hook.ts': 'export const hook = 1\n',
+      },
+      head: [{ write: 'src/a.js', content: CONST_ASSIGN }],
+    })
+    result = await scanPr(repo)
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await repo.remove()
+  })
+
+  it('notes the scope once per side, with the base side marked as the base', () => {
+    const bare =
+      'scan scope: 1 file under .crank/ was not scanned ' +
+      '(hidden directories other than .github/ are not source)'
+
+    expect(result.report.warnings).toHaveLength(2)
+    expect(result.report.warnings).toContain(bare)
+    expect(result.report.warnings).toContain(`base scan: ${bare}`)
+  })
+})
+
+/**
  * Spec §2's rename mapping. The content is byte-identical, so git reports
  * `R100` and the base findings are re-hashed under the new path before anything
  * is compared — which is the difference between "nothing happened" and "one

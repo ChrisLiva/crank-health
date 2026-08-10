@@ -129,7 +129,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
         ...(tree.rootShell === undefined ? {} : { rootShell: tree.rootShell }),
         runs: await adoptRawFiles(out, tree.scan),
         findings: tree.scan.findings,
-        warnings: tree.scan.warnings,
+        warnings: tree.warnings,
         generatedAt: new Date().toISOString(),
         durationMs: Date.now() - startedAt,
       }),
@@ -145,6 +145,12 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
 /** One tree's scan, graded. The unit PR mode runs twice; see `run-pr.ts`. */
 export interface TreeScan {
   readonly scan: ScanResult
+  /**
+   * Everything this tree's run has to say about itself: what discovery left out
+   * of the inventory, then what the tools reported about their own runs. The
+   * scan is read against a scope, so the scope comes first.
+   */
+  readonly warnings: readonly string[]
   /** The rollup's states: the whole tree, on the whole tree's denominators. */
   readonly categories: Record<Category, CategoryState>
   readonly selected: readonly Category[]
@@ -173,7 +179,8 @@ export interface TreeScanOptions extends Omit<HealthScanOptions, 'path' | 'out'>
  * the same options, which is what makes the two halves of a delta comparable.
  */
 export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
-  const files = await discoverFiles(options.repoRoot)
+  const discovered = await discoverFiles(options.repoRoot)
+  const files = discovered.files
   const discovery = await discoverProjects(options.repoRoot, files)
   const scanned = scopedProjects(discovery.projects, options.projects)
   const repo: RepoContext = {
@@ -199,6 +206,7 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   const selected = options.only === undefined ? CATEGORIES : options.only
   return {
     scan,
+    warnings: [...discovered.warnings, ...scan.warnings],
     selected,
     categories: await gradeAll(
       repo.repoRoot,
@@ -393,7 +401,9 @@ export async function assertProjectScope(
   requested: readonly string[] | undefined,
 ): Promise<void> {
   if (requested === undefined) return
-  const known = partitionProjects(await discoverFiles(repoRoot)).map((project) => project.path)
+  const known = partitionProjects((await discoverFiles(repoRoot)).files).map(
+    (project) => project.path,
+  )
   const unknown = requested.filter((path) => !known.includes(path))
   if (unknown.length === 0) return
   throw new CliUsageError(

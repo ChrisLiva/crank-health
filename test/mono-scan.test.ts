@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, symlink } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Finding } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { REPO_SCOPED_REASON, runHealthScan } from '../src/run.ts'
+import { renderTerminal } from '../src/render/terminal.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
@@ -57,6 +58,19 @@ const MONO_JS_TOKENS_ADVISORY = [
     gradeScope: false,
   })),
 ] as const
+
+/**
+ * The one file `mono-js` plants under a hidden directory. It would fail two of
+ * this repo's own gates if anything scanned it — an implicitly-`any` parameter
+ * for `tsc`, an unused local for `oxlint` — so every artifact staying silent
+ * about it is a positive assertion, not an accident of an empty directory.
+ */
+const MONO_JS_HIDDEN_FILE = '.crank/hooks/hook.ts'
+
+/** The one sentence that file's absence is explained by, in all three artifacts. */
+const MONO_JS_SCAN_SCOPE =
+  'scan scope: 1 file under .crank/ was not scanned ' +
+  '(hidden directories other than .github/ are not source)'
 
 /** Every finding planted in `test/fixtures/mono-js` — see that fixture's README. */
 const MONO_JS_PLANTED = [
@@ -131,6 +145,10 @@ describe('quick scan of the mono-js fixture', () => {
    * Acceptance criterion 1's first half. The root declares the workspace and
    * holds no source of its own, so it is a shell: eight empty categories under
    * `.` would say less than the note that the root is not a project.
+   *
+   * The `.ts` file under the root's hidden directory does not make it one: the
+   * partition never sees a path discovery dropped, so tooling scope at the root
+   * cannot promote a shell into a project with a grade nobody asked for.
    */
   it('discovers the two packages and records the root as a workspace shell', () => {
     expect(scan.report.projects.map((project) => project.path)).toEqual([
@@ -293,6 +311,44 @@ describe('quick scan of the mono-js fixture', () => {
     // …and the tasks link the evidence of the run that reported them.
     expect(scan.agentMarkdown).toContain('[raw/packages/api/oxlint.sarif.json]')
     expect(scan.agentMarkdown).toContain('[raw/packages/web/eslint.json]')
+  })
+
+  /**
+   * The file is in the tree the scan ran on and in none of the three artifacts:
+   * no finding, no tool row, no file list names it. Discovery dropped it before
+   * a single tool was planned, so nothing downstream had to know about it.
+   */
+  it('reports nothing anywhere about a file under a hidden directory', async () => {
+    expect(await readFile(join(fixture.root, MONO_JS_HIDDEN_FILE), 'utf8')).toContain('hook')
+    for (const artifact of [scan.json, scan.markdown, scan.agentMarkdown]) {
+      expect(artifact).not.toContain(MONO_JS_HIDDEN_FILE)
+    }
+  })
+
+  /**
+   * …and it says so once, in the report's own warnings channel, so a reader who
+   * wonders why the tree looks smaller than it is has the answer beside the
+   * grades rather than having to diff a file list.
+   */
+  it('says in the report that the hidden directory was not scanned', () => {
+    expect(scan.report.warnings).toContain(MONO_JS_SCAN_SCOPE)
+  })
+
+  /**
+   * The same sentence in all three artifacts, each through the channel it
+   * already had for a run's own warnings: nothing composes this prose twice, so
+   * the three can never drift into saying different things about one scan.
+   */
+  it('renders the same sentence in the terminal, report.md and agent.md', () => {
+    const terminal = renderTerminal(
+      scan.report,
+      { markdown: scan.markdownPath, agent: scan.agentPath, json: scan.reportPath },
+      { color: false },
+    )
+
+    expect(terminal).toContain(`  warning: ${MONO_JS_SCAN_SCOPE}`)
+    expect(scan.markdown).toContain(`- ${MONO_JS_SCAN_SCOPE}`)
+    expect(scan.agentMarkdown).toContain(`> How this run was graded: ${MONO_JS_SCAN_SCOPE}`)
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {

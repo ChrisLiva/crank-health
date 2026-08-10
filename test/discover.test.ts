@@ -57,7 +57,7 @@ describe('discoverFiles', () => {
     // tracked in the index but removed from disk -> must not be reported
     await rm(join(repo, 'src/deleted.ts'))
 
-    inventory = await discoverFiles(repo)
+    inventory = (await discoverFiles(repo)).files
   })
 
   afterAll(async () => {
@@ -94,7 +94,18 @@ describe('discoverFiles', () => {
   })
 
   it('is deterministic across runs', async () => {
-    expect((await discoverFiles(repo)).all).toEqual(inventory.all)
+    expect((await discoverFiles(repo)).files.all).toEqual(inventory.all)
+  })
+
+  /**
+   * Discovery hands back what it found and what it left out in one value, so a
+   * caller cannot take the inventory and lose the reason it is short.
+   */
+  it('returns the inventory beside the scan-scope warnings', async () => {
+    const scan = await discoverFiles(repo)
+
+    expect(scan.files.all).toEqual(inventory.all)
+    expect(scan.warnings).toEqual([])
   })
 
   it('classifies files by language', () => {
@@ -134,7 +145,7 @@ describe('discoverFiles and C# build output', () => {
       await plant(repo, 'bin/cli.js', '#!/usr/bin/env node\n')
       await plant(repo, 'bin/tool.py', 'x = 1\n')
 
-      const inventory = await discoverFiles(repo)
+      const inventory = (await discoverFiles(repo)).files
 
       expect(inventory.all).not.toContain('bin/Debug/App.cs')
       expect(inventory.all).not.toContain('obj/Release/Gen.cs')
@@ -173,7 +184,7 @@ describe('discoverFiles and hidden directories', () => {
     await plant(repo, '.github/scripts/build.js', 'const b = 1\n')
     await plant(repo, 'src/app.js', 'const a = 1\n')
 
-    inventory = await discoverFiles(repo)
+    inventory = (await discoverFiles(repo)).files
   })
 
   afterAll(async () => {
@@ -211,6 +222,108 @@ describe('discoverFiles and hidden directories', () => {
 })
 
 /**
+ * A scan that quietly looked at less than the repo is a scan a reader cannot
+ * check. One sentence names how much went and which directories it was under.
+ */
+describe('the scan-scope warning', () => {
+  it('names every hidden directory that dropped files, at its shallowest segment', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
+      await plant(repo, '.crank/hooks/other.ts', 'export const other = 1\n')
+      await plant(repo, 'packages/web/.next/cache/chunk.js', 'const c = 1\n')
+      await plant(repo, 'src/app.js', 'const a = 1\n')
+
+      const { warnings } = await discoverFiles(repo)
+
+      expect(warnings).toEqual([
+        'scan scope: 3 files under .crank/, packages/web/.next/ were not scanned ' +
+          '(hidden directories other than .github/ are not source)',
+      ])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * A dependency directory and MSBuild output are already out of scope when the
+   * hidden-scope rule is asked, so neither is this sentence's to explain — and
+   * the first repo with a `node_modules/.cache/` must not be told its
+   * dependencies were skipped for being hidden.
+   */
+  it('counts only what the hidden-scope rule dropped', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-nearer-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, 'node_modules/.cache/x.js', 'const x = 1\n')
+      await plant(repo, 'bin/Debug/App.cs', 'class App {}\n')
+      await plant(repo, 'src/app.js', 'const a = 1\n')
+
+      const { warnings } = await discoverFiles(repo)
+
+      expect(warnings).toEqual([])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('says it in the singular when one file went', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-one-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
+      await plant(repo, 'src/app.js', 'const a = 1\n')
+
+      const { warnings } = await discoverFiles(repo)
+
+      expect(warnings).toEqual([
+        'scan scope: 1 file under .crank/ was not scanned ' +
+          '(hidden directories other than .github/ are not source)',
+      ])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  /** Nothing dropped is nothing to say — not an empty-ish sentence about zero files. */
+  it('says nothing at all when no path was dropped', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-none-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, 'src/app.js', 'const a = 1\n')
+
+      const { warnings } = await discoverFiles(repo)
+
+      expect(warnings).toEqual([])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * The sentence goes into `report.json`, which is byte-compared across
+   * machines: repo-relative directory names are the only repo-specific text it
+   * may carry.
+   */
+  it('carries no absolute path', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-abs-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
+      await plant(repo, 'src/app.js', 'const a = 1\n')
+
+      const [warning = ''] = await discoverFiles(repo).then((scan) => scan.warnings)
+
+      expect(warning).not.toContain(repo)
+      expect(warning.includes('/tmp') || warning.includes('/var')).toBe(false)
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
  * The inventory is the one input `RepoContext.files` and every runner's
  * `ctx.files` derives from, so what it drops is dropped for all of them.
  */
@@ -225,7 +338,7 @@ describe('discoverFiles and the inventory every runner sees', () => {
       await plant(repo, '.hidden/.github/workflows/x.yml', 'on: push\n')
       await plant(repo, 'src/app.js', 'const a = 1\n')
 
-      const inventory = await discoverFiles(repo)
+      const inventory = (await discoverFiles(repo)).files
 
       expect(inventory.all).toEqual(['src/app.js'])
     } finally {
@@ -242,7 +355,7 @@ describe('the project partition after hidden directories leave', () => {
       await plant(repo, 'package.json', '{ "name": "root" }\n')
       await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
 
-      const inventory = await discoverFiles(repo)
+      const inventory = (await discoverFiles(repo)).files
       const projects = partitionProjects(inventory)
 
       expect(inventory.all).toEqual(['package.json'])
@@ -265,7 +378,7 @@ describe('the project partition after hidden directories leave', () => {
       await plant(repo, 'packages/web/package.json', '{ "name": "web" }\n')
       await plant(repo, 'packages/web/src/index.js', 'const a = 1\n')
 
-      const discovery = await discoverProjects(repo, await discoverFiles(repo))
+      const discovery = await discoverProjects(repo, (await discoverFiles(repo)).files)
 
       expect(paths(discovery.projects)).toEqual(['packages/web'])
       expect(discovery.rootShell).toBeDefined()

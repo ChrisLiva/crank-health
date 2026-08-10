@@ -78,6 +78,7 @@ export function renderReportMarkdown(report: Report, options: ReportMarkdownOpti
     subtitle(report, delta),
     '## Grades',
     gradesTable(report.categories, rollupScope(report), delta),
+    ...scanNotes(report),
     ...languageBreakdown(report),
     ...measurements(report),
     ...deltaSection(delta, options.maxDeltaFindings ?? DEFAULT_MAX_FINDINGS),
@@ -237,6 +238,20 @@ function gradesTable(
     return row([CATEGORY_LABELS[category], stateLabel(state), basis])
   })
   return table(['Category', 'Grade', 'Basis'], rows)
+}
+
+/**
+ * What the scan did not look at, beside the grades it is read against
+ * ({@link Report.warnings}, already sorted): the run's own fixed sentences,
+ * quoted verbatim — nothing is composed here. A run with nothing to note
+ * renders no block at all.
+ *
+ * The blank line after the bold lead keeps the bullets a list under every
+ * Markdown renderer rather than relying on a list interrupting a paragraph.
+ */
+function scanNotes(report: Report): string[] {
+  if (report.warnings.length === 0) return []
+  return [`**Scan notes.**\n\n${report.warnings.map((warning) => `- ${warning}`).join('\n')}`]
 }
 
 /**
