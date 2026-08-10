@@ -92,6 +92,20 @@ const IGNORE_GLOBS: readonly string[] = [
   '**/obj/**',
 ]
 
+/**
+ * Every glob rooted at the directory being measured. jscpd reports and matches
+ * absolute paths, so an unanchored `**` reaches *upwards* as readily as
+ * downwards: a repo living under `~/.cache/`, `.claude/worktrees/` or any other
+ * hidden directory matches `**\/.*\/**` on a segment of its own address, and
+ * jscpd then ignores the whole tree — 0% of tokens duplicated and a flattering
+ * A for a repo it never looked at. Anchoring confines each rule to the tree it
+ * is about; a path holding glob metacharacters needs no escaping, since the
+ * literal prefix is matched as written.
+ */
+function anchored(scanRoot: string, globs: readonly string[]): string[] {
+  return globs.map((glob) => `${scanRoot}/${glob}`)
+}
+
 /** Where jscpd's own report lands, under the scratch dir. */
 const REPORT_DIRECTORY = 'jscpd'
 const REPORT_FILE = 'jscpd-report.json'
@@ -239,7 +253,7 @@ export function invocationArgs(
     '--format',
     FORMATS,
     '--ignore',
-    [...IGNORE_GLOBS, ...nested.map((project) => `**/${project}/**`)].join(','),
+    anchored(scanRoot, [...IGNORE_GLOBS, ...nested.map((project) => `${project}/**`)]).join(','),
     // Absolute names in the report; with relative ones jscpd resolves them
     // against its own cwd, which is the scratch dir, not the repo.
     '--absolute',

@@ -118,7 +118,7 @@ describe('zero footprint, in the arguments', () => {
   it('derives jscpd’s ignore list from discovery’s excluded segments', () => {
     const entries = ignoreOf().split(',')
     for (const segment of EXCLUDED_SEGMENTS) {
-      expect(entries).toContain(`**/${segment}/**`)
+      expect(entries).toContain(`${REPO}/**/${segment}/**`)
     }
   })
 
@@ -131,9 +131,24 @@ describe('zero footprint, in the arguments', () => {
    */
   it('keeps jscpd out of hidden directories, with no way to carve .github back in', () => {
     const entries = ignoreOf().split(',')
-    expect(entries).toContain('**/.*/**')
+    expect(entries).toContain(`${REPO}/**/.*/**`)
     expect(entries.filter((entry) => entry.startsWith('!'))).toEqual([])
     expect(entries.filter((entry) => entry.includes('.github'))).toEqual([])
+  })
+
+  /**
+   * jscpd walks absolute paths, so an unanchored glob matches the *ancestors*
+   * of the scanned directory as well as its contents: a repo checked out under
+   * `~/.cache/` or `.claude/worktrees/` matches `**\/.*\/**` on a segment of
+   * its own address, and jscpd ignores the entire tree — reporting 0% of tokens
+   * duplicated and a flattering A for a repo it never measured. Anchoring every
+   * glob to the scanned directory is what confines each rule to the tree it is
+   * about.
+   */
+  it('anchors every ignore glob to the scanned directory, so no ancestor can match', () => {
+    const entries = ignoreOf(['packages/api']).split(',')
+    expect(entries.length).toBeGreaterThan(0)
+    expect(entries.filter((entry) => !entry.startsWith(`${REPO}/`))).toEqual([])
   })
 
   /**
@@ -143,12 +158,12 @@ describe('zero footprint, in the arguments', () => {
    */
   it('leaves a parent project’s nested projects to the nested projects', () => {
     const ignore = ignoreOf(['packages/api', 'packages/web'])
-    expect(ignore).toContain('**/packages/api/**')
-    expect(ignore).toContain('**/packages/web/**')
+    expect(ignore).toContain(`${REPO}/packages/api/**`)
+    expect(ignore).toContain(`${REPO}/packages/web/**`)
     // …and the repo-wide pass, which passes none, still sees every package.
     const entries = ignoreOf().split(',')
-    expect(entries).not.toContain('**/packages/api/**')
-    expect(entries).not.toContain('**/packages/web/**')
+    expect(entries).not.toContain(`${REPO}/packages/api/**`)
+    expect(entries).not.toContain(`${REPO}/packages/web/**`)
   })
 
   it('asks jscpd for exactly the graded languages, C# included', () => {

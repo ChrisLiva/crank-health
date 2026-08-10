@@ -75,7 +75,7 @@ export async function discoverFiles(repoRoot: string): Promise<FileScan> {
   // hidden-scope rule dropped. Only that rule's drops are collected — a path a
   // nearer rule already removed was never this rule's to explain, and naming
   // `node_modules/` in the warning would tell a repo its dependencies were
-  // skipped for being hidden (spec §8, §10).
+  // skipped for being hidden (spec §7).
   const kept: string[] = []
   const hidden: string[] = []
   for (const file of new Set(listed)) {
