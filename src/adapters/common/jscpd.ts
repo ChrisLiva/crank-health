@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { EXCLUDED_SEGMENTS } from '../../core/discover.ts'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
@@ -93,22 +94,61 @@ const IGNORE_GLOBS: readonly string[] = [
 ]
 
 /**
- * Every glob rooted at the directory being measured. jscpd reports and matches
- * absolute paths, so an unanchored `**` reaches *upwards* as readily as
- * downwards: a repo living under `~/.cache/`, `.claude/worktrees/` or any other
- * hidden directory matches `**\/.*\/**` on a segment of its own address, and
- * jscpd then ignores the whole tree — 0% of tokens duplicated and a flattering
- * A for a repo it never looked at. Anchoring confines each rule to the tree it
- * is about; a path holding glob metacharacters needs no escaping, since the
- * literal prefix is matched as written.
+ * Glob metacharacters in a literal path segment, backslash-escaped so the
+ * anchoring prefix below matches the directory it names rather than a pattern.
+ * A repo checked out to `~/src/br[ack]et/` would otherwise turn its own address
+ * into a character class that matches nothing, and every ignore rule with it.
  */
-function anchored(scanRoot: string, globs: readonly string[]): string[] {
-  return globs.map((glob) => `${scanRoot}/${glob}`)
+function escapeGlob(literal: string): string {
+  return literal.replace(/[\\*?[\]{}()!+@|^$]/g, String.raw`\$&`)
+}
+
+/**
+ * Every glob rooted at the directory being measured. jscpd matches against the
+ * absolute paths it walks, so an unanchored `**` reaches *upwards* as readily
+ * as downwards: a repo living under `~/.cache/`, `.claude/worktrees/` or any
+ * other hidden directory matches `**\/.*\/**` on a segment of its own address,
+ * and jscpd then ignores the whole tree — 0% of tokens duplicated and a
+ * flattering A for a repo it never looked at.
+ *
+ * Anchoring confines each rule to the tree it is about, and the prefix is
+ * escaped because it is a literal path spliced into a pattern. The globs travel
+ * in a config file rather than on `--ignore` for the last case escaping cannot
+ * reach: jscpd splits that flag's value on `,`, so a single comma anywhere in
+ * the repo's path would truncate every rule after it.
+ *
+ * Exported so the invocation tests can read the list without running anything.
+ *
+ * @param scanRoot absolute path of the directory to measure
+ * @param nested repo-relative posix paths of the projects inside this one
+ */
+export function ignoreGlobs(scanRoot: string, nested: readonly string[] = []): string[] {
+  const root = escapeGlob(scanRoot)
+  return [...IGNORE_GLOBS, ...nested.map((project) => `${project}/**`)].map(
+    (glob) => `${root}/${glob}`,
+  )
 }
 
 /** Where jscpd's own report lands, under the scratch dir. */
 const REPORT_DIRECTORY = 'jscpd'
 const REPORT_FILE = 'jscpd-report.json'
+
+/** Where the ignore list is handed to jscpd, under the scratch dir. */
+const CONFIG_FILE = 'jscpd.json'
+
+/**
+ * jscpd acknowledges `--config` on stderr. Kept out of the evidence directory:
+ * it is an echo of a flag we passed rather than anything jscpd observed about
+ * the repo, and keeping it would put a file whose only content is an absolute
+ * scratch path into every run's raw output. Anything else jscpd says still
+ * lands there verbatim.
+ */
+function withoutConfigEcho(stderr: string): string {
+  return stderr
+    .split('\n')
+    .filter((line) => !line.startsWith('Using config from '))
+    .join('\n')
+}
 
 export const jscpdRunner: ToolRunner = {
   tool: JSCPD_TOOL,
@@ -141,6 +181,14 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
   }
 
   const output = join(ctx.scratch, REPORT_DIRECTORY)
+  const scanRoot = join(ctx.repoRoot, ctx.project.path)
+  // Scratch-confined, like every other write this runner makes.
+  const config = join(ctx.scratch, CONFIG_FILE)
+  await writeFile(
+    config,
+    JSON.stringify({ ignore: ignoreGlobs(scanRoot, ctx.nestedProjects ?? []) }),
+    'utf8',
+  )
   const command =
     ctx.detection?.installed === true && ctx.detection.binPath !== undefined
       ? repoCommand(ctx.detection.binPath, [])
@@ -149,10 +197,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
   const execution = await execTool(
     {
       ...command,
-      args: [
-        ...command.args,
-        ...invocationArgs(join(ctx.repoRoot, ctx.project.path), output, ctx.nestedProjects ?? []),
-      ],
+      args: [...command.args, ...invocationArgs(scanRoot, output, config)],
     },
     // Started outside the repo: jscpd's default reporter writes `report/` into
     // the working directory, and `-o` is the flag that redirects it — but a
@@ -161,8 +206,9 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
   )
 
   const rawFiles: string[] = []
-  if (execution.stderr.trim().length > 0) {
-    rawFiles.push(await writeScratchRaw(ctx.scratch, 'jscpd.stderr.txt', execution.stderr))
+  const stderr = withoutConfigEcho(execution.stderr)
+  if (stderr.trim().length > 0) {
+    rawFiles.push(await writeScratchRaw(ctx.scratch, 'jscpd.stderr.txt', stderr))
   }
 
   if (execution.failure !== undefined) {
@@ -237,13 +283,10 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
  *
  * @param scanRoot absolute path of the directory to measure: the project's own,
  * or the repo root for the repo-wide pass
- * @param nested repo-relative posix paths of the projects inside this one
+ * @param output directory jscpd's json report is written to
+ * @param config path of the scratch config file carrying {@link ignoreGlobs}
  */
-export function invocationArgs(
-  scanRoot: string,
-  output: string,
-  nested: readonly string[] = [],
-): string[] {
+export function invocationArgs(scanRoot: string, output: string, config: string): string[] {
   return [
     '--reporters',
     'json',
@@ -252,8 +295,10 @@ export function invocationArgs(
     output,
     '--format',
     FORMATS,
-    '--ignore',
-    anchored(scanRoot, [...IGNORE_GLOBS, ...nested.map((project) => `${project}/**`)]).join(','),
+    // The ignore list travels here rather than on `--ignore`, whose value jscpd
+    // splits on `,` — a comma in the repo's own path would truncate it.
+    '--config',
+    config,
     // Absolute names in the report; with relative ones jscpd resolves them
     // against its own cwd, which is the scratch dir, not the repo.
     '--absolute',

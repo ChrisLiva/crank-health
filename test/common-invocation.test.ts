@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
@@ -7,6 +7,7 @@ import { banditRunner } from '../src/adapters/common/bandit.ts'
 import { gitleaksRunner, invocationArgs as gitleaksArgs } from '../src/adapters/common/gitleaks.ts'
 import {
   JSCPD_TOOL,
+  ignoreGlobs as jscpdIgnore,
   invocationArgs as jscpdArgs,
   jscpdRunner,
 } from '../src/adapters/common/jscpd.ts'
@@ -36,6 +37,7 @@ import {
 } from '../src/adapters/csharp/stryker-net.ts'
 import { EXCLUDED_SEGMENTS } from '../src/core/discover.ts'
 import { dnxCommand } from '../src/core/exec.ts'
+import { pinnedVersion } from '../src/manifest.ts'
 import { ADAPTERS } from '../src/adapters/index.ts'
 import type { RunContext } from '../src/core/types.ts'
 import { categoryRank } from '../src/core/types.ts'
@@ -88,23 +90,129 @@ describe('the license rule', () => {
   })
 })
 
-describe('zero footprint, in the arguments', () => {
-  /** jscpd's `--ignore` value, read by flag name rather than by position. */
-  const ignoreOf = (nested: readonly string[] = []) => {
-    const args = jscpdArgs(REPO, SCRATCH, nested)
-    return args[args.indexOf('--ignore') + 1] ?? ''
+/** jscpd names a clone's side as an object in some entries and a string in others. */
+const clonedFile = (file: unknown) =>
+  typeof file === 'object' && file !== null
+    ? ((file as { name?: string }).name ?? '')
+    : String(file)
+
+/** A duplicated pair, repeated under two directories the ignore list has to exclude. */
+const plantDuplicates = async (root: string) => {
+  const fixture = join(import.meta.dirname, 'fixtures', 'sec-basic', 'src')
+  const [handler, report] = await Promise.all([
+    readFile(join(fixture, 'handler.js'), 'utf8'),
+    readFile(join(fixture, 'report.js'), 'utf8'),
+  ])
+  await Promise.all(
+    ['src', 'node_modules', '.secretdir'].map(async (directory) => {
+      await mkdir(join(root, directory), { recursive: true })
+      await Promise.all([
+        writeFile(join(root, directory, 'a.js'), handler, 'utf8'),
+        writeFile(join(root, directory, 'b.js'), report, 'utf8'),
+      ])
+    }),
+  )
+}
+
+/** The pinned binary, run as the runner runs it: config in scratch, cwd outside the tree. */
+const measureDuplication = async (root: string, scratch: string) => {
+  const config = join(scratch, 'jscpd.json')
+  await writeFile(config, JSON.stringify({ ignore: jscpdIgnore(root) }), 'utf8')
+  const output = join(scratch, 'jscpd')
+  await execa(
+    'npx',
+    ['-y', `jscpd@${pinnedVersion('jscpd')}`, ...jscpdArgs(root, output, config)],
+    {
+      cwd: scratch,
+      reject: false,
+    },
+  )
+  const report = JSON.parse(await readFile(join(output, 'jscpd-report.json'), 'utf8')) as {
+    statistics: { total: { percentageTokens: number } }
+    duplicates: { firstFile: unknown; secondFile: unknown }[]
   }
+  return {
+    percentage: report.statistics.total.percentageTokens,
+    files: [
+      ...new Set(
+        report.duplicates.flatMap((d) => [clonedFile(d.firstFile), clonedFile(d.secondFile)]),
+      ),
+    ],
+  }
+}
+
+/**
+ * The ignore list is the only thing between the duplication grade and a repo's
+ * dependencies, and jscpd matches it against the absolute paths it walks — so
+ * whether it works at all depends on the repo's own address. The argument tests
+ * further down pin the strings; these pin what the real matcher does with them,
+ * because a list that matches nothing renders exactly like a list that matches
+ * everything it should.
+ */
+describe('jscpd’s ignore list, against the real tool', () => {
+  /**
+   * Each of these directory names disables the list a different way, and every
+   * one of them fails toward a *wrong grade* rather than an error: a hidden
+   * ancestor matches `**\/.*\/**` on the repo's own address; `[` and `{` are
+   * pattern syntax in the literal prefix; `,` splits the value jscpd is handed.
+   */
+  it.each([
+    ['a plain path', 'plain'],
+    ['a hidden ancestor', join('.cache', 'repo')],
+    ['brackets in the path', 'br[ack]et'],
+    ['braces in the path', 'br{ac}e'],
+    ['parentheses in the path', 'pa(re)n'],
+    ['a comma in the path', 'my,repo'],
+  ])(
+    'measures the repo and not its dependencies, with %s',
+    async (_label, relative) => {
+      const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-'))
+      try {
+        const root = join(base, relative)
+        const scratch = join(base, 'scratch')
+        await mkdir(scratch, { recursive: true })
+        await plantDuplicates(root)
+
+        const { percentage, files } = await measureDuplication(root, scratch)
+
+        // The `src/` pair is measured…
+        expect(files.some((file) => file.includes(`${join(root, 'src')}/`))).toBe(true)
+        expect(percentage).toBeGreaterThan(0)
+        // …and neither excluded directory is, in the clones or in the ratio.
+        expect(files.filter((file) => file.includes('node_modules'))).toEqual([])
+        expect(files.filter((file) => file.includes('.secretdir'))).toEqual([])
+      } finally {
+        await rm(base, { recursive: true, force: true })
+      }
+    },
+    120_000,
+  )
+})
+
+describe('zero footprint, in the arguments', () => {
+  /** The ignore list, read from the seam that builds it rather than from a flag. */
+  const ignoreOf = (nested: readonly string[] = []) => jscpdIgnore(REPO, nested)
 
   /** jscpd's default reporter writes `report/` into the working directory. */
   it('redirects jscpd’s report into the scratch dir', () => {
-    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'))
+    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'), join(SCRATCH, 'jscpd.json'))
     expect(args[args.indexOf('--output') + 1]).toBe('/scratch/jscpd')
     expect(args).toContain('--reporters')
     expect(args.at(-1)).toBe(REPO)
   })
 
+  /**
+   * jscpd splits `--ignore` on `,`, so a single comma in the repo's own path
+   * would truncate every rule after it. The config file's array does not split.
+   */
+  it('hands jscpd its ignore list in a scratch config file, not on --ignore', () => {
+    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'), join(SCRATCH, 'jscpd.json'))
+    expect(args).not.toContain('--ignore')
+    expect(args[args.indexOf('--config') + 1]).toBe('/scratch/jscpd.json')
+  })
+
   it('keeps jscpd out of .git and dependency directories', () => {
-    const ignore = ignoreOf()
+    const ignore = ignoreOf().join(',')
     for (const excluded of ['.git', 'node_modules', '.venv', '__pycache__']) {
       expect(ignore).toContain(excluded)
     }
@@ -116,7 +224,7 @@ describe('zero footprint, in the arguments', () => {
    * apart as one of them grows.
    */
   it('derives jscpd’s ignore list from discovery’s excluded segments', () => {
-    const entries = ignoreOf().split(',')
+    const entries = ignoreOf()
     for (const segment of EXCLUDED_SEGMENTS) {
       expect(entries).toContain(`${REPO}/**/${segment}/**`)
     }
@@ -130,7 +238,7 @@ describe('zero footprint, in the arguments', () => {
    * approximation stated on the constant.
    */
   it('keeps jscpd out of hidden directories, with no way to carve .github back in', () => {
-    const entries = ignoreOf().split(',')
+    const entries = ignoreOf()
     expect(entries).toContain(`${REPO}/**/.*/**`)
     expect(entries.filter((entry) => entry.startsWith('!'))).toEqual([])
     expect(entries.filter((entry) => entry.includes('.github'))).toEqual([])
@@ -146,9 +254,23 @@ describe('zero footprint, in the arguments', () => {
    * about.
    */
   it('anchors every ignore glob to the scanned directory, so no ancestor can match', () => {
-    const entries = ignoreOf(['packages/api']).split(',')
+    const entries = ignoreOf(['packages/api'])
     expect(entries.length).toBeGreaterThan(0)
     expect(entries.filter((entry) => !entry.startsWith(`${REPO}/`))).toEqual([])
+  })
+
+  /**
+   * The anchoring prefix is a literal path spliced into a pattern, so a repo
+   * checked out to `~/src/br[ack]et/` would otherwise turn its own address into
+   * a character class that matches nothing — taking every ignore rule with it
+   * and putting `node_modules/` back inside the duplication measurement.
+   */
+  it('escapes glob metacharacters in the path it anchors to', () => {
+    const entries = jscpdIgnore('/src/br[ack]et/re{p}o(1)', ['packages/api'])
+    expect(entries.length).toBeGreaterThan(0)
+    for (const entry of entries) {
+      expect(entry.startsWith(String.raw`/src/br\[ack\]et/re\{p\}o\(1\)/`)).toBe(true)
+    }
   })
 
   /**
@@ -161,13 +283,13 @@ describe('zero footprint, in the arguments', () => {
     expect(ignore).toContain(`${REPO}/packages/api/**`)
     expect(ignore).toContain(`${REPO}/packages/web/**`)
     // …and the repo-wide pass, which passes none, still sees every package.
-    const entries = ignoreOf().split(',')
+    const entries = ignoreOf()
     expect(entries).not.toContain(`${REPO}/packages/api/**`)
     expect(entries).not.toContain(`${REPO}/packages/web/**`)
   })
 
   it('asks jscpd for exactly the graded languages, C# included', () => {
-    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'))
+    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'), join(SCRATCH, 'jscpd.json'))
     expect(args[args.indexOf('--format') + 1]).toBe('javascript,jsx,typescript,tsx,python,csharp')
   })
 
@@ -179,9 +301,9 @@ describe('zero footprint, in the arguments', () => {
    * measurement.
    */
   it('keeps jscpd out of C# build output directories', () => {
-    const ignore = ignoreOf()
-    expect(ignore).toContain('**/bin/**')
-    expect(ignore).toContain('**/obj/**')
+    const entries = ignoreOf()
+    expect(entries).toContain(`${REPO}/**/bin/**`)
+    expect(entries).toContain(`${REPO}/**/obj/**`)
   })
 
   it('writes gitleaks’ report into the scratch dir, redacted', () => {
