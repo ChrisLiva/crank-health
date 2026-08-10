@@ -80,7 +80,6 @@ Graded on absolute counts, never normalized: any critical → F, any error → D
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files in this repo, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
-| opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
@@ -142,8 +141,6 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.14 | — |
-| jscpd | ok | [default-config] | 5.0.14 | — |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
 Evidence: [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json) · [raw/services/api/jscpd-report.json](raw/services/api/jscpd-report.json) · [raw/services/web/jscpd-report.json](raw/services/web/jscpd-report.json)

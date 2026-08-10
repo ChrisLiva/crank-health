@@ -3,6 +3,8 @@ import type { RunRecord } from '../src/core/orchestrator.ts'
 import { sortFindings } from '../src/core/orchestrator.ts'
 import type { CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
+import { collapseToolRows } from '../src/render/display.ts'
+import type { ReportTool } from '../src/render/json.ts'
 import { buildReport, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
 import { REPO_SCOPED_REASON } from '../src/run.ts'
@@ -323,6 +325,21 @@ describe('buildReport projects', () => {
     expect('repoWide' in (report.tools.at(-1) ?? {})).toBe(false)
   })
 
+  /**
+   * The renderers collapse the rows a reader cannot tell apart; the data does
+   * not. `report.json` is the record of what actually ran, so every run keeps
+   * its row and its attribution however alike two rows read.
+   */
+  it('keeps a row per run, whatever the renderers collapse', () => {
+    const projects = ['packages/api', 'packages/web', 'packages/z']
+    const report = buildReport(
+      input({ runs: projects.map((project) => ({ record: { ...record(), project }, raw: [] })) }),
+    )
+    expect(report.tools.map((tool) => [tool.tool, tool.project])).toEqual(
+      projects.map((project) => ['oxlint', project]),
+    )
+  })
+
   /** …and a package called `repo/` does not own the repo's secrets scanner. */
   it('keeps a repo-spanning run out of every project’s toolchain', () => {
     const spanning: RunRecord = {
@@ -398,6 +415,102 @@ describe('serializeReport', () => {
   })
 })
 
+/**
+ * The rows a reader sees, deduplicated. Two rows a reader cannot tell apart say
+ * nothing twice, so only the first of them is rendered — the companion unit to
+ * the rendered-output assertions in `report-md.test.ts` and below.
+ */
+describe('collapseToolRows', () => {
+  it('collapses nothing when there is nothing to collapse', () => {
+    expect(collapseToolRows([])).toEqual([])
+  })
+
+  it('keeps the first of the rows that render identically, in the order given', () => {
+    const first = toolRow({ project: 'packages/web' })
+    const gitleaks = toolRow({ tool: 'gitleaks', reason: 'gitleaks is not on PATH' })
+    const collapsed = collapseToolRows([
+      first,
+      gitleaks,
+      toolRow({ project: 'packages/api' }),
+      toolRow({ project: 'packages/cli' }),
+    ])
+    // The survivor is the first occurrence, and nothing was re-sorted.
+    expect(collapsed).toEqual([first, gitleaks])
+  })
+
+  /** The four fields no tool table renders: they cannot keep two rows apart. */
+  it('excludes project, repoWide, detection and raw from the key, as a set', () => {
+    const collapsed = collapseToolRows([
+      toolRow(),
+      toolRow({ project: 'packages/api' }),
+      toolRow({ repoWide: true }),
+      toolRow({
+        detection: {
+          reason: 'dependency',
+          configFiles: [],
+          ownedVia: 'package.json',
+          installed: true,
+          version: null,
+        },
+      }),
+      toolRow({ raw: ['raw/packages/api/opengrep.json'] }),
+    ])
+    expect(collapsed).toEqual([toolRow()])
+  })
+
+  /** …and every field a tool table does render keeps two rows apart. */
+  const KEYED: readonly (readonly [string, Partial<ReportTool>])[] = [
+    ['tool', { tool: 'gitleaks' }],
+    ['category', { category: 'lint' }],
+    ['scope', { scope: 'js-ts' }],
+    ['side', { side: 'base' }],
+    ['state', { state: 'error' }],
+    ['reason', { reason: 'no tsconfig.json under packages/api' }],
+    ['execution', { execution: 'repo-installed' }],
+    ['provenance', { provenance: 'repo-config' }],
+    ['version', { version: '1.26.0' }],
+    ['pinned', { pinned: '1.27.0' }],
+  ]
+
+  it.each(KEYED)('keeps two rows apart when %s differs', (_field, difference) => {
+    expect(
+      collapseToolRows([toolRow(), toolRow({ project: 'packages/api', ...difference })]),
+    ).toHaveLength(2)
+  })
+
+  /**
+   * A reason carrying a project-local path is a different sentence, so it is a
+   * different row however alike the two runs otherwise are.
+   */
+  it('keeps two rows apart when only their reason names a different project', () => {
+    const rows = [
+      toolRow({
+        tool: 'tsc',
+        project: 'packages/web',
+        reason: 'no tsconfig.json under packages/web',
+      }),
+      toolRow({
+        tool: 'tsc',
+        project: 'packages/api',
+        reason: 'no tsconfig.json under packages/api',
+      }),
+    ]
+    expect(collapseToolRows(rows)).toEqual(rows)
+  })
+
+  /** The repo-wide duplication pass renders as its per-project runs do. */
+  it('collapses a repo-wide row into the per-project row it renders as', () => {
+    const perProject = toolRow({
+      tool: 'jscpd',
+      category: 'duplication',
+      state: 'ok',
+      reason: null,
+    })
+    const repoWide = { ...perProject, project: 'repo', repoWide: true }
+    expect(collapseToolRows([perProject, repoWide])).toEqual([perProject])
+  })
+})
+
 describe('renderTerminal', () => {
   const report = buildReport(
     input({
@@ -459,6 +572,41 @@ describe('renderTerminal', () => {
     expect(renderTerminal(warned, paths, { color: false })).toContain(
       'warning: oxlint: graded lint on its default config because eslint reported not-available',
     )
+  })
+
+  /**
+   * The glance is a glance: one missing scanner is one line, however many
+   * projects it was planned in.
+   */
+  it('names a tool that did not complete once, however many projects it ran in', () => {
+    const missing = (project: string): { record: RunRecord; raw: string[] } => ({
+      record: {
+        ...record(),
+        tool: 'opengrep',
+        category: 'security',
+        scope: 'common',
+        project,
+        result: {
+          state: 'not-available',
+          findings: [],
+          rawFiles: [],
+          reason: 'opengrep is not on PATH',
+        },
+      },
+      raw: [],
+    })
+    const text = renderTerminal(
+      buildReport(
+        input({ runs: [missing('packages/api'), missing('packages/web'), missing('packages/z')] }),
+      ),
+      paths,
+      { color: false },
+    )
+
+    const [, degraded = ''] = text.split('Tools that did not complete')
+    expect(degraded.split('\n').filter((line) => line.includes('opengrep'))).toEqual([
+      '  not-available opengrep: opengrep is not on PATH',
+    ])
   })
 
   it('emits no escape sequences when colour is off, and some when it is on', () => {
@@ -543,6 +691,25 @@ describe('renderTerminal projects', () => {
 })
 
 const input = makeReportInput
+
+/** One tool row a monorepo repeats: a missing scanner, once per project. */
+function toolRow(overrides: Partial<ReportTool> = {}): ReportTool {
+  return {
+    tool: 'opengrep',
+    category: 'security',
+    scope: 'common',
+    project: 'packages/web',
+    execution: 'ephemeral-pinned',
+    provenance: 'default-config',
+    version: null,
+    pinned: '1.26.0',
+    detection: null,
+    state: 'not-available',
+    reason: 'opengrep is not on PATH',
+    raw: [],
+    ...overrides,
+  }
+}
 
 function record(): RunRecord {
   return {

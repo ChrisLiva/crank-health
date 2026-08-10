@@ -1,6 +1,6 @@
 import { ROOT_PROJECT } from '../core/discover.ts'
 import type { Category, CategoryState, Finding, Language } from '../core/types.ts'
-import type { ReportProjectMovement, ReportRootShell } from './json.ts'
+import type { ReportProjectMovement, ReportRootShell, ReportTool } from './json.ts'
 
 /**
  * The vocabulary every renderer shares: how a category, a grade state and a
@@ -61,6 +61,42 @@ export function hasProjectMovement(project: ReportProjectMovement): boolean {
     project.resolvedFindings > 0 ||
     movedCategories(project).length > 0
   )
+}
+
+/**
+ * The tool rows a reader sees, with the ones that say the same thing twice
+ * removed: in a thirty-package monorepo "opengrep is not on PATH" is one fact,
+ * not thirty rows of it (spec §9).
+ *
+ * The key is the union of the cells both renderers print, so a row surviving
+ * here is one no reader could have told from the one above it, in either
+ * surface. `project`, `repoWide`, `detection` and `raw` are left out because
+ * neither the terminal's degraded list nor `report.md`'s tool table prints
+ * them: what a run was about is `report.json`'s answer, and the per-project
+ * toolchain table's.
+ *
+ * The first row of a group survives and the input order is kept, so the report
+ * stays the deterministic order {@link buildReport} put the runs in.
+ */
+export function collapseToolRows(tools: readonly ReportTool[]): readonly ReportTool[] {
+  const seen = new Set<string>()
+  return tools.filter((tool) => {
+    const key = JSON.stringify([
+      tool.tool,
+      tool.category,
+      tool.scope,
+      tool.side ?? null,
+      tool.state,
+      tool.reason,
+      tool.execution,
+      tool.provenance,
+      tool.version,
+      tool.pinned,
+    ])
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 /** `lint B → F` for each of a project's categories whose state is not the one it was. */

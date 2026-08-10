@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CategoryState } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import { CATEGORY_LABELS } from '../src/render/display.ts'
-import type { ReportProject } from '../src/render/json.ts'
+import type { ReportProject, ResolvedRun } from '../src/render/json.ts'
 import { renderReportMarkdown } from '../src/render/report-md.ts'
 import { TIMINGS_MARKER } from '../src/render/report-md.ts'
 import {
@@ -41,6 +41,86 @@ function section(markdown: string, heading: string): string {
 function projectBlock(markdown: string, heading: string): string {
   const [, rest = ''] = markdown.split(heading)
   return rest.split('\n### ')[0]?.split('\n## ')[0] ?? ''
+}
+
+/**
+ * Every per-category tool table in a report, by the category it sits under —
+ * its data rows only, header and separator dropped. The per-project toolchain
+ * table starts `| Tool | Category |` and is deliberately not one of these: it
+ * says which project owns what, and repeats a row on purpose.
+ */
+function toolTables(markdown: string): Map<string, string[]> {
+  const tables = new Map<string, string[]>()
+  let category = ''
+  let rows: string[] | undefined
+  for (const line of markdown.split('\n')) {
+    if (line.startsWith('## ')) {
+      category = line.slice(3)
+      rows = undefined
+    }
+    if (line.startsWith('| Tool | State |') || line.startsWith('| Tool | Scan |')) {
+      rows = []
+      tables.set(category, rows)
+    } else if (rows !== undefined && line.startsWith('|') && !line.startsWith('| --- |')) {
+      rows.push(line)
+    } else if (!line.startsWith('|')) {
+      rows = undefined
+    }
+  }
+  return tables
+}
+
+/** One category's tool table as the reader sees it, or `''` where it has none. */
+function toolTable(markdown: string, category: string): string {
+  for (const [heading, rows] of toolTables(markdown)) {
+    if (heading.startsWith(`${category} —`)) return rows.join('\n')
+  }
+  return ''
+}
+
+/** One project's run of a scanner that is not installed: the row every project repeats. */
+function missingScan(project: string): ResolvedRun {
+  return {
+    record: {
+      tool: 'opengrep',
+      category: 'security',
+      scope: 'common',
+      project,
+      repoWide: false,
+      rollupOnly: false,
+      pinnedVersion: '1.26.0',
+      detection: null,
+      result: {
+        state: 'not-available',
+        findings: [],
+        rawFiles: [],
+        reason: 'opengrep is not on PATH',
+      },
+      durationMs: 1,
+      standby: false,
+    },
+    raw: [],
+  }
+}
+
+/** One project's successful lint run, with the raw output it left behind. */
+function lintScan(project: string, raw: readonly string[]): ResolvedRun {
+  return {
+    record: {
+      tool: 'oxlint',
+      category: 'lint',
+      scope: 'js-ts',
+      project,
+      repoWide: false,
+      rollupOnly: false,
+      pinnedVersion: '1.77.0',
+      detection: null,
+      result: { state: 'ok', findings: [], rawFiles: [], toolVersion: '1.77.0' },
+      durationMs: 1,
+      standby: false,
+    },
+    raw,
+  }
 }
 
 /** A graded duplication category measured at 12.5%, with `clones` clones under it. */
@@ -237,6 +317,58 @@ describe('renderReportMarkdown', () => {
       .split('\n')
       .find((row) => row.startsWith('| oxlint |'))
     expect(line).toBe('| oxlint | error | [default-config] | — (pinned 1.77.0) | a \\| b c |')
+  })
+
+  /**
+   * The same runner in four packages, unavailable for the same reason, is one
+   * fact. A tool table holding two rows a reader cannot tell apart is the noise
+   * the collapse exists to remove, whatever the row counts happen to be.
+   */
+  it.each(FIXTURES)('renders no two identical tool rows under a category for %s', async (name) => {
+    const tables = toolTables(await render(name))
+    expect(tables.size).toBeGreaterThan(0)
+    for (const [category, rows] of tables) {
+      expect([category, new Set(rows).size]).toEqual([category, rows.length])
+    }
+  })
+
+  /**
+   * Collapsing is removal and nothing else: no count marker, no suffix, no list
+   * of the projects that were folded in. The table reads as if the run had
+   * happened once.
+   */
+  it('adds no count, suffix or project list to a collapsed row', () => {
+    const one = renderReportMarkdown(makeReport({ runs: [missingScan('packages/api')] }))
+    const many = renderReportMarkdown(
+      makeReport({
+        runs: [missingScan('packages/api'), missingScan('packages/web'), missingScan('packages/z')],
+      }),
+    )
+    expect(toolTable(many, 'security')).toBe(toolTable(one, 'security'))
+    expect(toolTable(one, 'security')).toContain('| opengrep | not available |')
+  })
+
+  /**
+   * The evidence line is the reader's way back to what each run actually
+   * produced, so it reads the uncollapsed list: one row above it, one link per
+   * run under it.
+   */
+  it('links every run’s raw output under a collapsed tool row', () => {
+    const markdown = renderReportMarkdown(
+      makeReport({
+        runs: [
+          lintScan('packages/api', ['raw/packages/api/oxlint.sarif.json']),
+          lintScan('packages/web', ['raw/packages/web/oxlint.sarif.json']),
+        ],
+      }),
+    )
+    expect(toolTable(markdown, 'lint').split('\n')).toEqual([
+      '| oxlint | ok | [default-config] | 1.77.0 | — |',
+    ])
+    expect(markdown).toContain(
+      'Evidence: [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.json) · ' +
+        '[raw/packages/web/oxlint.sarif.json](raw/packages/web/oxlint.sarif.json)',
+    )
   })
 
   it('caps the findings it lists and says where the rest are', () => {

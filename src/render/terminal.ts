@@ -3,6 +3,7 @@ import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
 import {
   CATEGORY_LABELS,
+  collapseToolRows,
   hasProjectMovement,
   movedCategories,
   percent,
@@ -74,7 +75,7 @@ export function renderTerminal(
     }
   }
 
-  const degraded = report.tools.filter((tool) => tool.state !== 'ok')
+  const degraded = collapseToolRows(report.tools.filter((tool) => tool.state !== 'ok'))
   if (degraded.length > 0) {
     lines.push('', color.bold('Tools that did not complete'))
     for (const tool of degraded) {

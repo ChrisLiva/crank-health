@@ -17,6 +17,7 @@ import {
   ADVISORY_TAG,
   CATEGORY_LABELS,
   TOUCHED_TAG,
+  collapseToolRows,
   hasProjectMovement,
   location,
   movedCategories,
@@ -435,7 +436,7 @@ function categorySection(
   if (state.status === 'graded' && state.grade !== 'A') {
     blocks.push(`**Remediation.** ${REMEDIATION[category]}`)
   }
-  if (tools.length > 0) blocks.push(toolTable(tools))
+  if (tools.length > 0) blocks.push(toolTable(collapseToolRows(tools)))
   blocks.push(...findingList('Findings', graded, limit))
   blocks.push(
     ...findingList('Advisory findings — reported, not counted toward the grade', advisory, limit),
