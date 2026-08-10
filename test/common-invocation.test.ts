@@ -90,11 +90,8 @@ describe('the license rule', () => {
   })
 })
 
-/** jscpd names a clone's side as an object in some entries and a string in others. */
-const clonedFile = (file: unknown) =>
-  typeof file === 'object' && file !== null
-    ? ((file as { name?: string }).name ?? '')
-    : String(file)
+/** A clone side's path, read the way `parseJscpdReport` reads it. */
+const clonedFile = (side: { name: string }) => side.name
 
 /** A duplicated pair, repeated under two directories the ignore list has to exclude. */
 const plantDuplicates = async (root: string) => {
@@ -129,7 +126,7 @@ const measureDuplication = async (root: string, scratch: string) => {
   )
   const report = JSON.parse(await readFile(join(output, 'jscpd-report.json'), 'utf8')) as {
     statistics: { total: { percentageTokens: number } }
-    duplicates: { firstFile: unknown; secondFile: unknown }[]
+    duplicates: { firstFile: { name: string }; secondFile: { name: string } }[]
   }
   return {
     percentage: report.statistics.total.percentageTokens,

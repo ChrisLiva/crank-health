@@ -226,7 +226,10 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `jscpd wrote no report (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
+      // The filtered stderr: jscpd's config echo is line 1 of every run, and
+      // reporting it here would state the flag we passed instead of why the
+      // run failed — with a scratch path that changes on every run.
+      reason: `jscpd wrote no report (exit ${execution.exitCode ?? 'signal'}): ${firstLine(stderr)}`,
     }
   }
   rawFiles.unshift(
