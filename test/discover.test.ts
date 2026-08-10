@@ -9,6 +9,7 @@ import {
   discoverProjects,
   inventoryOf as coreInventoryOf,
   isExcluded,
+  isHiddenScope,
   languageOf,
   nearestProjectMap,
   partitionProjects,
@@ -141,6 +142,133 @@ describe('discoverFiles and C# build output', () => {
       // The exclusion is C#-only: a JS package's bin/ is source, not MSBuild output.
       expect(inventory.all).toContain('bin/cli.js')
       expect(inventory.all).toContain('bin/tool.py')
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('discoverFiles and hidden directories', () => {
+  let repo: string
+  let inventory: FileInventory
+
+  beforeAll(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'crank-discover-hidden-'))
+    await git(repo, 'init', '--quiet')
+
+    // Dot-files: the repo's own config, at the root and below it.
+    await plant(repo, '.gitignore', 'ignored.txt\n')
+    await plant(repo, '.prettierrc', '{}\n')
+    await plant(repo, '.env.example', 'TOKEN=\n')
+    await plant(repo, 'src/.hidden-named-file.ts', 'export const h = 1\n')
+    await plant(repo, 'packages/web/.eslintrc.cjs', 'module.exports = {}\n')
+    // Dot-directories: tooling scope, not source.
+    await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
+    await plant(repo, 'packages/web/.next/x.js', 'const n = 1\n')
+    await plant(repo, '.github/.cache/x.js', 'const c = 1\n')
+    await plant(repo, 'packages/web/.github/workflows/x.yml', 'on: push\n')
+    await plant(repo, '.hidden/.github/workflows/x.yml', 'on: push\n')
+    // The root `.github` exemption.
+    await plant(repo, '.github/workflows/ci.yml', 'on: push\n')
+    await plant(repo, '.github/scripts/build.js', 'const b = 1\n')
+    await plant(repo, 'src/app.js', 'const a = 1\n')
+
+    inventory = await discoverFiles(repo)
+  })
+
+  afterAll(async () => {
+    await rm(repo, { recursive: true, force: true })
+  })
+
+  it('drops files under a hidden directory', () => {
+    expect(inventory.all).not.toContain('.crank/hooks/hook.ts')
+    expect(inventory.all).not.toContain('packages/web/.next/x.js')
+  })
+
+  it('keeps dot-files wherever they sit', () => {
+    expect(inventory.all).toContain('.gitignore')
+    expect(inventory.all).toContain('.prettierrc')
+    expect(inventory.all).toContain('.env.example')
+    expect(inventory.all).toContain('src/.hidden-named-file.ts')
+    expect(inventory.all).toContain('packages/web/.eslintrc.cjs')
+  })
+
+  it('exempts the root .github only, and only that one segment', () => {
+    expect(inventory.all).toContain('.github/workflows/ci.yml')
+    expect(inventory.all).toContain('.github/scripts/build.js')
+    expect(inventory.all).not.toContain('.github/.cache/x.js')
+    expect(inventory.all).not.toContain('packages/web/.github/workflows/x.yml')
+  })
+
+  /**
+   * The workflow audit reads the inventory it is handed, so the only thing
+   * discovery decides is whether a root workflow file is still in that list.
+   */
+  it('leaves the root workflow files in the list a workflow audit filters', () => {
+    expect(inventory.all).toContain('.github/workflows/ci.yml')
+    expect(inventory.all).not.toContain('.hidden/.github/workflows/x.yml')
+  })
+})
+
+/**
+ * The inventory is the one input `RepoContext.files` and every runner's
+ * `ctx.files` derives from, so what it drops is dropped for all of them.
+ */
+describe('discoverFiles and the inventory every runner sees', () => {
+  it('leaves nothing under a hidden directory in the list', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-hidden-only-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, '.crank/secrets.env', 'TOKEN=\n')
+      await plant(repo, '.crank/pkg/package-lock.json', '{}\n')
+      await plant(repo, '.crank/mod.py', 'x = 1\n')
+      await plant(repo, '.hidden/.github/workflows/x.yml', 'on: push\n')
+      await plant(repo, 'src/app.js', 'const a = 1\n')
+
+      const inventory = await discoverFiles(repo)
+
+      expect(inventory.all).toEqual(['src/app.js'])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the project partition after hidden directories leave', () => {
+  it('falls through to the root project when hidden directories held the only source', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-hidden-src-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, 'package.json', '{ "name": "root" }\n')
+      await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
+
+      const inventory = await discoverFiles(repo)
+      const projects = partitionProjects(inventory)
+
+      expect(inventory.all).toEqual(['package.json'])
+      expect(paths(projects)).toEqual(['.'])
+      expect(projectAt(projects, '.').files.all).toEqual(['package.json'])
+      // No source file survives, so the root manifest's own declaration is all
+      // the language there is to report.
+      expect(projectAt(projects, '.').languages).toEqual(['js-ts'])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('demotes a root whose remaining source is all hidden to a shell', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-hidden-shell-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, 'package.json', '{ "name": "root" }\n')
+      await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
+      await plant(repo, 'packages/web/package.json', '{ "name": "web" }\n')
+      await plant(repo, 'packages/web/src/index.js', 'const a = 1\n')
+
+      const discovery = await discoverProjects(repo, await discoverFiles(repo))
+
+      expect(paths(discovery.projects)).toEqual(['packages/web'])
+      expect(discovery.rootShell).toBeDefined()
     } finally {
       await rm(repo, { recursive: true, force: true })
     }
@@ -584,5 +712,34 @@ describe('isExcluded', () => {
 
   it.each(['src/node_modules_helper.ts', 'src/venvy.py', 'src/app.js'])('keeps %s', (file) => {
     expect(isExcluded(file)).toBe(false)
+  })
+})
+
+describe('isHiddenScope', () => {
+  it.each([
+    '.crank/hooks/hook.ts',
+    'packages/web/.next/x.js',
+    // The `.github` exemption is that one segment's alone.
+    '.github/.cache/x.js',
+    // ... and only at the root.
+    'packages/web/.github/workflows/x.yml',
+    'a/.b/c/d.ts',
+  ])('excludes %s', (file) => {
+    expect(isHiddenScope(file)).toBe(true)
+  })
+
+  it.each([
+    // Dot-*files* are the repo's own config, wherever they sit.
+    '.gitignore',
+    '.prettierrc',
+    '.env.example',
+    'src/.hidden-named-file.ts',
+    'packages/web/.eslintrc.cjs',
+    '.github/workflows/ci.yml',
+    '.github/scripts/build.js',
+    'src/app.js',
+    'README.md',
+  ])('keeps %s', (file) => {
+    expect(isHiddenScope(file)).toBe(false)
   })
 })

@@ -51,6 +51,9 @@ const FS_CONCURRENCY = 32
  * that are not ignored. Works in a repo with zero commits (nothing is cached
  * yet, `--others` still lists the working tree).
  *
+ * Paths under a hidden directory are out of scope: they are tooling scope, not
+ * the repo's own source.
+ *
  * Paths come back repo-relative, posix, de-duplicated and stable-sorted.
  * Entries `git` lists but the disk no longer has (deleted, not yet staged) are
  * dropped, as are directories (submodule gitlinks) and symlinks.
@@ -62,7 +65,10 @@ export async function discoverFiles(repoRoot: string): Promise<FileInventory> {
   const listed = await gitListFiles(repoRoot)
 
   const candidates = [...new Set(listed)]
-    .filter((file) => file.length > 0 && !isExcluded(file) && !isCsharpBuildOutput(file))
+    .filter(
+      (file) =>
+        file.length > 0 && !isExcluded(file) && !isCsharpBuildOutput(file) && !isHiddenScope(file),
+    )
     .toSorted(compareFiles)
 
   const existing = await mapLimit(candidates, FS_CONCURRENCY, (file) =>
@@ -355,6 +361,27 @@ function isCsharpBuildOutput(file: string): boolean {
     languageOf(file) === 'csharp' &&
     file.split('/').some((segment) => segment === 'bin' || segment === 'obj')
   )
+}
+
+/** The one dot-directory whose contents the repo authors: its CI workflows. */
+const GITHUB_DIRECTORY = '.github'
+
+/**
+ * True when a path sits under a hidden directory — tooling scope rather than
+ * the repo's own source (spec §7). A root `.github` is the one exemption, so
+ * workflows stay in scope; it exempts that segment alone, so `.github/.cache/x.js`
+ * is hidden all the same, as is `packages/web/.github/workflows/x.yml` below the
+ * root. Only directory segments count: a dot-*file* is the repo's own config
+ * wherever it sits, so `.gitignore`, `src/.hidden-named-file.ts` and
+ * `packages/web/.eslintrc.cjs` all stay.
+ */
+export function isHiddenScope(file: string): boolean {
+  return file
+    .split('/')
+    .slice(0, -1)
+    .some(
+      (segment, index) => segment.startsWith('.') && !(index === 0 && segment === GITHUB_DIRECTORY),
+    )
 }
 
 /**
