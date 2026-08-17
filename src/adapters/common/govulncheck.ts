@@ -421,7 +421,7 @@ function packageKey(finding: Finding): string | undefined {
   const pkg = finding.package
   if (finding.rule !== OSV_PACKAGE_RULE || pkg === undefined) return undefined
   if (pkg.ecosystem !== GO_ECOSYSTEM) return undefined
-  return `${finding.file} ${pkg.name}@${pkg.version.replace(/^v/, '')}`
+  return `${finding.file}\u0000${pkg.name}@${pkg.version.replace(/^v/, '')}`
 }
 
 /** One host finding with the verdicts merged in and its sentence re-derived. */
