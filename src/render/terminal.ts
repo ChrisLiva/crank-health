@@ -77,7 +77,7 @@ export function renderTerminal(
   // skip past (spec §9).
   const omit = unselectedCategories(report)
   for (const category of CATEGORIES) {
-    if (!omit.includes(category)) lines.push(categoryLine(report, all, category, color))
+    if (!omit.includes(category)) lines.push(...categoryLines(report, all, category, color))
   }
   if (omit.length > 0) lines.push(color.dim(`  ${notSelectedNote(omit)}`))
 
@@ -353,23 +353,38 @@ function header(report: Report, color: Colors): string {
   return `${color.bold('crank-health')} ${report.crankHealth} · ${report.repo.path} @ ${commit} · ${report.profile}`
 }
 
-function categoryLine(
+/**
+ * One category's grade, and — where it has any — the advisory findings the
+ * grade is *not* about, on a line of their own.
+ *
+ * The two are separate facts: how many findings moved the letter, and how many
+ * were reported beside it without counting. Said in one clause they read as one
+ * number a reader has to unpick before the letter means anything.
+ */
+function categoryLines(
   report: Report,
   findings: readonly Finding[],
   category: Category,
   color: Colors,
-): string {
+): string[] {
   const state = report.categories[category]
   const label = CATEGORY_LABELS[category].padEnd(13)
+  const advisory = findings.filter(
+    (finding) => finding.category === category && !finding.gradeScope,
+  ).length
+  const note =
+    advisory === 0
+      ? []
+      : [color.dim(`    ${plural(advisory, 'advisory finding')}, not counted toward the grade`)]
 
   // Pad before colouring: escape sequences have length but no width.
   if (state.status !== 'graded') {
     const status = state.status === 'error' ? 'error' : 'not assessed'
     const tint = state.status === 'error' ? color.red : color.dim
-    return `  ${color.dim(label)} ${tint(status.padEnd(13))} ${color.dim(state.reason)}`
+    return [`  ${color.dim(label)} ${tint(status.padEnd(13))} ${color.dim(state.reason)}`, ...note]
   }
   const grade = gradeColor(state.grade, color)(state.grade.padEnd(13))
-  return `  ${label} ${grade} ${color.dim(measure(report, findings, category))}`
+  return [`  ${label} ${grade} ${color.dim(measure(report, findings, category))}`, ...note]
 }
 
 /** What the grade was computed from, in the fewest words that are still true. */
@@ -380,12 +395,8 @@ function measure(report: Report, findings: readonly Finding[], category: Categor
   if (score !== undefined) return `mutation score ${percent(score)}`
 
   const mine = findings.filter((finding) => finding.category === category)
-  const graded = mine.filter((finding) => finding.gradeScope).length
-  const advisory = mine.length - graded
   if (mine.length === 0) return 'no findings'
-  const parts = [`${graded} graded`]
-  if (advisory > 0) parts.push(`${advisory} advisory`)
-  return `${parts.join(', ')} ${mine.length === 1 ? 'finding' : 'findings'}`
+  return plural(mine.filter((finding) => finding.gradeScope).length, 'graded finding')
 }
 
 function findingLine(finding: Finding, color: Colors): string {

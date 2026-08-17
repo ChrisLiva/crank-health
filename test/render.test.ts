@@ -737,8 +737,35 @@ describe('renderTerminal', () => {
     for (const label of ['security', 'types', 'dead code', 'complexity', 'test quality']) {
       expect(text).toContain(label)
     }
-    expect(text).toMatch(/lint\s+F\s+1 graded, 1 advisory findings/)
+    expect(text).toMatch(/lint\s+F\s+1 graded finding/)
     expect(text).toMatch(/types\s+error\s+tsc crashed/)
+  })
+
+  /**
+   * What a category's grade was computed from and what it was not are two
+   * facts, and the second one read as part of the first: "1 graded, 1 advisory
+   * findings" is a sentence a reader has to unpick before the letter means
+   * anything.
+   */
+  it('counts a category’s advisory findings on a line of their own', () => {
+    const lines = renderTerminal(report, paths, { color: false }).split('\n')
+    const at = lines.findIndex((line) => line.includes('lint'))
+    expect(lines[at]).toMatch(/^ {2}lint\s+F\s+1 graded finding$/)
+    expect(lines[at + 1]).toBe('    1 advisory finding, not counted toward the grade')
+  })
+
+  it('gives a category with no advisory findings no such line', () => {
+    const text = renderTerminal(
+      buildReport(
+        input({
+          categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'B' } },
+          findings: [makeFinding({ id: 'a' })],
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+    expect(text).not.toContain('advisory')
   })
 
   /**
