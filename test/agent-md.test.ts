@@ -120,23 +120,158 @@ describe('task priority', () => {
     expect(tasks.map((task) => task.id)).toEqual(tasks.map((_, index) => `T${index + 1}`))
   })
 
-  it('leaves alone the categories nothing can be done about', () => {
+  /**
+   * A grade is not the filter any more: work is work whatever letter its
+   * category currently holds, and a category with no letter at all — nothing
+   * could assess it, its tool errored — still has the findings it produced.
+   */
+  it('makes a task of a graded finding whatever state its category is in', () => {
     const report = makeReport({
       categories: {
         ...allGraded(),
-        // Graded A: done. Not assessed: nothing to work from.
         types: { status: 'not-assessed', reason: 'no type checker ran' },
         lint: { status: 'error', reason: 'oxlint crashed' },
       },
       findings: [
         makeFinding({ id: 'a', category: 'lint' }),
-        makeFinding({ id: 'b', category: 'types' }),
-        makeFinding({ id: 'c', category: 'dead-code' }),
+        makeFinding({ id: 'b', category: 'types', tool: 'tsc', rule: 'TS1000' }),
+        makeFinding({ id: 'c', category: 'dead-code', tool: 'knip', rule: 'knip/unused-exports' }),
       ],
     })
-    expect(buildAgentTasks(report)).toEqual([])
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual([
+      'types',
+      'dead-code',
+      'lint',
+    ])
   })
 })
+
+/**
+ * What earns a place in the list, now that a grade no longer decides it.
+ *
+ * A finding is *eligible* when it counted toward a grade, or when it is
+ * advisory and `related` links it to a graded finding at the same place — a
+ * default config's opinion standing alone is not work anyone asked for. A theme
+ * survives when an eligible finding of its lands in a file somebody wrote: not a
+ * manifest, not generated. Dependency work is the exception that proves it — its
+ * file is always a manifest, so what decides it is whether a fixed version to
+ * upgrade to exists at all.
+ */
+describe('what counts as a task', () => {
+  it('makes a task of a graded finding in a category already graded A', () => {
+    const report = makeReport({
+      categories: allGraded(),
+      findings: [makeFinding({ id: 'a' })],
+    })
+    expect(buildAgentTasks(report).map((task) => [task.category, task.gradeImpact])).toEqual([
+      ['lint', 'lint · A → A'],
+    ])
+  })
+
+  it('leaves an advisory finding nothing else answers for out of the list', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      findings: [clone('src/a.ts')],
+    })
+    expect(report.advisories).toHaveLength(1)
+    expect(buildAgentTasks(report)).toEqual([])
+  })
+
+  /**
+   * The cross-link is what makes an advisory row work: a graded finding at the
+   * same place says somebody has to open that file anyway.
+   */
+  it('keeps an advisory finding a graded one answers for at the same place', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      findings: [clone('src/a.ts'), makeFinding({ id: 'l', file: 'src/a.ts' })],
+    })
+    expect(report.advisories[0]?.related).toEqual(['l'])
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['duplication', 'lint'])
+  })
+
+  it('leaves a theme whose only eligible finding is in generated code out', () => {
+    for (const file of ['gen/api.ts', 'src/gen/api.ts', 'src/api.gen.ts']) {
+      expect(buildAgentTasks(lintIn(file))).toEqual([])
+    }
+  })
+
+  /** The repo's own configs say which trees it generates; R2-T6 reads them. */
+  it('leaves a theme in a file the repo’s own configs exclude out', () => {
+    expect(buildAgentTasks(lintIn('build/api.ts'), undefined, ['build/**'])).toEqual([])
+    expect(buildAgentTasks(lintIn('packages/web/dist/a.ts'), undefined, ['**/dist/**'])).toEqual([])
+  })
+
+  /** A pattern the translation cannot carry over must not hide a finding. */
+  it('keeps a theme whose file only matches an exclude it cannot read', () => {
+    expect(buildAgentTasks(lintIn('build/api.ts'), undefined, ['bui[l]d/**'])).toHaveLength(1)
+  })
+
+  it('keeps a theme with one hand-written file among generated ones', () => {
+    const report = makeReport({
+      categories: allGraded(),
+      findings: [
+        makeFinding({ id: 'g', file: 'src/api.gen.ts' }),
+        makeFinding({ id: 'h', file: 'src/api.ts' }),
+      ],
+    })
+    expect(buildAgentTasks(report)[0]?.findings.map((finding) => finding.file)).toEqual([
+      'src/api.gen.ts',
+      'src/api.ts',
+    ])
+  })
+
+  it('leaves a vulnerable dependency no released version fixes out', () => {
+    expect(buildAgentTasks(vulnerable(undefined))).toEqual([])
+    expect(buildAgentTasks(vulnerable('4.17.21')).map((task) => task.title)).toEqual([
+      'Upgrade 1 vulnerable dependency in `package-lock.json`',
+    ])
+  })
+})
+
+/** A jscpd clone: reported so a reader knows where, never counted (spec §3). */
+function clone(file: string): Finding {
+  return makeFinding({
+    id: `dup-${file}`,
+    category: 'duplication',
+    tool: 'jscpd',
+    rule: 'jscpd/duplicate-block',
+    gradeScope: false,
+    file,
+  })
+}
+
+/** One graded lint finding, in the file the test is about. */
+function lintIn(file: string): Report {
+  return makeReport({ categories: allGraded(), findings: [makeFinding({ id: 'a', file })] })
+}
+
+/** A vulnerable dependency, with or without a version to upgrade to. */
+function vulnerable(fixedIn: string | undefined): Report {
+  return makeReport({
+    categories: { ...allGraded(), security: { status: 'graded', grade: 'D' } },
+    findings: [
+      makeFinding({
+        id: 'osv',
+        category: 'security',
+        tool: OSV_SCANNER_TOOL,
+        rule: 'GHSA-0000-0000-0001',
+        severity: 'error',
+        file: 'package-lock.json',
+        package: { name: 'lodash', version: '4.17.15', ecosystem: 'npm' },
+        packageAdvisories: [
+          {
+            id: 'GHSA-0000-0000-0001',
+            aliases: [],
+            severity: 'error',
+            summary: 'prototype pollution',
+            ...(fixedIn === undefined ? {} : { fixedIn }),
+          },
+        ],
+      }),
+    ],
+  })
+}
 
 describe('themed grouping', () => {
   /** Spec §10: "Remove 14 dead exports" is one task, not fourteen. */
@@ -432,7 +567,24 @@ describe('the task budget', () => {
   it('says so plainly when there is nothing to do', () => {
     const markdown = renderAgentMarkdown(makeReport({ categories: allGraded() }))
     expect(headings(markdown)).toEqual([])
-    expect(markdown).toContain('No tasks: every assessed category is graded A.')
+    expect(markdown).toContain('No tasks: nothing this scan found is work in hand-written code')
+  })
+
+  /**
+   * A report with findings and no eligible ones among them says the same thing.
+   * Naming a task there would be fabricating work out of rows the rule just
+   * decided were not work.
+   */
+  it('fabricates no task for a report whose every finding is ineligible', () => {
+    const markdown = renderAgentMarkdown(
+      makeReport({
+        categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+        findings: [clone('src/a.ts'), clone('src/b.ts')],
+      }),
+    )
+    expect(headings(markdown)).toEqual([])
+    expect(markdown).toContain('No tasks: nothing this scan found is work in hand-written code')
+    expect(markdown).toContain('Full findings (2)')
   })
 
   /** A budget of nothing is a budget: it spends no slot and cuts every task. */
@@ -560,6 +712,13 @@ describe('each task', () => {
             range: { startLine: 5, startCol: 1, endLine: 9, endCol: 1 },
             message: '11 lines duplicated from src/b.ts:1-11',
             gradeScope: false,
+          }),
+          // What makes the advisory row eligible: a graded finding at the same
+          // place, which `related` links it to.
+          makeFinding({
+            id: 'l',
+            file: 'src/a.ts',
+            range: { startLine: 6, startCol: 1, endLine: 6, endCol: 2 },
           }),
         ],
       }),
@@ -1228,6 +1387,8 @@ describe('tasks against per-project grades', () => {
           file: 'packages/api/api/main.py',
           project: 'packages/api',
         }),
+        // The graded finding at the same place that makes the clone eligible.
+        makeFinding({ id: 'lint', file: 'packages/api/api/main.py', project: 'packages/api' }),
       ],
       runs: [
         { record: spanningRecord('jscpd', 'duplication'), raw: [] },

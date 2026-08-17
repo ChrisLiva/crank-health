@@ -32,15 +32,9 @@ Grade impact: dead code · F → A
 
 Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
 
-### T3 — Remove 1 unused function
-
-- `dead.py:8` `vulture/unused-function` — Unused function `never_called` (60% confidence) [advisory]
-
-Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
-
 Verify: `npx crank-health --only dead-code --fail-under A`
 
-### T4 — Reduce the complexity of 1 function
+### T3 — Reduce the complexity of 1 function
 
 Grade impact: complexity · D → A
 
@@ -50,7 +44,7 @@ Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/comp
 
 Verify: `npx crank-health --only complexity --fail-under A`
 
-### T5 — Fix 1 `F821` finding
+### T4 — Fix 1 `F821` finding
 
 Grade impact: lint · F → A
 
@@ -58,7 +52,7 @@ Grade impact: lint · F → A
 
 Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
-### T6 — Fix 1 `F401` finding
+### T5 — Fix 1 `F401` finding
 
 - `dead.py:1` `F401` — `os` imported but unused
 
@@ -66,7 +60,7 @@ Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
-### T7 — Format 1 file
+### T6 — Format 1 file
 
 Grade impact: format · C → A
 

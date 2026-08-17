@@ -6,6 +6,7 @@ import {
   CATEGORY_LABELS,
   TOUCHED_TAG,
   location,
+  manifestFiles,
   plural,
   projectLabel,
   stateLabel,
@@ -109,6 +110,16 @@ export interface AgentMarkdownOptions {
    * report does not have.
    */
   readonly delta?: ReportDelta | undefined
+  /**
+   * The globs the repo's own tool configs exclude, repo-relative posix — what
+   * `adapters/jsts/repo-excludes.ts` reads. A file the repo already told its own
+   * tools to skip is generated, and generated code is nobody's task (see
+   * {@link generated}).
+   *
+   * Passed in rather than read here: a renderer is a pure function of a report
+   * and never opens a file. `src/run.ts` reads them once per run.
+   */
+  readonly excludes?: readonly string[] | undefined
 }
 
 /** Resolved findings listed at the bottom before the rest is left to the JSON. */
@@ -118,7 +129,7 @@ const RESOLVED_LIMIT = 15
 export function renderAgentMarkdown(report: Report, options: AgentMarkdownOptions = {}): string {
   const limit = options.maxTasks ?? MAX_TASKS
   const delta = options.delta ?? report.delta
-  const all = buildAgentTasks(report, delta)
+  const all = buildAgentTasks(report, delta, options.excludes)
   const tasks = budgetTasks(all, report, limit)
 
   const blocks: string[] = [
@@ -141,23 +152,31 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
 /**
  * The task list, in emission order, with ids already assigned.
  *
- * **Whole-repo:** only categories graded worse than A produce tasks — a
- * category nothing could assess has nothing to fix, and a category at A is
- * done. Advisory findings are carried inside their theme rather than dropped:
- * duplication and complexity grade on a measured percentage, so their findings
- * are all advisory and excluding them would leave an F with no task under it.
+ * **What earns a place.** Not a grade: a category at A can still hold a graded
+ * finding, and fixing it is real work the old rule threw away. What decides is
+ * whether the theme holds an *eligible* finding in a file somebody wrote — see
+ * {@link eligible} and {@link handWritten}. Ineligible rows are still carried
+ * inside a surviving theme, each with its own scope, so the advisory ones still
+ * read as advisory; they just cannot mint a task on their own.
  *
- * **PR mode:** the source is the delta's new findings, and the grade filter is
- * dropped — a category can be graded A and still have a regression this change
- * introduced, and that regression is the whole reason for the run. Nothing that
- * was already there becomes a task; it is not this change's to fix.
+ * **PR mode:** the source is the delta's new findings. Nothing that was already
+ * there becomes a task; it is not this change's to fix. The eligibility rule is
+ * the same one — a regression in generated code is still not the author's to
+ * hand-fix.
  *
- * Ordering is spec §10's fixed category priority first, always. Within a
- * category, PR mode puts the themes that touch changed lines ahead of the
- * non-local ones, and then both fall back to the whole-repo rule: heaviest
- * findings, then most findings, then theme key.
+ * **Order.** Spec §10's fixed category priority first. Within a category, PR
+ * mode puts the themes that touch changed lines ahead of the non-local ones,
+ * and then both fall back to the whole-repo rule: heaviest findings, then most
+ * findings, then keys that make the order total.
+ *
+ * @param excludes globs the repo's own configs exclude; see
+ * {@link AgentMarkdownOptions.excludes}.
  */
-export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined): AgentTask[] {
+export function buildAgentTasks(
+  report: Report,
+  delta?: ReportDelta | undefined,
+  excludes?: readonly string[] | undefined,
+): AgentTask[] {
   const source = delta ?? report.delta
   const evidenceOf = rawEvidence(report)
   // The schema's graded/advisory split is a reading order, not a work order: a
@@ -172,15 +191,16 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
       ? []
       : source.newFindings.filter((finding) => finding.touchedLine).map((finding) => finding.id),
   )
+  const written = handWritten(reportFindings(report), excludes ?? [])
 
-  const ordered = CATEGORIES.flatMap((category) =>
+  const themes = CATEGORIES.flatMap((category) =>
     themesOf(
       category,
       findings.filter((finding) => finding.category === category),
     ),
-  ).filter((theme) => source !== undefined || needsWork(report, theme))
+  ).filter((theme) => isWork(theme, written))
 
-  return ordered
+  return themes
     .toSorted(
       (a, b) =>
         categoryRank(a.category) - categoryRank(b.category) ||
@@ -191,6 +211,111 @@ export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined)
         compare(a.project ?? '', b.project ?? ''),
     )
     .map((theme, index) => toTask(theme, index + 1, report, evidenceOf, touched))
+}
+
+/* --------------------------------------------------------- what is a task */
+
+/**
+ * Whether a finding can mint a task of its own.
+ *
+ * Graded ones can: they are what a letter is made of. An advisory one can only
+ * when `related` links it to a finding in another category at the same place —
+ * somebody has to open that file for the graded finding anyway, and the
+ * advisory row is then part of the same sitting. An advisory row standing alone
+ * is a default config's opinion nobody asked for, and a list of those is what
+ * makes an agent stop reading the list.
+ */
+function eligible(finding: Finding): boolean {
+  return finding.gradeScope || (finding.related?.length ?? 0) > 0
+}
+
+/**
+ * Whether a theme is work: an eligible finding of its lands in a file somebody
+ * wrote.
+ *
+ * Dependency themes are the exception. Their file is a manifest by
+ * construction — that is where a pinned version lives — so the hand-written
+ * question cannot decide them, and what does is whether there is a released
+ * version to upgrade to. "Upgrade lodash" with no fixed version is not a task;
+ * it is a fact, and `report.json` already records it.
+ */
+function isWork(theme: Theme, written: (finding: Finding) => boolean): boolean {
+  const rows = theme.findings.filter((finding) => eligible(finding))
+  if (rows.length === 0) return false
+  if (rows.every((finding) => finding.package !== undefined)) return rows.some(hasFix)
+  return rows.some((finding) => written(finding))
+}
+
+/** Whether some advisory against this dependency names a version that fixes it. */
+function hasFix(finding: Finding): boolean {
+  return (finding.packageAdvisories ?? []).some((advisory) => advisory.fixedIn !== undefined)
+}
+
+/** Path segment naming a directory of generated code; see {@link handWritten}. */
+const GENERATED_DIR = 'gen'
+
+/** `schema.gen.ts` — the other half of the convention {@link GENERATED_DIR} names. */
+const GENERATED_NAME = /^.+\.gen\..+$/
+
+/**
+ * Whether a finding is in a file a person wrote — the only kind a task can ask
+ * an agent to edit.
+ *
+ * Three things it is not. A **manifest**, read off the scan's own dependency
+ * findings ({@link manifestFiles}): a lint row in a lockfile is not hand-written
+ * source, whoever reported it. **Generated** by convention: a `gen/` path
+ * segment, or a `*.gen.*` name. And generated by the repo's own account: a file
+ * matching a glob the repo told Biome or fallow to skip
+ * ({@link AgentMarkdownOptions.excludes}).
+ *
+ * Every rule can only ever *remove* a task, so each one fails safe in the same
+ * direction: a glob {@link globMatcher} cannot translate matches nothing, and
+ * the finding stays a task rather than disappearing into a claim nobody checked.
+ */
+function handWritten(
+  all: readonly Finding[],
+  excludes: readonly string[],
+): (finding: Finding) => boolean {
+  const manifests = manifestFiles(all)
+  const matchers = excludes.flatMap((pattern) => globMatcher(pattern) ?? [])
+  return (finding) => !manifests.has(finding.file) && !generated(finding.file, matchers)
+}
+
+function generated(file: string, matchers: readonly RegExp[]): boolean {
+  const segments = file.split('/')
+  if (segments.includes(GENERATED_DIR)) return true
+  if (GENERATED_NAME.test(segments.at(-1) ?? file)) return true
+  return matchers.some((matcher) => matcher.test(file))
+}
+
+/** Glob syntax this translation refuses to guess at; see {@link globMatcher}. */
+const UNTRANSLATABLE = /[?[\]{}!\\()+@|^$]/
+
+/**
+ * A repo-relative posix glob as a regular expression, or `undefined` for one
+ * this cannot carry over faithfully.
+ *
+ * Three shapes, which is what `readRepoExcludes` emits: literal segments, `*`
+ * inside a segment (anything but a separator), and `**` for any run of
+ * segments. Character classes, brace groups, extglobs and negations are not
+ * translated at all — an approximation here would hide a finding in a file the
+ * repo never excluded, and a task that survives a pattern nobody could read is
+ * the harmless half of that choice.
+ */
+function globMatcher(pattern: string): RegExp | undefined {
+  if (pattern.length === 0 || UNTRANSLATABLE.test(pattern)) return undefined
+  const segments = pattern.split('/')
+  if (segments.some((segment) => segment === '..' || segment === '.' || segment === '')) {
+    return undefined
+  }
+  const body = segments
+    .map((segment, index) => {
+      const last = index === segments.length - 1
+      if (segment === '**') return last ? '.*' : '(?:[^/]+/)*'
+      return `${segment.replaceAll('*', '\u0000').replaceAll('.', '\\.').replaceAll('\u0000', '[^/]*')}${last ? '' : '/'}`
+    })
+    .join('')
+  return new RegExp(`^${body}$`)
 }
 
 /**
@@ -277,23 +402,6 @@ function rawEvidence(report: Report): (finding: Finding) => readonly string[] {
 /** A run's identity for {@link rawEvidence}: repo-spanning runs have no project. */
 function evidenceKey(tool: string, project: string | undefined): string {
   return JSON.stringify([project ?? null, tool])
-}
-
-/**
- * Whether a theme is work: its category is graded worse than A **in its own
- * project**, or in the rollup.
- *
- * Both, because `--fail-under` gates both. A package graded F inside a repo the
- * rollup grades A is CI red with nothing in this file to do about it — the
- * failure this rule exists for — and a rollup dragged below A by findings spread
- * thinly over packages that each grade A is the same failure from the other end.
- * A single-project repo has only the rollup, and reads exactly as it always has.
- */
-function needsWork(report: Report, theme: Theme): boolean {
-  const own = namedProject(report, theme.project)?.categories[theme.category]
-  return [report.categories[theme.category], own].some(
-    (state) => state?.status === 'graded' && state.grade !== TARGET_GRADE,
-  )
 }
 
 /**
@@ -591,7 +699,7 @@ const PR_GROUND_RULES = `- This is a PR delta: the tasks below are what *this ch
 - Findings marked ${TOUCHED_TAG} are on lines this change touched — fix those first. A new finding without the marker was caused from elsewhere in the change; it is still a regression.`
 
 const NOTHING_TO_DO =
-  'No tasks: every assessed category is graded A. Categories nothing could assess are listed above with the reason.'
+  'No tasks: nothing this scan found is work in hand-written code — every finding it reported is advisory with nothing graded beside it, in generated code, or in a dependency with no released fix. All of them are in `report.json`; categories nothing could assess are listed above with the reason.'
 
 const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
 

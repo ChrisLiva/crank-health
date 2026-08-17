@@ -5,6 +5,7 @@ import {
   CATEGORY_LABELS,
   collapseToolRows,
   hasProjectMovement,
+  manifestFiles,
   movedCategories,
   notSelectedNote,
   percent,
@@ -182,22 +183,6 @@ function rankOf(
     manifests.has(finding.file) ? 1 : 0,
     SEVERITY_RANK[finding.severity],
   ]
-}
-
-/**
- * The files this scan's dependency findings are about — lockfiles and package
- * manifests, whatever an ecosystem calls them.
- *
- * Read off the findings that carry the pinned {@link Finding.package} they are
- * about, because those are the only rows that know: a scanner that reports a
- * vulnerable dependency reports the manifest it is pinned in. Matching names or
- * extensions instead would need a new entry per ecosystem and would still be
- * guessing.
- */
-function manifestFiles(findings: readonly Finding[]): ReadonlySet<string> {
-  return new Set(
-    findings.filter((finding) => finding.package !== undefined).map((finding) => finding.file),
-  )
 }
 
 /** How many extensions the unassessed remainder is named by before it is summed. */

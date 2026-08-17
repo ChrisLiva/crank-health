@@ -55,15 +55,9 @@ Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
-### T6 — Fix 1 `oxc(no-accumulating-spread)` finding
-
-- `src/accumulate.js:2` `oxc(no-accumulating-spread)` — Do not spread accumulators in loops [advisory]
-
-Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
-
 Verify: `npx crank-health --only lint --fail-under A`
 
-### T7 — Format 1 file
+### T6 — Format 1 file
 
 Grade impact: format · C → A
 

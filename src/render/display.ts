@@ -143,6 +143,26 @@ export function standInNote(tool: CollapsedTool, projectCount: number): string |
 }
 
 /**
+ * The files this scan's dependency findings are about — lockfiles and package
+ * manifests, whatever an ecosystem calls them.
+ *
+ * Read off the findings that carry the pinned {@link Finding.package} they are
+ * about, because those are the only rows that know: a scanner that reports a
+ * vulnerable dependency reports the manifest it is pinned in. Matching names or
+ * extensions instead would need a new entry per ecosystem and would still be
+ * guessing.
+ *
+ * Shared, because two renderers ask the same question of it: the terminal ranks
+ * a manifest's findings below hand-written source, and `agent.md` will not make
+ * a task of a theme that only ever lands in one.
+ */
+export function manifestFiles(findings: readonly Finding[]): ReadonlySet<string> {
+  return new Set(
+    findings.filter((finding) => finding.package !== undefined).map((finding) => finding.file),
+  )
+}
+
+/**
  * The categories this run was never asked to assess: everything `--only` left
  * out, in {@link CATEGORIES} order (spec §9).
  *

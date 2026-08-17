@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { mergeReachability } from './adapters/common/govulncheck.ts'
 import { forgetBuilds } from './adapters/csharp/build.ts'
 import { ADAPTERS } from './adapters/index.ts'
+import { readRepoExcludes } from './adapters/jsts/repo-excludes.ts'
 import { CliUsageError } from './args.ts'
 import { applyDependencyScopes } from './core/dep-scope.ts'
 import type { RootShell } from './core/discover.ts'
@@ -362,7 +363,7 @@ export async function adoptRawFiles(
 export async function writeArtifacts(out: OutputDir, report: Report): Promise<HealthScanResult> {
   const json = serializeReport(report)
   const markdown = renderReportMarkdown(report)
-  const agentMarkdown = renderAgentMarkdown(report)
+  const agentMarkdown = renderAgentMarkdown(report, { excludes: await repoExcludes(report) })
   const [reportPath, markdownPath, agentPath] = await Promise.all([
     out.write('report.json', json),
     out.write('report.md', markdown),
@@ -378,6 +379,23 @@ export async function writeArtifacts(out: OutputDir, report: Report): Promise<He
     markdownPath,
     agentPath,
   }
+}
+
+/**
+ * Every glob the repo's own Biome and fallow configs exclude, across the
+ * projects this scan covered — the same seam the duplication pass inherits from
+ * (`adapters/jsts/repo-excludes.ts`), read here because `agent.md` uses it to
+ * tell generated files from hand-written ones and a renderer opens no files.
+ *
+ * Per project and then unioned: the patterns come back rooted at the directory
+ * of the config that declared them, so a package's own `!build/**` arrives as
+ * `packages/web/build/**` and cannot reach outside the package that wrote it.
+ */
+async function repoExcludes(report: Report): Promise<readonly string[]> {
+  const read = await Promise.all(
+    report.projects.map(async (project) => readRepoExcludes(report.repo.path, project.path)),
+  )
+  return [...new Set(read.flatMap((excludes) => excludes.patterns))].toSorted(compareFiles)
 }
 
 /**

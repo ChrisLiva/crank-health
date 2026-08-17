@@ -46,25 +46,9 @@ Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stder
 
 Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stderr.txt](raw/repo/zizmor.stderr.txt)
 
-### T6 — Fix 1 `B404` finding reported by bandit
-
-- `src/config.py:3` `B404` — Consider possible security implications associated with the subprocess module. (low severity, high confidence) [advisory]
-
-Evidence: [raw/root/bandit.json](raw/root/bandit.json)
-
 Verify: `npx crank-health --only security --fail-under A`
 
-### T7 — De-duplicate 1 copied block
-
-Grade impact: duplication · F → A
-
-- `src/handler.js:5` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/report.js:1-11 [advisory]
-
-Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
-
-Verify: `npx crank-health --only duplication --fail-under A`
-
-### T8 — Fix 1 `eslint(no-eval)` finding
+### T6 — Fix 1 `eslint(no-eval)` finding
 
 Grade impact: lint · F → A
 

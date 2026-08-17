@@ -16,19 +16,7 @@ Grades: security not assessed · types not assessed · dead code A · complexity
 
 ## Tasks
 
-### T1 — De-duplicate 1 copied block
-
-Project: packages/api
-
-Grade impact: duplication · A → A
-
-- `packages/api/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11 [advisory]
-
-Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.json) · [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json)
-
-Verify: `npx crank-health --only duplication --project packages/api --fail-under A`
-
-### T2 — Fix 1 `eslint(no-const-assign)` finding
+### T1 — Fix 1 `eslint(no-const-assign)` finding
 
 Project: packages/api
 
@@ -40,7 +28,7 @@ Evidence: [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.jso
 
 Verify: `npx crank-health --only lint --project packages/api --fail-under A`
 
-### T3 — Fix 1 `no-unused-vars` finding
+### T2 — Fix 1 `no-unused-vars` finding
 
 Project: packages/web
 
@@ -52,7 +40,7 @@ Evidence: [raw/packages/web/eslint.json](raw/packages/web/eslint.json)
 
 Verify: `npx crank-health --only lint --project packages/web --fail-under A`
 
-### T4 — Format 1 file
+### T3 — Format 1 file
 
 Project: packages/api
 
