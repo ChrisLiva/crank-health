@@ -3,7 +3,12 @@ import type { RunRecord } from '../src/core/orchestrator.ts'
 import { sortFindings } from '../src/core/orchestrator.ts'
 import type { CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
-import { collapseToolRows, notSelectedNote, unselectedCategories } from '../src/render/display.ts'
+import {
+  basisAnnotation,
+  collapseToolRows,
+  notSelectedNote,
+  unselectedCategories,
+} from '../src/render/display.ts'
 import type { ReportTool } from '../src/render/json.ts'
 import { buildReport, reportFindings, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
@@ -665,6 +670,33 @@ describe('collapseToolRows', () => {
  * What `--only` left out, as the renderers ask it: read off `report.selected`,
  * never off the reason the orchestrator wrote into the states it skipped.
  */
+describe('basisAnnotation', () => {
+  it('singularizes the noun that belongs to a count of one', () => {
+    expect(basisAnnotation({ value: 1, denominator: null, unit: 'graded findings' })).toBe(
+      '1 graded finding',
+    )
+    expect(
+      basisAnnotation({ value: 1, denominator: 0.8, unit: 'weighted findings per KLOC' }),
+    ).toBe('1 weighted finding per 0.8 KLOC')
+    // In the `of` shape the noun counts the denominator, not the value.
+    expect(
+      basisAnnotation({ value: 1, denominator: 12, unit: 'files failing the formatter' }),
+    ).toBe('1 of 12 files failing the formatter')
+    expect(basisAnnotation({ value: 1, denominator: 1, unit: 'files failing the formatter' })).toBe(
+      '1 of 1 file failing the formatter',
+    )
+  })
+
+  it('leaves any other count plural', () => {
+    expect(basisAnnotation({ value: 3, denominator: null, unit: 'graded findings' })).toBe(
+      '3 graded findings',
+    )
+    expect(basisAnnotation({ value: 0, denominator: null, unit: 'graded findings' })).toBe(
+      '0 graded findings',
+    )
+  })
+})
+
 describe('unselectedCategories', () => {
   it('names the categories --only left out, in priority order', () => {
     expect(unselectedCategories(buildReport(input({ selected: ['lint'] })))).toEqual([

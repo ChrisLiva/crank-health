@@ -224,11 +224,20 @@ export function rootShellNote(shell: ReportRootShell): string {
 export function basisAnnotation(basis: ReportGradeBasis): string {
   const value = basis.unit.startsWith('%') ? percent(basis.value) : amount(basis.value)
   const unit = basis.unit.startsWith('%') ? basis.unit.slice(1) : ` ${basis.unit}`
-  if (basis.denominator === null) return `${value}${unit}`
+  if (basis.denominator === null) return `${value}${singularAt(value, unit)}`
 
-  const [numerator, per] = basis.unit.split(' per ')
-  if (per !== undefined) return `${value} ${numerator} per ${amount(basis.denominator)} ${per}`
-  return `${value} of ${amount(basis.denominator)}${unit}`
+  const [numerator = basis.unit, per] = basis.unit.split(' per ')
+  if (per !== undefined)
+    return `${value} ${singularAt(value, numerator)} per ${amount(basis.denominator)} ${per}`
+  // In the `of` shape the unit's noun counts the denominator, not the value.
+  const denominator = amount(basis.denominator)
+  return `${value} of ${denominator}${singularAt(denominator, unit)}`
+}
+
+/** The plural nouns {@link ReportGradeBasis} units use, singular when their count is one. */
+function singularAt(count: string, text: string): string {
+  if (count !== '1') return text
+  return text.replace(/\b(findings|files|functions)\b/, (noun) => noun.slice(0, -1))
 }
 
 /**
