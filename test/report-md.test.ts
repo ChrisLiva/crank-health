@@ -456,6 +456,25 @@ describe('renderReportMarkdown', () => {
     )
   })
 
+  /**
+   * The repo-wide duplication pass and the per-project one are two runs over
+   * one report file, and a reader offered the same link twice reads it as two
+   * pieces of evidence.
+   */
+  it('names each piece of raw evidence once, however many runs produced it', () => {
+    const markdown = renderReportMarkdown(
+      makeReport({
+        runs: [
+          lintScan('packages/api', ['raw/repo/oxlint.sarif.json']),
+          lintScan('packages/web', ['raw/repo/oxlint.sarif.json']),
+        ],
+      }),
+    )
+    expect(markdown).toContain(
+      'Evidence: [raw/repo/oxlint.sarif.json](raw/repo/oxlint.sarif.json)\n',
+    )
+  })
+
   it('caps the findings it lists and says where the rest are', () => {
     const findings = Array.from({ length: 30 }, (_, index) =>
       makeFinding({ id: `f${index}`, file: `src/f${index}.ts` }),

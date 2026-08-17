@@ -479,7 +479,11 @@ function categorySection(
   }
   blocks.push(...findingList('Findings', graded, limit))
   blocks.push(...advisoryBlock(advisory))
-  const evidence = tools.flatMap((tool) => tool.raw)
+  // One link per file, in the order the runs produced them: two runs over one
+  // report file — the repo-wide duplication pass and a project's — are one
+  // piece of evidence, and offering it twice reads as two. `output.ts` has
+  // already left out the files nothing was written to.
+  const evidence = [...new Set(tools.flatMap((tool) => tool.raw))]
   if (evidence.length > 0) {
     blocks.push(`Evidence: ${evidence.map((path) => `[${path}](${path})`).join(' · ')}`)
   }

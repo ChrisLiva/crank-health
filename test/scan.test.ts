@@ -434,7 +434,9 @@ describe('quick scan of the js-library fixture', () => {
   })
 
   it('marks them advisory in report.md, under their own heading', () => {
-    expect(scan.markdown).toContain('Advisory findings — reported, not counted toward the grade')
+    expect(scan.markdown).toContain(
+      '**Advisory findings** (2) — reported, not counted toward the grade',
+    )
     expect(scan.markdown).toMatch(/`fallow\/unused-export`.*\[advisory\]/)
     expect(scan.markdown).toMatch(/`knip\/unused-exports`.*\[advisory\]/)
     expect(scan.markdown).toContain('`src/util.js:5`')

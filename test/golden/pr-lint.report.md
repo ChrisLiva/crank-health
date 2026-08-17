@@ -37,10 +37,6 @@ Against `main`, merge-base `<short>`. 1 new finding (1 on lines this change touc
 
 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). This change: 1 new, 1 resolved.
 
-Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
-
-**Remediation.** Fix the reported violations. Where a rule is wrong for this repo, configure it in the repo’s own lint config rather than suppressing it line by line.
-
 | Tool | Scan | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- | --- |
 | oxlint | base | ok | [default-config] | 1.77.0 | — |
@@ -54,5 +50,13 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 - error `src/renamed.js:2` `eslint(no-dupe-keys)` — Duplicate key 'x' (oxlint) [default-config]
 
 Evidence: [raw/base/root/oxlint.sarif.json](raw/base/root/oxlint.sarif.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
+
+## Reference
+
+How each category is graded, and what fixing it means — the same in every report.
+
+| Category | Graded on | Remediation |
+| --- | --- | --- |
+| lint | weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F. | Fix the reported violations. Where a rule is wrong for this repo, configure it in the repo’s own lint config rather than suppressing it line by line. |
 
 ---

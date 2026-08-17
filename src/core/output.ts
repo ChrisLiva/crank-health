@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { ROOT_PROJECT } from './discover.ts'
 
@@ -143,11 +143,35 @@ export async function createOutputDir(repoRoot: string, out?: string): Promise<O
         // Sequential: a handful of small files, and unbounded fan-out here
         // would buy nothing but EMFILE risk.
         // eslint-disable-next-line no-await-in-loop
+        if (!(await hasContent(source))) continue
+        // eslint-disable-next-line no-await-in-loop
         await copyFile(source, join(directory, name))
         adopted.push(`${relative}/${name}`)
       }
       return adopted
     },
+  }
+}
+
+/**
+ * Whether a staged file holds anything at all — the one gate on what becomes
+ * evidence.
+ *
+ * Runners stage a file per stream whether or not the tool wrote to it, so a
+ * clean run leaves empty `*.stderr.txt` files behind. Adopted, each one is a
+ * link in every report offering a reader evidence there is none of, and a row
+ * in `report.json` naming a file with nothing in it. Deciding here rather than
+ * in the renderers keeps `ToolResult.rawFiles`, `tool.raw` and every rendered
+ * evidence list saying the same thing.
+ *
+ * A file that has gone missing between staging and adoption is not content
+ * either, so it is dropped the same way rather than failing the run.
+ */
+async function hasContent(source: string): Promise<boolean> {
+  try {
+    return (await stat(source)).size > 0
+  } catch {
+    return false
   }
 }
 

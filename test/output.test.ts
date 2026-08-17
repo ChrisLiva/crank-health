@@ -248,6 +248,24 @@ describe('createOutputDir', () => {
     await rm(scratch, { recursive: true, force: true })
     expect(await readFile(join(out.raw, 'oxlint.sarif.json'), 'utf8')).toBe('{"runs":[]}\n')
   })
+
+  /**
+   * A tool that wrote nothing to stderr staged an empty file for it, and every
+   * report then linked evidence there is none of. The file is not adopted and
+   * the report never names it — one place, so no renderer has to filter.
+   */
+  it('adopts no empty file, and names none in what it returns', async () => {
+    const scratch = await mkdtemp(join(tmpdir(), 'crank-scratch-'))
+    const empty = await writeScratchRaw(scratch, 'zizmor.stderr.txt', '')
+    const staged = await writeScratchRaw(scratch, 'zizmor.json', '{}\n')
+
+    const out = await createOutputDir(repo)
+    const adopted = await out.adoptRaw([empty, staged])
+
+    expect(adopted).toEqual(['raw/zizmor.json'])
+    expect(await readdir(out.raw)).toEqual(['zizmor.json'])
+    await rm(scratch, { recursive: true, force: true })
+  })
 })
 
 describe('resolveRepoRoot', () => {
