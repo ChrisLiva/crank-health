@@ -96,9 +96,14 @@ describe(
     it.runIf(GOLDEN_TOOLCHAIN)('prints report.json and nothing else with --json', async () => {
       const result = await runCli(['--json', '--out', out, fixture.root])
       expect(result.exitCode).toBe(0)
-      const report = JSON.parse(result.stdout) as { findings: unknown[]; schemaVersion: number }
+      const report = JSON.parse(result.stdout) as {
+        advisories: unknown[]
+        findings: unknown[]
+        schemaVersion: number
+      }
       expect(report.schemaVersion).toBe(2)
-      expect(report.findings).toHaveLength(8)
+      expect(report.findings).toHaveLength(7)
+      expect(report.advisories).toHaveLength(1)
     })
 
     it('exits 1 when --fail-under is tripped, naming the categories', async () => {
