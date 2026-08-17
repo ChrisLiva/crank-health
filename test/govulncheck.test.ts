@@ -687,6 +687,26 @@ describe('the govulncheck runner against a farmed PATH', () => {
     expect(await readFile(result.rawFiles[0] ?? '', 'utf8')).toContain('go: build failed')
   })
 
+  /**
+   * The plan's named retiring check: a forced tiny budget must produce an
+   * honest non-`ok` state and say what happened, never a clean scan.
+   *
+   * The state is `timeout` rather than `not-available` — see the report's
+   * Deviations. An overrun is the orchestrator's own state (`withTimeout` in
+   * `core/orchestrator.ts` mints exactly this for a runner that outlives its
+   * budget), and calling it "not available" would say the toolchain is missing
+   * on a machine that has it.
+   */
+  it('ends a module that outruns its budget as a timeout, and says so', async () => {
+    const result = await runUnder({ go: '#!/bin/sh\nsleep 30' }, ['go.mod', 'main.go'], 50)
+
+    expect(result.state).toBe('timeout')
+    expect(result.reason ?? '').toMatch(/time budget/i)
+    expect(result.findings).toEqual([])
+    // Not the missing-toolchain story: `go` was right there and ran.
+    expect(result.reason).not.toBe(GO_ABSENT_REASON)
+  })
+
   /** A tool that found something still reports it, whatever its exit code. */
   it('keeps the findings of a module that exited non-zero after reporting them', async () => {
     const result = await runUnder({ go: `#!/bin/sh\ncat ${CAPTURED}\nexit 3` }, [

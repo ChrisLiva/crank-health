@@ -701,6 +701,13 @@ function reasonsOf(failures: readonly ToolFailure[]): string {
 /**
  * A missing `go` is the toolchain gap spec §8 wants named, not a generic "not
  * executable"; every other failure is left exactly as `execTool` classified it.
+ *
+ * The overrun is the case worth being explicit about. A module that outlives
+ * its budget stays `timeout` and is deliberately *not* folded into the
+ * not-available story: `timeout` is this codebase's own word for an overrun —
+ * `withTimeout` in `core/orchestrator.ts` mints exactly it — and telling a
+ * reader the Go toolchain is absent, on a machine where `go` was found and ran
+ * for five minutes, would send them to install something they already have.
  */
 function explainGo(failure: ToolFailure): ToolFailure {
   return failure.state === 'not-available'
