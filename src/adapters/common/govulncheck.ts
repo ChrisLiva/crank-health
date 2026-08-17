@@ -353,9 +353,9 @@ export function demotionOf(advisories: readonly PackageAdvisory[]): string | und
  * downstream, in `run.ts`, where both tools' results are in hand.
  *
  * **The join key is the advisory, not the row.** A Go module's finding is
- * matched by `name@version` — with Go's `v` prefix normalized away, because
- * osv-scanner strips it and govulncheck keeps it — and inside it each advisory
- * is matched by *alias intersection*: govulncheck reports `GO-2026-4945`,
+ * matched by its `go.mod` and its `name@version` together — see
+ * {@link packageKey} for why the manifest is half of that — and inside it each
+ * advisory is matched by *alias intersection*: govulncheck reports `GO-2026-4945`,
  * osv-scanner files the same advisory under `GHSA-78h2-9frx-2jm8` and lists the
  * `GO-` id among its aliases. An advisory only govulncheck knows is appended
  * rather than dropped, and the package's sentence is re-derived from the
@@ -401,14 +401,27 @@ export function mergeReachability(findings: readonly Finding[]): Finding[] {
 
 /**
  * A Go dependency finding's identity as both tools can state it, or `undefined`
- * for every finding that is not one. The `v` prefix is Go's own and osv-scanner
- * drops it, so `v1.0.0` and `1.0.0` are the same pin.
+ * for every finding that is not one.
+ *
+ * The **manifest is part of the identity**, not just the pin. osv-scanner emits
+ * one finding per (file, ecosystem, name, version), and this runner visits every
+ * `go.mod` in the repo — so two modules pinning the same vulnerable version are
+ * two rows about two separate pieces of work, and one of them can be reachable
+ * where the other is not. Keyed on the pin alone, both verdicts folded onto
+ * whichever row came first: the second module stayed graded with no verdict at
+ * all, and its govulncheck row was deleted as already-merged, so nothing in the
+ * report said so. That is the defect this runner exists to fix, silently
+ * unfixed for every module after the first.
+ *
+ * The `v` prefix is Go's own and osv-scanner drops it, so `v1.0.0` and `1.0.0`
+ * are the same pin. A space separates the halves: a repo-relative posix path
+ * cannot contain one, so the two fields cannot run together.
  */
 function packageKey(finding: Finding): string | undefined {
   const pkg = finding.package
   if (finding.rule !== OSV_PACKAGE_RULE || pkg === undefined) return undefined
   if (pkg.ecosystem !== GO_ECOSYSTEM) return undefined
-  return `${pkg.name}@${pkg.version.replace(/^v/, '')}`
+  return `${finding.file} ${pkg.name}@${pkg.version.replace(/^v/, '')}`
 }
 
 /** One host finding with the verdicts merged in and its sentence re-derived. */
@@ -418,9 +431,15 @@ function annotated(host: Finding, contributed: readonly PackageAdvisory[]): Find
     const verdict = contributed.find((entry) => sameAdvisory(advisory, entry))?.reachability
     return verdict === undefined ? advisory : { ...advisory, reachability: verdict }
   })
-  const extra = contributed.filter(
-    (entry) => !known.some((advisory) => sameAdvisory(advisory, entry)),
-  )
+  // Deduped against what is already here *and* against itself: the sentence is
+  // re-derived from this list, so one advisory contributed twice would read as
+  // two problems and could move the fix the row names.
+  const extra: PackageAdvisory[] = []
+  for (const entry of contributed) {
+    if (known.some((advisory) => sameAdvisory(advisory, entry))) continue
+    if (extra.some((advisory) => sameAdvisory(advisory, entry))) continue
+    extra.push(entry)
+  }
   const advisories = [...merged, ...extra].toSorted((a, b) => compare(a.id, b.id))
 
   const pkg = host.package

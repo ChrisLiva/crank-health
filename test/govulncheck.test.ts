@@ -272,12 +272,20 @@ function packageFinding(overrides: Partial<Finding> = {}): Finding {
   })
 }
 
-/** The govulncheck half of the same dependency. */
-function goFinding(vulnerabilities: readonly GoVulnerability[] = [vulnerability()]): Finding {
-  const [pending] = toPendingFindings(vulnerabilities, 'go.mod')
+/** The govulncheck half of the same dependency, pinned by a named go.mod. */
+function goFindingIn(
+  goMod: string,
+  vulnerabilities: readonly GoVulnerability[] = [vulnerability()],
+): Finding {
+  const [pending] = toPendingFindings(vulnerabilities, goMod)
   if (pending === undefined) throw new Error('no finding built')
   const { anchor: _anchor, ...rest } = pending
-  return { id: 'govulncheckfinding', ...rest }
+  return { id: `govulncheck ${goMod}`, ...rest }
+}
+
+/** The same, for the single-module repo most of these cases are about. */
+function goFinding(vulnerabilities: readonly GoVulnerability[] = [vulnerability()]): Finding {
+  return goFindingIn('go.mod', vulnerabilities)
 }
 
 describe('mergeReachability', () => {
@@ -391,15 +399,72 @@ describe('mergeReachability', () => {
     expect(mergeReachability([lint, npm])).toEqual([lint, npm])
   })
 
+  /**
+   * osv-scanner emits one finding per (file, ecosystem, name, version), and this
+   * runner visits every `go.mod` in the repo — so two modules pinning the same
+   * vulnerable version are two host rows, and a key that cannot tell them apart
+   * folds both verdicts onto the first, leaves the second graded, and deletes
+   * the evidence that would have said so.
+   */
+  it('gives each go.mod its own verdict when two modules pin the same version', () => {
+    const merged = mergeReachability([
+      packageFinding({ id: 'a', file: 'a/go.mod' }),
+      packageFinding({ id: 'b', file: 'b/go.mod' }),
+      goFindingIn('a/go.mod', [vulnerability({ reachability: 'not-imported' })]),
+      goFindingIn('b/go.mod', [vulnerability({ reachability: 'symbol-reachable' })]),
+    ])
+
+    expect(merged.map((finding) => [finding.file, finding.tool])).toEqual([
+      ['a/go.mod', OSV_SCANNER_TOOL],
+      ['b/go.mod', OSV_SCANNER_TOOL],
+    ])
+    expect(merged[0]?.packageAdvisories?.[0]?.reachability).toBe('not-imported')
+    expect(merged[0]?.gradeScope).toBe(false)
+    expect(merged[1]?.packageAdvisories?.[0]?.reachability).toBe('symbol-reachable')
+    expect(merged[1]?.gradeScope).toBe(true)
+  })
+
+  it('leaves a module whose lockfile audit saw nothing standing on its own row', () => {
+    const merged = mergeReachability([
+      packageFinding({ file: 'a/go.mod' }),
+      goFindingIn('a/go.mod'),
+      goFindingIn('b/go.mod'),
+    ])
+
+    expect(merged.map((finding) => [finding.file, finding.tool])).toEqual([
+      ['a/go.mod', OSV_SCANNER_TOOL],
+      ['b/go.mod', GOVULNCHECK_TOOL],
+    ])
+  })
+
+  /** Two contributions of one advisory are one advisory, not a doubled count. */
+  it('appends a govulncheck-only advisory once however often it is contributed', () => {
+    const only = [vulnerability({ osv: 'GO-9', aliases: [], summary: 'go only' })]
+    const merged = mergeReachability([
+      packageFinding(),
+      goFindingIn('go.mod', only),
+      goFindingIn('go.mod', only),
+    ])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.packageAdvisories?.map((advisory) => advisory.id)).toEqual([
+      'GHSA-aaaa',
+      'GO-9',
+    ])
+    expect(merged[0]?.message).toContain('2 advisories')
+  })
+
   it('keeps the findings in the order it was given them', () => {
     const first = packageFinding({ file: 'a/go.mod' })
     const second = packageFinding({
       file: 'b/go.mod',
       package: { name: 'example.com/second', version: '2.0.0', ecosystem: 'Go' },
     })
-    const merged = mergeReachability([first, goFinding(), second])
+    // Folds into `first`, so what is left is the two hosts in the order given.
+    const merged = mergeReachability([first, goFindingIn('a/go.mod'), second])
 
     expect(merged.map((finding) => finding.file)).toEqual(['a/go.mod', 'b/go.mod'])
+    expect(merged[0]?.packageAdvisories?.[0]?.reachability).toBe('symbol-reachable')
   })
 })
 
