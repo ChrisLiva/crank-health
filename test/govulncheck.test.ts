@@ -545,12 +545,14 @@ describe('the govulncheck runner against a farmed PATH', () => {
   async function runUnder(
     extras: Readonly<Record<string, string>> | undefined,
     files: readonly string[],
+    timeoutMs?: number,
   ): Promise<ToolResult> {
     const farm = await pathFarm(extras)
     const original = process.env['PATH']
     process.env['PATH'] = farm.path
     try {
-      return await govulncheckRunner.run({ ...runContext(files, scratch), repoRoot: root })
+      const ctx = { ...runContext(files, scratch), repoRoot: root }
+      return await govulncheckRunner.run(timeoutMs === undefined ? ctx : { ...ctx, timeoutMs })
     } finally {
       process.env['PATH'] = original
       await farm.remove()
@@ -579,5 +581,55 @@ describe('the govulncheck runner against a farmed PATH', () => {
     expect(result.findings[0]?.gradeScope).toBe(true)
     expect(result.findings[1]?.gradeScope).toBe(false)
     expect(result.rawFiles.map((file) => basename(file))).toEqual(['govulncheck.json'])
+  })
+
+  /**
+   * `execTool` deliberately does not call a non-zero exit a failure — most
+   * analyzers exit non-zero when they find something — so a runner that only
+   * reads `execution.failure` reports a module that never built as a clean
+   * scan. `go run` exits non-zero for the ordinary cases (the module does not
+   * compile, the analyzer cannot be fetched on a cold cache, an unsupported
+   * `go` directive), and writes `config` and `progress` records to stdout
+   * before it gives up — so "nothing parsed" is not "nothing to find".
+   */
+  it('calls a module that exited non-zero with nothing parsed an error, not a clean scan', async () => {
+    const result = await runUnder(
+      {
+        go: [
+          '#!/bin/sh',
+          'printf \'{"config": {"scanner_name": "govulncheck"}}\\n\'',
+          'echo "go: updates to go.mod needed; to update it: go mod tidy" >&2',
+          'exit 1',
+        ].join('\n'),
+      },
+      ['go.mod', 'main.go'],
+    )
+
+    expect(result.state).toBe('error')
+    expect(result.findings).toEqual([])
+    expect(result.reason).toContain('exit 1')
+    expect(result.reason).toContain('go: updates to go.mod needed')
+  })
+
+  /** The failing run is the one whose evidence a reader most needs. */
+  it('stages stderr, so a failed module leaves evidence behind', async () => {
+    const result = await runUnder({ go: '#!/bin/sh\necho "go: build failed" >&2\nexit 1' }, [
+      'go.mod',
+      'main.go',
+    ])
+
+    expect(result.rawFiles.map((file) => basename(file))).toEqual(['govulncheck.stderr.txt'])
+    expect(await readFile(result.rawFiles[0] ?? '', 'utf8')).toContain('go: build failed')
+  })
+
+  /** A tool that found something still reports it, whatever its exit code. */
+  it('keeps the findings of a module that exited non-zero after reporting them', async () => {
+    const result = await runUnder({ go: `#!/bin/sh\ncat ${CAPTURED}\nexit 3` }, [
+      'go.mod',
+      'main.go',
+    ])
+
+    expect(result.state).toBe('ok')
+    expect(result.findings).toHaveLength(2)
   })
 })

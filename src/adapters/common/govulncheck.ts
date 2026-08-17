@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
-import type { ToolFailure } from '../../core/exec.ts'
+import type { ToolExecution, ToolFailure } from '../../core/exec.ts'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   DetectContext,
@@ -14,7 +14,15 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
-import { asArray, asRecord, asString, byLocation, compare, identify } from '../support.ts'
+import {
+  asArray,
+  asRecord,
+  asString,
+  byLocation,
+  compare,
+  firstLine,
+  identify,
+} from '../support.ts'
 import { OSV_PACKAGE_RULE, severityOf, summarizePackage } from './osv-scanner.ts'
 
 /**
@@ -572,13 +580,25 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
     })
     if (execution.stdout.trim().length > 0) {
       // eslint-disable-next-line no-await-in-loop
-      rawFiles.push(await writeScratchRaw(ctx.scratch, rawName(goMod), execution.stdout))
+      rawFiles.push(await writeScratchRaw(ctx.scratch, rawName(goMod, 'json'), execution.stdout))
+    }
+    if (execution.stderr.trim().length > 0) {
+      // eslint-disable-next-line no-await-in-loop
+      rawFiles.push(
+        await writeScratchRaw(ctx.scratch, rawName(goMod, 'stderr.txt'), execution.stderr),
+      )
     }
     if (execution.failure !== undefined) {
       failures.push(explainGo(execution.failure))
       continue
     }
-    pending.push(...toPendingFindings(parseGovulncheckStream(execution.stdout), goMod))
+    const vulnerabilities = parseGovulncheckStream(execution.stdout)
+    const collapsed = collapsedRun(execution, vulnerabilities.length, goMod)
+    if (collapsed !== undefined) {
+      failures.push(collapsed)
+      continue
+    }
+    pending.push(...toPendingFindings(vulnerabilities, goMod))
   }
 
   const failure = wholesale(failures, modules.length)
@@ -595,6 +615,39 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
     // Our tool on our defaults, whatever `detect` found; see `detectGovulncheck`.
     configOwned: false,
     ...(failures.length === 0 ? {} : { reason: reasonsOf(failures) }),
+  }
+}
+
+/**
+ * A module that gave up rather than reported nothing, or `undefined` when the
+ * run stands.
+ *
+ * {@link execTool} deliberately does not call a non-zero exit a failure —
+ * most analyzers exit non-zero precisely when they find something — so a runner
+ * that reads only `execution.failure` would report a module that never built as
+ * a clean scan. `go run` exits non-zero for the ordinary cases: the module does
+ * not compile, the pinned analyzer cannot be fetched on a cold cache with no
+ * network, the `go` directive is newer than the toolchain. It writes its
+ * `config` and `progress` records before giving up, so stdout is never empty
+ * and "nothing parsed" is not "nothing to find".
+ *
+ * Both halves of the test matter. A clean module exits 0 with no vulnerability
+ * and must stay `ok`; a module that reported vulnerabilities and *then* exited
+ * non-zero keeps them. It is only the pair — nothing parsed **and** a non-zero
+ * exit — that means the tool never answered. Same shape as `tsc.ts` and
+ * `osv-scanner.ts`, so a reader who knows one knows all three.
+ */
+function collapsedRun(
+  execution: ToolExecution,
+  reported: number,
+  goMod: string,
+): ToolFailure | undefined {
+  if (reported > 0 || execution.exitCode === 0) return undefined
+  return {
+    state: 'error',
+    reason:
+      `govulncheck analyzed nothing in ${dirname(goMod)} ` +
+      `(exit ${execution.exitCode ?? 'on a signal'}): ${firstLine(execution.stderr)}`,
   }
 }
 
@@ -633,13 +686,13 @@ function goModules(files: readonly string[]): string[] {
 }
 
 /**
- * Where one module's stream is staged. All of a repo-scoped run's evidence
+ * Where one module's evidence is staged. All of a repo-scoped run's evidence
  * lands in one directory, so a monorepo's second module must not overwrite its
  * first — the module's own directory is what tells them apart.
  */
-function rawName(goMod: string): string {
+function rawName(goMod: string, extension: string): string {
   const directory = dirname(goMod)
   return directory === '.'
-    ? 'govulncheck.json'
-    : `govulncheck-${directory.replaceAll('/', '-')}.json`
+    ? `govulncheck.${extension}`
+    : `govulncheck-${directory.replaceAll('/', '-')}.${extension}`
 }
