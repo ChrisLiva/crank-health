@@ -570,6 +570,8 @@ describe('the govulncheck runner against a farmed PATH', () => {
 
     expect(result.state).toBe('ok')
     expect(result.configOwned).toBe(false)
+    // `go run <path>@v1.7.0` is an exact spec, so what ran is the pin.
+    expect(result.toolVersion).toBe(govulncheckRunner.pinnedVersion)
     expect(result.findings.map((finding) => finding.package?.name)).toEqual([
       'github.com/go-jose/go-jose/v3',
       'golang.org/x/crypto',

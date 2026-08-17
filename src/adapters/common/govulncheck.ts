@@ -588,6 +588,9 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
   return {
     state: 'ok',
     findings: await identify(ctx.repoRoot, pending.toSorted(byLocation)),
+    // `go run <import-path>@<version>` is an exact spec with no resolution step
+    // that could land elsewhere, so the pin is what ran (spec §6).
+    toolVersion: pinnedGoVersion(GOVULNCHECK_PACKAGE),
     rawFiles,
     // Our tool on our defaults, whatever `detect` found; see `detectGovulncheck`.
     configOwned: false,
