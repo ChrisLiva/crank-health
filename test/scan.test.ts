@@ -4,7 +4,9 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { RUN_DIRNAME_PATTERN } from '../src/core/output.ts'
+import { weightedCount } from '../src/core/grade.ts'
 import type { Finding, RunContext, ToolRunner } from '../src/core/types.ts'
+import { CATEGORIES } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan, scanTree } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
@@ -164,6 +166,37 @@ describe('quick scan of the js-basic fixture', () => {
       if (tool.version !== null) expect(tool.version).toBe(tool.pinned)
     }
     expect(findings.every((finding) => finding.provenance === 'default-config')).toBe(true)
+  })
+
+  /**
+   * A letter without its arithmetic is not checkable. Every graded category
+   * says the two numbers its formula divided and what one of them counts, so a
+   * reader can redo the sum — and a category nothing graded says nothing,
+   * rather than a zero that would read as a clean measurement.
+   */
+  it('shows the arithmetic behind every grade, and only the graded ones', () => {
+    const { categories, gradeBasis, metrics } = scan.report
+    expect(Object.keys(gradeBasis)).toEqual(
+      CATEGORIES.filter((category) => categories[category].status === 'graded'),
+    )
+
+    expect(gradeBasis.lint?.value).toBe(
+      weightedCount(
+        findings.filter((finding) => finding.category === 'lint' && finding.gradeScope),
+      ),
+    )
+    expect(gradeBasis.lint?.unit).toBe('weighted findings per KLOC')
+    expect(gradeBasis.lint?.denominator).toBeGreaterThan(0)
+
+    expect(gradeBasis.format).toEqual({
+      value: new Set(
+        findings
+          .filter((finding) => finding.category === 'format' && finding.gradeScope)
+          .map((finding) => finding.file),
+      ).size,
+      denominator: metrics.format?.formattableFiles,
+      unit: 'files failing the formatter',
+    })
   })
 
   /**

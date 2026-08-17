@@ -89,6 +89,7 @@ export function makeReportInput(overrides: Partial<ReportInput> = {}): ReportInp
     profile: 'quick',
     selected: CATEGORIES,
     categories: allNotAssessed(),
+    gradeBasis: {},
     metrics: noMetrics(),
     coverage: noCoverage(),
     projects: [makeProjectScan()],

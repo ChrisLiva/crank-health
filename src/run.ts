@@ -13,7 +13,13 @@ import {
   partitionProjects,
 } from './core/discover.ts'
 import { headCommit } from './core/git.ts'
-import { failingFilePercent, gradeCategory } from './core/grade.ts'
+import {
+  COMPLEXITY_CEILING,
+  GRADE_TABLE,
+  failingFilePercent,
+  gradeCategory,
+  weightedCount,
+} from './core/grade.ts'
 import { aggregateCategories, aggregateMetrics, runScan } from './core/orchestrator.ts'
 import type { RunRecord, ScanResult } from './core/orchestrator.ts'
 import type { OutputDir } from './core/output.ts'
@@ -33,11 +39,18 @@ import type {
   LanguageAdapter,
   Project,
   RepoContext,
+  Severity,
   ToolMetrics,
 } from './core/types.ts'
 import { CATEGORIES, LANGUAGES, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
-import type { ProjectScan, Report, ReportCoverage, ResolvedRun } from './render/json.ts'
+import type {
+  ProjectScan,
+  Report,
+  ReportCoverage,
+  ReportGradeBasis,
+  ResolvedRun,
+} from './render/json.ts'
 import { buildReport, serializeReport } from './render/json.ts'
 import { renderReportMarkdown } from './render/report-md.ts'
 
@@ -124,6 +137,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
         selected: tree.selected,
         ...(options.projects === undefined ? {} : { scopedTo: options.projects }),
         categories: tree.categories,
+        gradeBasis: tree.gradeBasis,
         metrics: tree.scan.metrics,
         coverage: tree.coverage,
         projects: tree.projects,
@@ -154,6 +168,8 @@ export interface TreeScan {
   readonly warnings: readonly string[]
   /** The rollup's states: the whole tree, on the whole tree's denominators. */
   readonly categories: Record<Category, CategoryState>
+  /** The arithmetic behind the rollup's grades; see {@link ReportGradeBasis}. */
+  readonly gradeBasis: Partial<Record<Category, ReportGradeBasis>>
   /** How much of this tree the rollup's grades are about; see {@link scanCoverage}. */
   readonly coverage: ReportCoverage
   readonly selected: readonly Category[]
@@ -216,6 +232,7 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
     warnings: [...discovered.warnings, ...scan.warnings],
     selected,
     categories: rollup.categories,
+    gradeBasis: rollup.basis,
     coverage: await scanCoverage(repo.repoRoot, graded, rollup.sourceLines),
     projects: await gradeProjects(repo, scan, selected),
     ...(discovery.rootShell === undefined ? {} : { rootShell: discovery.rootShell }),
@@ -590,12 +607,18 @@ async function gradeAll(repoRoot: string, scope: GradedScope): Promise<GradedRes
   const kloc = sourceLines / 1000
 
   const categories = {} as Record<Category, CategoryState>
+  const basis: Partial<Record<Category, ReportGradeBasis>> = {}
   for (const category of CATEGORIES) {
     categories[category] = toCategoryState(scope.categories[category], () =>
       gradeOne(category, scope, kloc, sourceFiles.length),
     )
+    // Only where there is a letter to explain: the arithmetic behind a category
+    // nothing could assess is a row of zeroes that reads as a measurement.
+    if (categories[category].status === 'graded') {
+      basis[category] = basisOf(category, scope, kloc, sourceFiles.length)
+    }
   }
-  return { categories, sourceLines }
+  return { categories, basis, sourceLines }
 }
 
 /**
@@ -605,8 +628,75 @@ async function gradeAll(repoRoot: string, scope: GradedScope): Promise<GradedRes
  */
 interface GradedResult {
   readonly categories: Record<Category, CategoryState>
+  /** The arithmetic behind the graded ones; see {@link ReportGradeBasis}. */
+  readonly basis: Partial<Record<Category, ReportGradeBasis>>
   /** Physical lines of the source files a language adapter claims. */
   readonly sourceLines: number
+}
+
+/**
+ * The two numbers one category's formula divided, in that formula's own terms
+ * (spec §3) — the same reading `report.md`'s "basis" sentence has always given
+ * a person, said in a shape a machine can check.
+ *
+ * The `null` denominators are the shapes that normalize nothing: security counts
+ * findings outright, and duplication and mutation score are percentages their
+ * tool computed, with no numerator and denominator of ours behind them.
+ */
+function basisOf(
+  category: Category,
+  scope: GradedScope,
+  kloc: number,
+  sourceFileCount: number,
+): ReportGradeBasis {
+  const counted = countedFindings(category, scope.findings)
+  const metrics = scope.metrics[category]
+  switch (category) {
+    case 'security':
+      return { value: counted.length, denominator: null, unit: 'graded findings' }
+    case 'lint':
+    case 'types':
+    case 'dead-code':
+      return {
+        value: weightedCount(counted),
+        denominator: kloc,
+        unit: 'weighted findings per KLOC',
+      }
+    case 'format':
+      return {
+        value: new Set(counted.map((finding) => finding.file)).size,
+        denominator: metrics.formattableFiles ?? sourceFileCount,
+        unit: 'files failing the formatter',
+      }
+    case 'complexity':
+      return {
+        value: metrics.functionsOverCeiling ?? 0,
+        denominator: metrics.functionsTotal ?? null,
+        unit: `functions over cognitive complexity ${COMPLEXITY_CEILING}`,
+      }
+    case 'duplication':
+      return {
+        value: metrics.duplicationPercent ?? 0,
+        denominator: null,
+        unit: '% of tokens duplicated',
+      }
+    case 'test-quality':
+      return { value: metrics.mutationScore ?? 0, denominator: null, unit: '% of mutants detected' }
+  }
+}
+
+/**
+ * The findings a category's formula counts: in scope, in that category, and —
+ * for `types`, the one category whose rule names severities — of a severity the
+ * rule reads. The rule is read off `GRADE_TABLE`, so this cannot drift from what
+ * `gradeDensity` actually counted.
+ */
+function countedFindings(category: Category, findings: readonly Finding[]): readonly Finding[] {
+  const rule = GRADE_TABLE[category]
+  const mine = findings.filter((finding) => finding.gradeScope && finding.category === category)
+  if (!('severities' in rule)) return mine
+  const severities: readonly Severity[] = rule.severities
+  return mine.filter((finding) => severities.includes(finding.severity))
 }
 
 /**

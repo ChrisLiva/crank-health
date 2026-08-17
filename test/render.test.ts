@@ -30,6 +30,7 @@ describe('buildReport', () => {
       'mode',
       'selected',
       'categories',
+      'gradeBasis',
       'metrics',
       'languages',
       'coverage',
@@ -174,6 +175,20 @@ describe('buildReport', () => {
       findings.map((finding) => finding.id),
     )
     expect(reportFindings(report).map((finding) => finding.gradeScope)).toEqual([true, false, true])
+  })
+
+  /** Canonical order, fixed keys, and only the categories that have a basis. */
+  it('reports the grade basis in category order, with a fixed key order', () => {
+    const report = buildReport(
+      input({
+        gradeBasis: {
+          lint: { unit: 'weighted findings per KLOC', denominator: 2.5, value: 10 },
+          security: { unit: 'graded findings', denominator: null, value: 3 },
+        },
+      }),
+    )
+    expect(Object.keys(report.gradeBasis)).toEqual(['security', 'lint'])
+    expect(Object.keys(report.gradeBasis.lint ?? {})).toEqual(['value', 'denominator', 'unit'])
   })
 
   /**

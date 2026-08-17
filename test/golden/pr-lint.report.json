@@ -44,6 +44,13 @@
       "reason": "not selected by --only"
     }
   },
+  "gradeBasis": {
+    "lint": {
+      "value": 10,
+      "denominator": 0.012,
+      "unit": "weighted findings per KLOC"
+    }
+  },
   "metrics": {},
   "languages": {
     "js-ts": {

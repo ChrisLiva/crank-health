@@ -78,6 +78,11 @@ export interface Report {
   /** All eight states, always — including the ones nothing assessed (spec §8). */
   readonly categories: Readonly<Record<Category, CategoryState>>
   /**
+   * The arithmetic behind each grade above, in {@link CATEGORIES} order and only
+   * for the categories that have one; see {@link ReportGradeBasis}.
+   */
+  readonly gradeBasis: Readonly<Partial<Record<Category, ReportGradeBasis>>>
+  /**
    * The tool-reported measurements behind the ratio grades, for the categories
    * where a tool reported any. A grade of "complexity: C" is unreadable without
    * the numbers it came from.
@@ -199,6 +204,28 @@ export interface ReportProjectMovement {
 
 /** A finding in {@link ReportDelta.newFindings}: the schema plus the flag. */
 export type ReportNewFinding = ReportFinding & { readonly touchedLine: boolean }
+
+/**
+ * The two numbers one category's formula divided, and what they count.
+ *
+ * A letter on its own is not checkable: `lint: C` says nothing about whether the
+ * repo has forty warnings in a thousand lines or four hundred in ten thousand,
+ * and the grade tables in `core/grade.ts` are stated in exactly these terms. A
+ * reader who has this can redo the sum.
+ */
+export interface ReportGradeBasis {
+  /** The measured numerator, in {@link unit}. */
+  readonly value: number
+  /**
+   * What {@link value} was measured against — KLOC, files checked, functions
+   * analyzed. `null` for the shapes that normalize nothing: security counts
+   * findings outright, and duplication and mutation score are percentages the
+   * tool computed itself.
+   */
+  readonly denominator: number | null
+  /** What one unit of {@link value} is, in the formula's own words. */
+  readonly unit: string
+}
 
 /**
  * What the grades are silent about: the part of the tree no language adapter
@@ -375,6 +402,8 @@ export interface ReportInput {
   /** The `--project` selection, when there was one; see {@link Report.scopedTo}. */
   readonly scopedTo?: readonly string[]
   readonly categories: Readonly<Record<Category, CategoryState>>
+  /** The arithmetic behind the graded ones; see {@link ReportGradeBasis}. */
+  readonly gradeBasis: Readonly<Partial<Record<Category, ReportGradeBasis>>>
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
   /** What the scan could read of the tree; see {@link ReportCoverage}. */
   readonly coverage: ReportCoverage
@@ -419,6 +448,7 @@ export function buildReport(input: ReportInput): Report {
     selected: CATEGORIES.filter((category) => input.selected.includes(category)),
     ...(input.scopedTo === undefined ? {} : { scopedTo: input.scopedTo.toSorted(compare) }),
     categories: orderedCategories(input.categories),
+    gradeBasis: orderedGradeBasis(input.gradeBasis),
     metrics: orderedMetrics(input.metrics),
     languages: countByLanguage(input.findings),
     coverage: orderedCoverage(input.coverage),
@@ -611,6 +641,29 @@ function orderedDeltaFinding(finding: Finding): ReportFinding {
     ...orderedFinding(finding),
     ...(finding.gradeScope ? {} : { advisory: true as const }),
   }
+}
+
+/**
+ * The graded categories' arithmetic, in canonical order and with a fixed key
+ * order inside each. Only the categories that have a basis appear — a
+ * `not-assessed` category divided nothing, and a row of zeroes under it would
+ * read as a measurement nobody took.
+ */
+function orderedGradeBasis(
+  basis: Readonly<Partial<Record<Category, ReportGradeBasis>>>,
+): Partial<Record<Category, ReportGradeBasis>> {
+  const ordered: Partial<Record<Category, ReportGradeBasis>> = {}
+  for (const category of CATEGORIES) {
+    const measured = basis[category]
+    if (measured !== undefined) {
+      ordered[category] = {
+        value: measured.value,
+        denominator: measured.denominator,
+        unit: measured.unit,
+      }
+    }
+  }
+  return ordered
 }
 
 /** The coverage block in the schema's key order; the runner already sorted it. */

@@ -238,6 +238,7 @@ the selection `scopedTo` names — and `projects[]` answers the same questions p
 | `crankHealth`, `repo`, `profile`, `mode`, `selected` | Which crank-health ran, against which commit, in which profile, and which categories were asked for.      |
 | `scopedTo`                                           | The `--project` selection the rollup was computed over. Absent when every discovered project was scanned. |
 | `categories`                                         | All eight states, always: `graded`, `not-assessed(reason)` or `error(reason)`.                            |
+| `gradeBasis`                                         | The arithmetic behind each grade — see below. Only the categories that have one.                          |
 | `metrics`                                            | The tool-reported numbers behind the ratio grades — function counts, duplicated-token %, mutation score.  |
 | `languages`                                          | Findings per language per category.                                                                       |
 | `coverage`                                           | How much of the tree the grades are about — see below.                                                    |
@@ -271,6 +272,14 @@ range overlap another finding's, in a _different_ category — the function over
 that also fails the type checker — carries that finding's id, and it carries yours. Sorted, absent
 when there is nothing to link, and never drawn within a category: two lint findings on one line are
 already in the same section of the report.
+
+**`gradeBasis` makes a letter checkable.** `lint: C` says nothing about whether the repo has forty
+warnings in a thousand lines or four hundred in ten thousand, and the tables above are stated in
+exactly those terms. Each graded category carries `{value, denominator, unit}` — `{20, 2.5,
+"weighted findings per KLOC"}` — so a reader can redo the sum. `denominator` is `null` for the
+shapes that normalize nothing: security counts findings outright, and duplication and mutation score
+are percentages the tool computed itself. A `not-assessed` category has no entry, because it divided
+nothing.
 
 **`coverage` is the denominator annotation.** Every density grade divides by the _assessed_ KLOC and
 every ratio grade by an assessed file or function count, so a repo can be graded A across the board
