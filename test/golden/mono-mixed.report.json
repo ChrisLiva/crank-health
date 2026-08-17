@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "crankHealth": "0.7.0",
+  "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
     "commit": "3048f450a6c1c828d5fd777d2b188c80877db803"
@@ -140,7 +140,7 @@
       "categories": {
         "security": {
           "status": "not-assessed",
-          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing"
+          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files, so bandit assessed nothing"
         },
         "types": {
           "status": "not-assessed",
@@ -217,7 +217,7 @@
       "pinned": "1.9.4",
       "detection": null,
       "state": "not-available",
-      "reason": "no Python files in this repo, so bandit assessed nothing",
+      "reason": "no Python files, so bandit assessed nothing",
       "raw": []
     },
     {

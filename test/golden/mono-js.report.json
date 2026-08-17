@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "crankHealth": "0.7.0",
+  "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
     "commit": "acbb91a96406d62565ed52fa2009a8581e16b023"
@@ -20,7 +20,7 @@
   "categories": {
     "security": {
       "status": "not-assessed",
-      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files in this repo, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
     },
     "types": {
       "status": "not-assessed",
@@ -234,7 +234,7 @@
       "pinned": "1.9.4",
       "detection": null,
       "state": "not-available",
-      "reason": "no Python files in this repo, so bandit assessed nothing",
+      "reason": "no Python files, so bandit assessed nothing",
       "raw": []
     },
     {
@@ -833,6 +833,6 @@
     }
   ],
   "warnings": [
-    "scan scope: 1 file under .crank/ was not scanned (hidden directories other than .github/ are not source)"
+    "scan scope: 1 file under a hidden directory was not analyzed by language tools; repo-scoped scanners (gitleaks, osv-scanner) scan the full tree"
   ]
 }

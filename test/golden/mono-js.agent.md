@@ -1,10 +1,10 @@
 # Fix plan
 
-`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.7.0 · quick profile
+`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.8.0 · quick profile
 
 Grades: security not assessed · types not assessed · dead code A · complexity A · duplication D · lint D · format B · test quality not assessed
 
-> How this run was graded: scan scope: 1 file under .crank/ was not scanned (hidden directories other than .github/ are not source)
+> How this run was graded: scan scope: 1 file under a hidden directory was not analyzed by language tools; repo-scoped scanners (gitleaks, osv-scanner) scan the full tree
 
 ## Ground rules
 

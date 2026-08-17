@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `3048f450a6c1c828d5fd777d2b188c80877db803` · crank-health 0.7.0 · quick profile
+`<repo>` @ `3048f450a6c1c828d5fd777d2b188c80877db803` · crank-health 0.8.0 · quick profile
 
 ## Grades
 
@@ -57,7 +57,7 @@ This project declares no tool of its own: it was analyzed on crank-health’s de
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files in this repo, so bandit assessed nothing |
+| security | not assessed | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files, so bandit assessed nothing |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 | dead code | A | Nothing counted toward the grade. |
 | complexity | A | 0 of 1 function over cognitive complexity 15 (0.0%). |
@@ -77,7 +77,7 @@ Graded on absolute counts, never normalized: any critical → F, any error → D
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | bandit | ok | [default-config] | 1.9.4 | (services/api) |
-| bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files in this repo, so bandit assessed nothing (services/web) |
+| bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing (services/web) |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (services/api, services/web) |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
