@@ -69,8 +69,8 @@ const MONO_JS_HIDDEN_FILE = '.crank/hooks/hook.ts'
 
 /** The one sentence that file's absence is explained by, in all three artifacts. */
 const MONO_JS_SCAN_SCOPE =
-  'scan scope: 1 file under .crank/ was not scanned ' +
-  '(hidden directories other than .github/ are not source)'
+  'scan scope: 1 file under a hidden directory was not analyzed by language tools; ' +
+  'repo-scoped scanners (gitleaks, osv-scanner) scan the full tree'
 
 /** Every finding planted in `test/fixtures/mono-js` — see that fixture's README. */
 const MONO_JS_PLANTED = [
@@ -345,7 +345,7 @@ describe('quick scan of the mono-js fixture', () => {
    * wonders why the tree looks smaller than it is has the answer beside the
    * grades rather than having to diff a file list.
    */
-  it('says in the report that the hidden directory was not scanned', () => {
+  it('says in the report that the hidden directory went unanalyzed', () => {
     expect(scan.report.warnings).toContain(MONO_JS_SCAN_SCOPE)
   })
 

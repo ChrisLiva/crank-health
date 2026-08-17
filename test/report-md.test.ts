@@ -246,8 +246,8 @@ describe('renderReportMarkdown', () => {
    */
   it('notes the scan’s scope under the grades, above the language breakdown', () => {
     const scope =
-      'scan scope: 1 file under .crank/ was not scanned ' +
-      '(hidden directories other than .github/ are not source)'
+      'scan scope: 1 file under a hidden directory was not analyzed by language tools; ' +
+      'repo-scoped scanners (gitleaks, osv-scanner) scan the full tree'
     const standby = 'lint graded by oxlint: the repo’s own ESLint could not run'
     const markdown = renderReportMarkdown(
       makeReport({

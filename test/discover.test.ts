@@ -226,10 +226,11 @@ describe('discoverFiles and hidden directories', () => {
 
 /**
  * A scan that quietly looked at less than the repo is a scan a reader cannot
- * check. One sentence names how much went and which directories it was under.
+ * check. One sentence says how much went and what "went" actually means: the
+ * language tools did not analyze it, the repo-scoped scanners still walked it.
  */
 describe('the scan-scope warning', () => {
-  it('names every hidden directory that dropped files, at its shallowest segment', async () => {
+  it('says how much went and which tools stopped short, naming no directory', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-'))
     try {
       await git(repo, 'init', '--quiet')
@@ -241,8 +242,8 @@ describe('the scan-scope warning', () => {
       const { warnings } = await discoverFiles(repo)
 
       expect(warnings).toEqual([
-        'scan scope: 3 files under .crank/, packages/web/.next/ were not scanned ' +
-          '(hidden directories other than .github/ are not source)',
+        'scan scope: 3 files under hidden directories were not analyzed by language tools; ' +
+          'repo-scoped scanners (gitleaks, osv-scanner) scan the full tree',
       ])
     } finally {
       await rm(repo, { recursive: true, force: true })
@@ -281,8 +282,8 @@ describe('the scan-scope warning', () => {
       const { warnings } = await discoverFiles(repo)
 
       expect(warnings).toEqual([
-        'scan scope: 1 file under .crank/ was not scanned ' +
-          '(hidden directories other than .github/ are not source)',
+        'scan scope: 1 file under a hidden directory was not analyzed by language tools; ' +
+          'repo-scoped scanners (gitleaks, osv-scanner) scan the full tree',
       ])
     } finally {
       await rm(repo, { recursive: true, force: true })
@@ -306,8 +307,7 @@ describe('the scan-scope warning', () => {
 
   /**
    * The sentence goes into `report.json`, which is byte-compared across
-   * machines: repo-relative directory names are the only repo-specific text it
-   * may carry.
+   * machines, so it may carry no path from the machine it ran on.
    */
   it('carries no absolute path', async () => {
     const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-abs-'))

@@ -184,8 +184,8 @@ describe('a change in a repo whose hidden directories are out of scope', () => {
 
   it('notes the scope once per side, with the base side marked as the base', () => {
     const bare =
-      'scan scope: 1 file under .crank/ was not scanned ' +
-      '(hidden directories other than .github/ are not source)'
+      'scan scope: 1 file under a hidden directory was not analyzed by language tools; ' +
+      'repo-scoped scanners (gitleaks, osv-scanner) scan the full tree'
 
     expect(result.report.warnings).toHaveLength(2)
     expect(result.report.warnings).toContain(bare)

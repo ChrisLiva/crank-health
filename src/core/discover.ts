@@ -73,7 +73,7 @@ export async function discoverFiles(repoRoot: string): Promise<FileScan> {
 
   // One pass decides both sides: a path is a candidate or it is what the
   // hidden-scope rule dropped. Only that rule's drops are collected — a path a
-  // nearer rule already removed was never this rule's to explain, and naming
+  // nearer rule already removed was never this rule's to explain, and counting
   // `node_modules/` in the warning would tell a repo its dependencies were
   // skipped for being hidden (spec §7).
   const kept: string[] = []
@@ -417,19 +417,22 @@ function hiddenScopeRoot(file: string): string | undefined {
 
 /**
  * What the hidden-scope rule left out, as the one sentence the terminal,
- * `report.md` and `agent.md` all quote verbatim. The count is of files; the
- * directories are each dropped path's shallowest hidden segment, de-duplicated
- * and in the report's byte-wise order. Nothing dropped says nothing at all.
+ * `report.md` and `agent.md` all quote verbatim. The count is of files, and the
+ * claim is scoped to what actually stopped at the rule: the language tools take
+ * this inventory, while the repo-scoped scanners are pointed at the repo root
+ * and walk everything under it. Naming the directories would sell the reader a
+ * list to audit instead of the one fact that changes what they do next.
+ * Nothing dropped says nothing at all.
  */
 function scanScopeWarnings(dropped: readonly string[]): readonly string[] {
   if (dropped.length === 0) return []
-  const directories = [...new Set(dropped.flatMap((file) => hiddenScopeRoot(file) ?? []))].toSorted(
-    compareFiles,
-  )
-  const [noun, verb] = dropped.length === 1 ? ['file', 'was'] : ['files', 'were']
+  const [noun, verb, where] =
+    dropped.length === 1
+      ? ['file', 'was', 'a hidden directory']
+      : ['files', 'were', 'hidden directories']
   return [
-    `scan scope: ${dropped.length} ${noun} under ${directories.join(', ')} ${verb} not scanned ` +
-      `(hidden directories other than ${GITHUB_DIRECTORY}/ are not source)`,
+    `scan scope: ${dropped.length} ${noun} under ${where} ${verb} not analyzed by ` +
+      `language tools; repo-scoped scanners (gitleaks, osv-scanner) scan the full tree`,
   ]
 }
 
