@@ -114,14 +114,13 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 | fallow-health | ok | [default-config] | 3.14.0 | (packages/api, packages/web) |
 | fta | ok | [default-config] | 3.0.0 | (packages/api, packages/web) |
 
-**Advisory findings — reported, not counted toward the grade** (6)
+**Advisory findings** (6) — reported, not counted toward the grade: 5 × `fallow-health` `fallow/complexity`, 1 × `fta` `fta/file-score`.
 
 - info `packages/web/src/tokens.js` `fta/file-score` — File has an FTA maintainability score of 63.2 (needs improvement), across 165 lines (fta) [default-config] [advisory]
 - error `packages/web/src/tokens.js:10` `fallow/complexity` — Function `kindOf` has cognitive complexity 1 (cyclomatic 37); the ceiling is 15 (fallow-health) [default-config] [advisory]
 - error `packages/web/src/tokens.js:58` `fallow/complexity` — Function `tierOf` has cognitive complexity 1 (cyclomatic 35); the ceiling is 15 (fallow-health) [default-config] [advisory]
-- error `packages/web/src/tokens.js:104` `fallow/complexity` — Function `mapsFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15 (fallow-health) [default-config] [advisory]
-- error `packages/web/src/tokens.js:135` `fallow/complexity` — Function `loaderFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15 (fallow-health) [default-config] [advisory]
-- error `packages/web/src/tokens.js:171` `fallow/complexity` — Function `isPlannable` has cognitive complexity 5 (cyclomatic 12); the ceiling is 15 (fallow-health) [default-config] [advisory]
+
+All 6 are in `report.json`, under `advisories`.
 
 Evidence: [raw/packages/api/fallow-health.json](raw/packages/api/fallow-health.json) · [raw/packages/api/fallow-health.stderr.txt](raw/packages/api/fallow-health.stderr.txt) · [raw/packages/web/fallow-health.json](raw/packages/web/fallow-health.json) · [raw/packages/web/fallow-health.stderr.txt](raw/packages/web/fallow-health.stderr.txt) · [raw/packages/api/fta.json](raw/packages/api/fta.json) · [raw/packages/web/fta.json](raw/packages/web/fta.json)
 
@@ -137,7 +136,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | (packages/api, packages/web) |
 
-**Advisory findings — reported, not counted toward the grade** (1)
+**Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
 - warning `packages/api/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11 (jscpd) [default-config] [advisory]
   - fix: Extract the duplicated block into a shared function or module

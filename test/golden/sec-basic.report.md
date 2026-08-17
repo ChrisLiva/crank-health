@@ -60,7 +60,7 @@ Graded on absolute counts, never normalized: any critical → F, any error → D
 - error `src/config.py:13` `B602` — subprocess call with shell=True identified, security issue. (high severity, high confidence) (bandit) [default-config]
   - fix: see https://bandit.readthedocs.io/en/1.9.4/plugins/b602_subprocess_popen_with_shell_equals_true.html
 
-**Advisory findings — reported, not counted toward the grade** (1)
+**Advisory findings** (1) — reported, not counted toward the grade: 1 × `bandit` `B404`.
 
 - info `src/config.py:3` `B404` — Consider possible security implications associated with the subprocess module. (low severity, high confidence) (bandit) [default-config] [advisory]
   - fix: see https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess
@@ -107,7 +107,7 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 | fallow-health | ok | [default-config] | 3.14.0 | — |
 | fta | ok | [default-config] | 3.0.0 | — |
 
-**Advisory findings — reported, not counted toward the grade** (2)
+**Advisory findings** (2) — reported, not counted toward the grade: 2 × `fallow-health` `fallow/complexity`.
 
 - info `src/handler.js:5` `fallow/complexity` — Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15 (fallow-health) [default-config] [advisory]
 - info `src/report.js:1` `fallow/complexity` — Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15 (fallow-health) [default-config] [advisory]
@@ -126,7 +126,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
-**Advisory findings — reported, not counted toward the grade** (1)
+**Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
 - warning `src/handler.js:5` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/report.js:1-11 (jscpd) [default-config] [advisory]
   - fix: Extract the duplicated block into a shared function or module

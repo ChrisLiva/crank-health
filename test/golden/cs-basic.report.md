@@ -56,7 +56,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
 
-**Advisory findings — reported, not counted toward the grade** (1)
+**Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
 - warning `dupe-a.cs:4` `jscpd/duplicate-block` — 30 lines (100 tokens) duplicated from dupe-b.cs:4-33 (jscpd) [default-config] [advisory]
   - fix: Extract the duplicated block into a shared function or module

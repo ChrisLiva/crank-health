@@ -111,7 +111,7 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 - error `src/dupe-keys.js:2` `eslint(no-dupe-keys)` — Duplicate key 'home' (oxlint) [default-config]
 - error `src/unreachable.js:6` `eslint(no-unreachable)` — Unreachable code. (oxlint) [default-config]
 
-**Advisory findings — reported, not counted toward the grade** (1)
+**Advisory findings** (1) — reported, not counted toward the grade: 1 × `oxlint` `oxc(no-accumulating-spread)`.
 
 - warning `src/accumulate.js:2` `oxc(no-accumulating-spread)` — Do not spread accumulators in loops (oxlint) [default-config] [advisory]
 

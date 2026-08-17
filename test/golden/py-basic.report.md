@@ -72,7 +72,7 @@ Graded on weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F.
 
 - warning `dead.py` `vulture/unused-import` — Unused import `os` (90% confidence) (vulture) [default-config]
 
-**Advisory findings — reported, not counted toward the grade** (1)
+**Advisory findings** (1) — reported, not counted toward the grade: 1 × `vulture` `vulture/unused-function`.
 
 - info `dead.py:8` `vulture/unused-function` — Unused function `never_called` (60% confidence) (vulture) [default-config] [advisory]
 

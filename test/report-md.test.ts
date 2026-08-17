@@ -189,10 +189,51 @@ describe('renderReportMarkdown', () => {
 
   it('separates advisory findings and labels them', async () => {
     const markdown = await render('sec-basic')
-    expect(markdown).toContain('Advisory findings — reported, not counted toward the grade')
+    expect(markdown).toContain('**Advisory findings** (1) — reported, not counted toward the grade')
     expect(markdown).toMatch(/`B404`.*\[advisory\]/)
     // The graded findings are not labelled advisory.
     expect(markdown).not.toMatch(/`B602`.*\[advisory\]/)
+  })
+
+  /**
+   * A page of advisory rows buries the graded ones above it. What a reader
+   * needs is how many there are, what they are made of, enough of them to
+   * recognize the shape, and where the rest are.
+   */
+  it('collapses advisory findings to a count, a shape, three exemplars and a pointer', () => {
+    const markdown = renderReportMarkdown(
+      makeReport({
+        categories: { ...allGraded(), lint: { status: 'graded', grade: 'C' } },
+        findings: [
+          ...Array.from({ length: 5 }, (_, index) =>
+            makeFinding({
+              id: `s${index}`,
+              tool: 'ruff',
+              rule: 'S101',
+              file: `src/t${index}.py`,
+              gradeScope: false,
+            }),
+          ),
+          ...Array.from({ length: 2 }, (_, index) =>
+            makeFinding({
+              id: `b${index}`,
+              tool: 'bandit',
+              rule: 'B404',
+              file: `src/c${index}.py`,
+              gradeScope: false,
+            }),
+          ),
+        ],
+      }),
+    )
+
+    const lint = section(markdown, '## lint — C')
+    expect(lint).toContain(
+      '**Advisory findings** (7) — reported, not counted toward the grade: ' +
+        '5 × `ruff` `S101`, 2 × `bandit` `B404`.',
+    )
+    expect(lint.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(3)
+    expect(lint).toContain('All 7 are in `report.json`, under `advisories`.')
   })
 
   /**

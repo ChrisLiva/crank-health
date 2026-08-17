@@ -482,9 +482,7 @@ function categorySection(
     blocks.push(toolTable(collapseToolRows(tools), report.projects.length))
   }
   blocks.push(...findingList('Findings', graded, limit))
-  blocks.push(
-    ...findingList('Advisory findings — reported, not counted toward the grade', advisory, limit),
-  )
+  blocks.push(...advisoryBlock(advisory))
   const evidence = tools.flatMap((tool) => tool.raw)
   if (evidence.length > 0) {
     blocks.push(`Evidence: ${evidence.map((path) => `[${path}](${path})`).join(' · ')}`)
@@ -529,6 +527,57 @@ function versionCell(tool: ReportTool): string {
   if (tool.version === null) return tool.pinned === null ? '—' : `— (pinned ${tool.pinned})`
   if (tool.pinned === null || tool.pinned === tool.version) return tool.version
   return `${tool.version} (pinned ${tool.pinned})`
+}
+
+/** Advisory rows listed in full before the rest is left to `report.json`. */
+const ADVISORY_EXEMPLARS = 3
+
+/** Distinct tool-and-rule pairs named before the shape is summed up. */
+const ADVISORY_SHAPES = 5
+
+/**
+ * The advisory findings, collapsed: how many there are, what they are made of,
+ * enough of them to recognize, and where the rest are.
+ *
+ * Listed in full they are the longest part of every category — a default
+ * config's style opinions, a low-confidence tier — and they bury the graded
+ * findings above them, which are the ones that moved the letter. Nothing is
+ * hidden by the collapse: `report.json` carries every row, and the pointer says
+ * so.
+ */
+function advisoryBlock(advisory: readonly Finding[]): string[] {
+  if (advisory.length === 0) return []
+  const shown = advisory.slice(0, ADVISORY_EXEMPLARS)
+  return [
+    `**Advisory findings** (${advisory.length}) — reported, not counted toward the grade: ` +
+      `${advisoryShape(advisory)}.`,
+    shown.map((finding) => findingLine(finding)).join('\n'),
+    // Only where rows were left out: a block that listed all of them has
+    // nothing to point at.
+    ...(advisory.length > shown.length
+      ? [`All ${advisory.length} are in \`report.json\`, under \`advisories\`.`]
+      : []),
+  ]
+}
+
+/**
+ * `5 × \`ruff\` \`S101\`, 2 × \`bandit\` \`B404\`` — what the collapsed rows
+ * are, biggest group first, with the tool and the rule as total tiebreakers so
+ * two runs cannot order two equal groups differently.
+ */
+function advisoryShape(advisory: readonly Finding[]): string {
+  const counts = new Map<string, number>()
+  for (const finding of advisory) {
+    const key = `\`${finding.tool}\` \`${finding.rule}\``
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const ranked = [...counts].toSorted(
+    ([leftKey, left], [rightKey, right]) =>
+      right - left || (leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0),
+  )
+  const named = ranked.slice(0, ADVISORY_SHAPES).map(([key, count]) => `${count} × ${key}`)
+  const rest = ranked.length - named.length
+  return `${named.join(', ')}${rest === 0 ? '' : `, ${plural(rest, 'other rule')}`}`
 }
 
 function findingList(
