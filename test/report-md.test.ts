@@ -9,6 +9,7 @@ import {
   allGraded,
   allNotAssessed,
   makeFinding,
+  makeProject,
   makeProjectScan,
   makeReport,
   noMetrics,
@@ -120,6 +121,32 @@ function lintScan(project: string, raw: readonly string[]): ResolvedRun {
       standby: false,
     },
     raw,
+  }
+}
+
+/** One project's owned run of a tool, with the artifact that decided it. */
+function ownedScan(project: string, tool: string, ownedVia: string): ResolvedRun {
+  return {
+    record: {
+      tool,
+      category: tool === 'oxlint' ? 'lint' : 'format',
+      scope: 'js-ts',
+      project,
+      repoWide: false,
+      rollupOnly: false,
+      pinnedVersion: '1.0.0',
+      detection: {
+        reason: 'dependency',
+        configFiles: [],
+        ownedVia,
+        installed: true,
+        version: '1.0.0',
+      },
+      result: { state: 'ok', findings: [], rawFiles: [], toolVersion: '1.0.0' },
+      durationMs: 1,
+      standby: false,
+    },
+    raw: [],
   }
 }
 
@@ -644,6 +671,50 @@ describe('renderReportMarkdown projects', () => {
         '(`packages/api`, `packages/web`)',
     )
     expect(scoped).not.toContain('the repo as a whole')
+  })
+
+  /**
+   * In a workspace every package inherits the root's toolchain, so a full table
+   * per package is the same rows printed n times and the one row that differs
+   * is invisible in the middle of them.
+   */
+  describe('toolchain tables against the root', () => {
+    const workspace = renderReportMarkdown(
+      makeReport({
+        projects: [
+          makeProjectScan({ project: makeProject(['package.json', 'src/a.ts']) }),
+          makeProjectScan({ project: projectAt('packages/api') }),
+          makeProjectScan({ project: projectAt('packages/web') }),
+        ],
+        runs: [
+          ownedScan('.', 'oxlint', 'package.json'),
+          ownedScan('packages/api', 'oxlint', 'package.json'),
+          ownedScan('packages/web', 'oxlint', 'package.json'),
+          ownedScan('packages/web', 'prettier', 'packages/web/package.json'),
+        ],
+      }),
+    )
+
+    it('renders the root’s own toolchain in full', () => {
+      expect(projectBlock(workspace, '### repo root')).toContain(
+        '| oxlint | lint | dependency | package.json | 1.0.0 |',
+      )
+    })
+
+    it('renders only the rows a project does not share with the root', () => {
+      const web = projectBlock(workspace, '### packages/web')
+      expect(web).toContain('As `repo root`, except:')
+      expect(web).toContain(
+        '| prettier | format | dependency | packages/web/package.json | 1.0.0 |',
+      )
+      expect(web).not.toContain('| oxlint |')
+    })
+
+    it('says so in a sentence where a project shares the root’s toolchain exactly', () => {
+      const api = projectBlock(workspace, '### packages/api')
+      expect(api).toContain('The same toolchain as `repo root`.')
+      expect(api).not.toContain('| Tool |')
+    })
   })
 
   it('leaves a single-project report exactly as it was', async () => {

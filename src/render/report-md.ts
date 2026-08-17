@@ -1,3 +1,4 @@
+import { ROOT_PROJECT } from '../core/discover.ts'
 import {
   COMPLEXITY_CEILING,
   GRADE_TABLE,
@@ -399,7 +400,12 @@ function projectsSection(
       'audits, workflow checks — so it is graded once, above, and not per project.',
   ]
   if (report.rootShell !== undefined) blocks.push(rootShellNote(report.rootShell))
-  return [...blocks, ...report.projects.flatMap((project) => projectBlock(findings, project, omit))]
+  // What every package's toolchain is read against; see {@link projectToolBlock}.
+  const root = report.projects.find((project) => project.path === ROOT_PROJECT)?.toolchain ?? []
+  return [
+    ...blocks,
+    ...report.projects.flatMap((project) => projectBlock(findings, project, omit, root)),
+  ]
 }
 
 /**
@@ -421,6 +427,7 @@ function projectBlock(
   findings: readonly Finding[],
   project: ReportProject,
   omit: readonly Category[],
+  root: readonly ReportProjectTool[],
 ): string[] {
   const manifests = project.manifests.map((manifest) => `\`${manifest}\``)
   const languages = project.languages.length === 0 ? [] : [project.languages.join(', ')]
@@ -430,7 +437,48 @@ function projectBlock(
     gradesTable(project.categories, projectScope(findings, project), undefined, omit),
     ...(project.toolchain.length === 0
       ? ['This project declares no tool of its own: it was analyzed on crank-health’s defaults.']
-      : [projectToolTable(project.toolchain)]),
+      : projectToolBlock(project, root)),
+  ]
+}
+
+/**
+ * What this project owns, said against the root project's toolchain.
+ *
+ * In a workspace a package's tools are regularly the root's, hoisted: a full
+ * table per package is one table printed n times, and the single row that
+ * actually differs is invisible in the middle of it. So only the rows the root
+ * does not already carry are rendered, and the ones it does are one sentence.
+ *
+ * The root's own block is the full table — there is nothing above it to read it
+ * against — and so is every project's in a repo whose root owns no tool, where
+ * "except" would be the whole table anyway.
+ */
+function projectToolBlock(
+  project: ReportProject,
+  root: readonly ReportProjectTool[],
+): readonly string[] {
+  if (project.path === ROOT_PROJECT || root.length === 0) {
+    return [projectToolTable(project.toolchain)]
+  }
+  const shared = new Set(root.map((tool) => projectToolRow(tool)))
+  const own = project.toolchain.filter((tool) => !shared.has(projectToolRow(tool)))
+  // A tool the root owns and this package does not is a difference too, and one
+  // no table of this package's rows could show.
+  const absent = root.filter(
+    (tool) =>
+      !project.toolchain.some((mine) => mine.tool === tool.tool && mine.category === tool.category),
+  )
+  const label = `\`${projectLabel(ROOT_PROJECT)}\``
+  if (own.length === 0 && absent.length === 0) return [`The same toolchain as ${label}.`]
+  return [
+    `As ${label}, except:`,
+    ...(own.length === 0 ? [] : [projectToolTable(own)]),
+    ...(absent.length === 0
+      ? []
+      : [
+          `${label} also owns ${absent.map((tool) => `\`${tool.tool}\``).join(', ')}; ` +
+            'this project does not.',
+        ]),
   ]
 }
 
@@ -440,16 +488,21 @@ function projectBlock(
  * that is how a hoisted dependency at the root becomes this package's toolchain.
  */
 function projectToolTable(toolchain: readonly ReportProjectTool[]): string {
-  const rows = toolchain.map((tool) =>
-    row([
-      tool.tool,
-      CATEGORY_LABELS[tool.category],
-      `${tool.reason}${tool.installed ? '' : ', not installed'}`,
-      tool.ownedVia ?? '—',
-      tool.version ?? '—',
-    ]),
+  return table(
+    ['Tool', 'Category', 'Ownership', 'Owned via', 'Version'],
+    toolchain.map((tool) => projectToolRow(tool)),
   )
-  return table(['Tool', 'Category', 'Ownership', 'Owned via', 'Version'], rows)
+}
+
+/** One toolchain row, and the whole of what makes two of them the same row. */
+function projectToolRow(tool: ReportProjectTool): string {
+  return row([
+    tool.tool,
+    CATEGORY_LABELS[tool.category],
+    `${tool.reason}${tool.installed ? '' : ', not installed'}`,
+    tool.ownedVia ?? '—',
+    tool.version ?? '—',
+  ])
 }
 
 /* ---------------------------------------------------------- category detail */
