@@ -137,8 +137,8 @@ Workspace globs (npm/pnpm/yarn/uv) corroborate that classification and never dec
 exist, so an unlisted or unbuilt package is still scanned. There is no mode flag: one project
 behaves exactly as it always has, and more than one produces per-project output automatically.
 Hidden directories are not scanned — a repo's `.crank/`, `.next/` or agent scratch directory is
-tooling scope, not its source — with the root `.github/` the one exception, so CI workflows stay in
-scope; each skipped scope is named in `warnings[]`.
+tooling scope, not its source — with `.github/` the one exception, at any depth, so CI workflows
+stay in scope; each skipped scope is named in `warnings[]`.
 
 Each project is detected, run and graded on its own terms — its own config, its own installed
 binaries, its own KLOC and file-count denominators — with ownership inheriting from ancestors, so a
@@ -255,7 +255,7 @@ written. This is a hard contract, tested on every fixture:
   invoked.
 - Discovery is `git ls-files`-based, so `.gitignore` is respected — including by the tools that
   ignore it natively, which get explicit exclusion flags — and files under hidden directories are
-  left out, the root `.github/` excepted.
+  left out, `.github/` at any depth excepted.
 
 The quick profile never executes your code; it only reads it. `--deep` is the exception, and it says
 so below.

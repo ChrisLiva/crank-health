@@ -85,7 +85,7 @@ const FORMATS = 'javascript,jsx,typescript,tsx,python,csharp'
  *
  * A dot-directory glob carries discovery's hidden-scope rule across too, and
  * carries it further than discovery does: a glob list has no negation, so the
- * root `.github/` discovery allows back in cannot be carved back in here.
+ * `.github/` discovery allows back in cannot be carved back in here.
  * Duplication inside `.github/scripts/` is therefore neither measured nor
  * reported — the percentage and the clones come from this one list, so the
  * report never shows a clone the percentage did not count — while discovery

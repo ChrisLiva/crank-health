@@ -23,7 +23,7 @@ import {
   invocationArgs as osvArgs,
   osvScannerRunner,
 } from '../src/adapters/common/osv-scanner.ts'
-import { zizmorRunner } from '../src/adapters/common/zizmor.ts'
+import { isAuditable, zizmorRunner } from '../src/adapters/common/zizmor.ts'
 import { buildInvocationArgs } from '../src/adapters/csharp/build.ts'
 import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
 import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
@@ -715,6 +715,51 @@ describe('the C# adapter', () => {
       'test-quality',
     ])
     expect(csharpAdapter.runners.at(-1)).toBe(strykerNetRunner)
+  })
+})
+
+/**
+ * zizmor is handed discovery's paths, then filters them itself — so this
+ * predicate, not the inventory, is what decides whether a workflow file is
+ * audited. Discovery keeps a `.github` at any depth (see `isHiddenScope`); a
+ * filter anchored at the repo root would take a nested package's workflows
+ * straight back out again, and zizmor would report `not-available` on a repo
+ * whose workflows it was holding.
+ */
+describe('the inputs zizmor audits', () => {
+  it.each([
+    '.github/workflows/ci.yml',
+    '.github/workflows/release.yaml',
+    // A package's own workflows are workflow files at any depth.
+    'packages/web/.github/workflows/x.yml',
+    'a/b/c/.github/workflows/x.yaml',
+    // Composite actions, which live wherever their action does.
+    'action.yml',
+    '.github/actions/setup/action.yml',
+    'packages/web/.github/actions/setup/action.yaml',
+  ])('audits %s', (file) => {
+    expect(isAuditable(file)).toBe(true)
+  })
+
+  it.each([
+    // `workflows/` is the directory that makes a YAML file a workflow.
+    '.github/dependabot.yml',
+    '.github/zizmor.yml',
+    'workflows/ci.yml',
+    '.github/workflows/nested/ci.yml',
+    // Neither a workflow nor an action, whatever it is named.
+    'src/app.js',
+    'action.json',
+    'my-action.yml',
+    'README.md',
+    '',
+  ])('leaves %s alone', (file) => {
+    expect(isAuditable(file)).toBe(false)
+  })
+
+  /** Nothing auditable is the honest `not-available`, not an empty audit. */
+  it('finds nothing to audit in an empty inventory', () => {
+    expect([].filter(isAuditable)).toEqual([])
   })
 })
 

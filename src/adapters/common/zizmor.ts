@@ -47,8 +47,15 @@ const ZIZMOR_SECTIONS: readonly string[] = ['tool.zizmor']
  * The inputs zizmor audits: workflow definitions and composite actions. Handing
  * it the discovered paths — rather than the repo root — is what keeps a
  * gitignored or vendored workflow out of the report (spec §7).
+ *
+ * `.github/workflows/` is matched at any depth, the way discovery exempts
+ * `.github` at any depth (`core/discover.ts`): a monorepo package's
+ * `packages/web/.github/workflows/x.yml` is a workflow file GitHub happens not
+ * to run from there, and auditing it beats waiting for the repo split that
+ * moves it up. `workflows/` must still be `.github`'s own, and the file must
+ * sit directly in it — `.github/workflows/nested/ci.yml` is not a workflow.
  */
-const WORKFLOW_PATTERN = /^\.github\/workflows\/[^/]+\.ya?ml$/
+const WORKFLOW_PATTERN = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/
 const ACTION_PATTERN = /(?:^|\/)action\.ya?ml$/
 
 /**
@@ -197,7 +204,7 @@ const INVOCATION_ARGS: readonly string[] = [
 ]
 
 /** Workflow definitions and composite actions, by path. */
-function isAuditable(file: string): boolean {
+export function isAuditable(file: string): boolean {
   return WORKFLOW_PATTERN.test(file) || ACTION_PATTERN.test(file)
 }
 
