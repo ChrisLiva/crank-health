@@ -1,6 +1,7 @@
 import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
 import { banditRunner } from './bandit.ts'
 import { gitleaksRunner } from './gitleaks.ts'
+import { govulncheckRunner } from './govulncheck.ts'
 import { jscpdRunner } from './jscpd.ts'
 import { opengrepRunner } from './opengrep.ts'
 import { osvScannerRunner } from './osv-scanner.ts'
@@ -29,6 +30,7 @@ export const commonAdapter: LanguageAdapter = {
     zizmorRunner,
     banditRunner,
     osvScannerRunner,
+    govulncheckRunner,
     jscpdRunner,
   ],
 }

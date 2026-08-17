@@ -1,5 +1,20 @@
-import type { Finding, FindingPackage, PackageAdvisory, PendingFinding } from '../../core/types.ts'
-import { asArray, asRecord, asString, byLocation, compare } from '../support.ts'
+import { homedir } from 'node:os'
+import { basename, dirname, join } from 'node:path'
+import type { ToolFailure } from '../../core/exec.ts'
+import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import type {
+  DetectContext,
+  Detection,
+  Finding,
+  FindingPackage,
+  PackageAdvisory,
+  PendingFinding,
+  RunContext,
+  ToolResult,
+  ToolRunner,
+} from '../../core/types.ts'
+import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
+import { asArray, asRecord, asString, byLocation, compare, identify } from '../support.ts'
 import { OSV_PACKAGE_RULE, severityOf, summarizePackage } from './osv-scanner.ts'
 
 /**
@@ -417,4 +432,211 @@ function annotated(host: Finding, contributed: readonly PackageAdvisory[]): Find
 function sameAdvisory(one: PackageAdvisory, other: PackageAdvisory): boolean {
   const ids = new Set([one.id, ...one.aliases])
   return [other.id, ...other.aliases].some((id) => ids.has(id))
+}
+
+/** The Go module manifest that makes a directory a module worth analyzing. */
+export const GO_MOD = 'go.mod'
+
+/** The fetcher: `go run <path>@<version>` builds and runs the pinned analyzer. */
+const GO_BINARY = 'go'
+
+/** The pinned analyzer's import path; see `GO_TOOL_MANIFEST`. */
+const GOVULNCHECK_PACKAGE = 'golang.org/x/vuln/cmd/govulncheck'
+
+/**
+ * Spec §8's honest degradation for a missing Go toolchain, in the words the
+ * grade depends on: with no `go`, no advisory gets a reachability verdict, and
+ * `isGraded` therefore counts every Go advisory. A repo is never graded better
+ * for a tool that could not run.
+ */
+export const GO_ABSENT_REASON =
+  'Go toolchain absent — Go advisories graded conservatively (reachability unknown)'
+
+/** Nothing to analyze is not a failure, and it is not a clean bill of health. */
+export const NO_GO_MODULES_REASON =
+  'no go.mod in this repo, so govulncheck assessed no Go dependencies'
+
+/**
+ * govulncheck's own wall-clock budget, overriding the 120 s every other quick
+ * runner gets ({@link import('../../core/orchestrator.ts').DEFAULT_TIMEOUT_MS}).
+ *
+ * It loads the whole package graph and, on a cold module cache, downloads the
+ * analyzer and every dependency of the module it is analyzing first. Two
+ * minutes is a timeout for that on any real service; five is enough that a real
+ * module finishes and small enough that a wedged one still ends. `--timeout`
+ * still wins — a user who names a budget means it.
+ */
+export const GOVULNCHECK_TIMEOUT_MS = 300_000
+
+export const govulncheckRunner: ToolRunner = {
+  tool: GOVULNCHECK_TOOL,
+  category: 'security',
+  pinnedVersion: pinnedGoVersion(GOVULNCHECK_PACKAGE),
+  // Reachability is nobody else's job, and osv-scanner must never stand this
+  // down or be stood down by it; see `ToolRunner.complementary`.
+  complementary: true,
+  // Go modules are found by walking the repo, and a repo's modules do not line
+  // up with its `package.json`/`pyproject.toml` projects at all — so this is
+  // asked once, and it visits every go.mod it finds.
+  repoScoped: true,
+  timeoutMs: GOVULNCHECK_TIMEOUT_MS,
+  detect: detectGovulncheck,
+  run: runGovulncheck,
+}
+
+/**
+ * A `go.mod` anywhere in the inventory is what gives govulncheck something to
+ * analyze, and {@link Detection.ownedVia} names the nearest one.
+ *
+ * This is *not* a claim that the repo owns govulncheck — nobody configures a
+ * reachability analyzer into a Go module, and `installed: false` plus the
+ * `configOwned: false` every result carries keep the tool record's provenance at
+ * `default-config`. What it records is the artifact that decided this runner
+ * applies here, which is the same thing every other detector's `ownedVia` says.
+ */
+function detectGovulncheck(ctx: DetectContext): Promise<Detection | null> {
+  const ownedVia = goModules(ctx.files.all)[0]
+  return Promise.resolve(
+    ownedVia === undefined
+      ? null
+      : { reason: 'dependency', configFiles: [], ownedVia, installed: false },
+  )
+}
+
+/**
+ * The command line, exported so a test can assert that no `go` subcommand which
+ * could touch the repo is reachable from here.
+ *
+ * `run` is the only one built: `go get`, `go mod tidy` and `go mod vendor` all
+ * rewrite files in the module, and none of them is on this command line. The
+ * pin is exact — a bare import path would mean `@latest` and break determinism
+ * (spec §6). `./...` is every package in the module at `cwd`.
+ */
+export function invocationArgs(): string[] {
+  return ['run', pinnedGoSpec(GOVULNCHECK_PACKAGE), '-json', './...']
+}
+
+/**
+ * The environment every `go` spawn carries — the zero-footprint contract (spec
+ * §7) for a toolchain that is perfectly willing to write into the module it is
+ * pointed at.
+ *
+ * `GOFLAGS=-mod=readonly` is Go's own default, set explicitly so an ambient
+ * `GOFLAGS=-mod=mod` cannot turn a scan into a `go.mod`/`go.sum` rewrite. It is
+ * safe for a vendored module too: verified against a `go mod vendor`ed tree,
+ * where it produces byte-identical findings.
+ *
+ * `GOMODCACHE` is pinned to the machine's warm cache — `$HOME/go/pkg/mod`,
+ * Go's own default — for the same reason `dotnet-project.ts` pins
+ * `NUGET_PACKAGES`: it is the one setting that could otherwise be pointed
+ * inside the repo being scanned. The build cache (`GOCACHE`) is derived from
+ * the OS cache directory and is never inside a repo.
+ */
+export function goEnv(): Record<string, string> {
+  return {
+    GOFLAGS: '-mod=readonly',
+    GOMODCACHE: join(homedir(), 'go', 'pkg', 'mod'),
+  }
+}
+
+/**
+ * One `go run govulncheck` per module in the repo, merged.
+ *
+ * **The quick profile still applies.** govulncheck reads source and the module
+ * graph — it builds nothing of the repo's and runs none of its tests — so it is
+ * a quick-tier runner (spec §5), unlike the mutation tools.
+ *
+ * A module that fails takes only itself down: the rest are still analyzed, and
+ * the reasons travel with the result. When *every* module failed the same way
+ * — which is what a machine with no `go` looks like — that one reason is the
+ * whole result.
+ */
+async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
+  const modules = goModules(ctx.files)
+  if (modules.length === 0) {
+    return { state: 'not-available', findings: [], rawFiles: [], reason: NO_GO_MODULES_REASON }
+  }
+
+  const rawFiles: string[] = []
+  const pending: (PendingFinding & { readonly anchor: string })[] = []
+  const failures: ToolFailure[] = []
+
+  for (const goMod of modules) {
+    // Sequential: each module is a full package-graph load, and the scan's own
+    // concurrency pool is what parallelizes work across tools.
+    // eslint-disable-next-line no-await-in-loop
+    const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), {
+      cwd: join(ctx.repoRoot, dirname(goMod)),
+      timeoutMs: ctx.timeoutMs,
+      env: goEnv(),
+    })
+    if (execution.stdout.trim().length > 0) {
+      // eslint-disable-next-line no-await-in-loop
+      rawFiles.push(await writeScratchRaw(ctx.scratch, rawName(goMod), execution.stdout))
+    }
+    if (execution.failure !== undefined) {
+      failures.push(explainGo(execution.failure))
+      continue
+    }
+    pending.push(...toPendingFindings(parseGovulncheckStream(execution.stdout), goMod))
+  }
+
+  const failure = wholesale(failures, modules.length)
+  if (failure !== undefined) {
+    return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+  }
+  return {
+    state: 'ok',
+    findings: await identify(ctx.repoRoot, pending.toSorted(byLocation)),
+    rawFiles,
+    // Our tool on our defaults, whatever `detect` found; see `detectGovulncheck`.
+    configOwned: false,
+    ...(failures.length === 0 ? {} : { reason: reasonsOf(failures) }),
+  }
+}
+
+/**
+ * The one failure that stands for the whole run, or `undefined` when at least
+ * one module was analyzed. A partial failure is reported beside the findings
+ * that did come back; a total one is the result.
+ */
+function wholesale(failures: readonly ToolFailure[], modules: number): ToolFailure | undefined {
+  if (failures.length < modules) return undefined
+  const worst =
+    failures.find((entry) => entry.state === 'error') ??
+    failures.find((entry) => entry.state === 'timeout') ??
+    failures[0]
+  return worst === undefined ? undefined : { state: worst.state, reason: reasonsOf(failures) }
+}
+
+/** Identical reasons collapse: one repo, one sentence, however many modules. */
+function reasonsOf(failures: readonly ToolFailure[]): string {
+  return [...new Set(failures.map((failure) => failure.reason))].join('; ')
+}
+
+/**
+ * A missing `go` is the toolchain gap spec §8 wants named, not a generic "not
+ * executable"; every other failure is left exactly as `execTool` classified it.
+ */
+function explainGo(failure: ToolFailure): ToolFailure {
+  return failure.state === 'not-available'
+    ? { state: 'not-available', reason: GO_ABSENT_REASON }
+    : failure
+}
+
+/** Every `go.mod` in an inventory, repo-relative and stable-sorted. */
+function goModules(files: readonly string[]): string[] {
+  return files.filter((file) => basename(file) === GO_MOD).toSorted(compare)
+}
+
+/**
+ * Where one module's stream is staged. All of a repo-scoped run's evidence
+ * lands in one directory, so a monorepo's second module must not overwrite its
+ * first — the module's own directory is what tells them apart.
+ */
+function rawName(goMod: string): string {
+  const directory = dirname(goMod)
+  return directory === '.'
+    ? 'govulncheck.json'
+    : `govulncheck-${directory.replaceAll('/', '-')}.json`
 }

@@ -1,21 +1,45 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
+import { basename, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { GoVulnerability } from '../src/adapters/common/govulncheck.ts'
 import {
   GOVULNCHECK_TOOL,
+  GO_ABSENT_REASON,
+  NO_GO_MODULES_REASON,
+  goEnv,
+  govulncheckRunner,
+  invocationArgs,
   mergeReachability,
   parseGovulncheckStream,
   toPendingFindings,
 } from '../src/adapters/common/govulncheck.ts'
+import { commonAdapter } from '../src/adapters/common/index.ts'
 import { OSV_PACKAGE_RULE, OSV_SCANNER_TOOL } from '../src/adapters/common/osv-scanner.ts'
-import type { Finding, ToolRunner } from '../src/core/types.ts'
+import { inventoryOf, repoProject } from '../src/core/discover.ts'
+import type { Finding, RunContext, ToolResult, ToolRunner } from '../src/core/types.ts'
 import { scanTree } from '../src/run.ts'
 import { makeFinding } from './factories.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import { pathFarm } from './support/path-farm.ts'
+
+const REPO = '/repo'
+
+/** A run context over a file list, as the orchestrator hands one to a runner. */
+function runContext(files: readonly string[], scratch: string): RunContext {
+  return {
+    repoRoot: REPO,
+    project: repoProject(inventoryOf(files)),
+    files,
+    scratch,
+    runScratch: scratch,
+    detection: null,
+    timeoutMs: 30_000,
+    deep: false,
+  }
+}
 
 /**
  * govulncheck — the Go reachability analyzer.
@@ -432,5 +456,126 @@ describe('the scan pipeline', () => {
     // Demoted by the verdict, so the security grade is not counting it.
     expect(tree.scan.findings[0]?.gradeScope).toBe(false)
     expect(tree.gradeBasis.security).toMatchObject({ value: 0 })
+  })
+})
+
+describe('the govulncheck runner', () => {
+  it('is a complementary, repo-scoped security runner on the pinned analyzer', () => {
+    expect(govulncheckRunner).toMatchObject({
+      tool: GOVULNCHECK_TOOL,
+      category: 'security',
+      complementary: true,
+      repoScoped: true,
+      pinnedVersion: 'v1.7.0',
+    })
+    expect(commonAdapter.runners).toContain(govulncheckRunner)
+  })
+
+  it('is owned by any go.mod in the inventory, and by nothing else', async () => {
+    const files = inventoryOf(['README.md', 'services/api/go.mod', 'services/api/main.go'])
+
+    expect(
+      await govulncheckRunner.detect({ repoRoot: REPO, project: repoProject(files), files }),
+    ).toEqual({
+      reason: 'dependency',
+      configFiles: [],
+      ownedVia: 'services/api/go.mod',
+      installed: false,
+    })
+    const none = inventoryOf(['README.md', 'src/a.ts'])
+    expect(
+      await govulncheckRunner.detect({ repoRoot: REPO, project: repoProject(none), files: none }),
+    ).toBeNull()
+  })
+
+  it('runs the exact pin and no go subcommand that could write', () => {
+    expect(invocationArgs()).toEqual([
+      'run',
+      'golang.org/x/vuln/cmd/govulncheck@v1.7.0',
+      '-json',
+      './...',
+    ])
+    for (const mutating of ['get', 'install', 'mod', 'tidy', 'vendor', 'generate', 'work']) {
+      expect(invocationArgs()).not.toContain(mutating)
+    }
+    expect(invocationArgs().some((arg) => arg.includes('@latest'))).toBe(false)
+  })
+
+  it('pins the module cache outside any repo and forbids go.mod rewrites', () => {
+    expect(goEnv()).toEqual({
+      GOFLAGS: '-mod=readonly',
+      GOMODCACHE: join(homedir(), 'go', 'pkg', 'mod'),
+    })
+    expect(isAbsolute(goEnv()['GOMODCACHE'] ?? '')).toBe(true)
+  })
+
+  it('assesses nothing, and says so, in a repo with no Go module', async () => {
+    const result = await govulncheckRunner.run(runContext(['src/a.ts'], '/scratch'))
+
+    expect(result.state).toBe('not-available')
+    expect(result.reason).toBe(NO_GO_MODULES_REASON)
+    expect(result.findings).toEqual([])
+  })
+})
+
+describe('the govulncheck runner against a farmed PATH', () => {
+  let scratch: string
+  let root: string
+
+  beforeAll(async () => {
+    scratch = await mkdtemp(join(tmpdir(), 'crank-govulncheck-run-'))
+    root = await mkdtemp(join(tmpdir(), 'crank-govulncheck-repo-'))
+    await writeFile(join(root, 'go.mod'), 'module example.com/app\n\ngo 1.26\n', 'utf8')
+  })
+
+  afterAll(async () => {
+    await Promise.all([
+      rm(scratch, { recursive: true, force: true }),
+      rm(root, { recursive: true, force: true }),
+    ])
+  })
+
+  /**
+   * The machine that runs this suite may or may not have `go`, and the answer
+   * must not change the test. So the real subprocess goes out under a farmed
+   * `PATH` holding exactly what the test planted — the same seam
+   * `dotnet-format.test.ts` uses for the SDK — and `process.env.PATH` is put
+   * back afterwards, because `execTool` inherits it.
+   */
+  async function runUnder(
+    extras: Readonly<Record<string, string>> | undefined,
+    files: readonly string[],
+  ): Promise<ToolResult> {
+    const farm = await pathFarm(extras)
+    const original = process.env['PATH']
+    process.env['PATH'] = farm.path
+    try {
+      return await govulncheckRunner.run({ ...runContext(files, scratch), repoRoot: root })
+    } finally {
+      process.env['PATH'] = original
+      await farm.remove()
+    }
+  }
+
+  it('degrades to not-available with the Go-toolchain reason when go is absent', async () => {
+    const result = await runUnder(undefined, ['go.mod', 'main.go'])
+
+    expect(result.state).toBe('not-available')
+    expect(result.reason).toBe(GO_ABSENT_REASON)
+    expect(result.findings).toEqual([])
+  })
+
+  it('parses the stream a real run produces, and stages it as evidence', async () => {
+    const result = await runUnder({ go: `#!/bin/sh\ncat ${CAPTURED}` }, ['go.mod', 'main.go'])
+
+    expect(result.state).toBe('ok')
+    expect(result.configOwned).toBe(false)
+    expect(result.findings.map((finding) => finding.package?.name)).toEqual([
+      'github.com/go-jose/go-jose/v3',
+      'golang.org/x/crypto',
+    ])
+    expect(result.findings[0]?.gradeScope).toBe(true)
+    expect(result.findings[1]?.gradeScope).toBe(false)
+    expect(result.rawFiles.map((file) => basename(file))).toEqual(['govulncheck.json'])
   })
 })

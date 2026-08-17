@@ -57,6 +57,21 @@ export const DOTNET_TOOL_MANIFEST = {
 } as const satisfies Readonly<Record<string, string>>
 
 /**
+ * The Go side, resolved by the `go` command itself: `go run <import-path>@<version>`
+ * fetches, builds and runs a tool into the module cache and the build cache,
+ * both outside the target repo. Keys are the tool's import path.
+ *
+ * `go` is not in {@link SYSTEM_TOOL_MANIFEST} because nothing pins it: it is the
+ * fetcher here, the way `npx` and `uvx` are, and a machine without it gets the
+ * runner's own `not-available` reason rather than a version comparison.
+ *
+ * The `v` prefix is part of a Go version, so it is part of the pin.
+ */
+export const GO_TOOL_MANIFEST = {
+  'golang.org/x/vuln/cmd/govulncheck': 'v1.7.0',
+} as const satisfies Readonly<Record<string, string>>
+
+/**
  * Tools crank-health cannot fetch at all, and runs from `PATH` when the machine
  * already has them.
  *
@@ -125,6 +140,9 @@ export type PinnedPythonTool = keyof typeof PYTHON_TOOL_MANIFEST
 /** A NuGet tool package crank-health runs through `dnx` at a pinned version. */
 export type PinnedDotnetTool = keyof typeof DOTNET_TOOL_MANIFEST
 
+/** A Go tool crank-health runs through `go run` at a pinned version. */
+export type PinnedGoTool = keyof typeof GO_TOOL_MANIFEST
+
 /** A tool crank-health runs from `PATH`; see {@link SYSTEM_TOOL_MANIFEST}. */
 export type SystemTool = keyof typeof SYSTEM_TOOL_MANIFEST
 
@@ -152,6 +170,20 @@ export function pinnedVersion(tool: PinnedTool): string {
  */
 export function pinnedSpec(tool: PinnedTool): string {
   return `${tool}@${TOOL_MANIFEST[tool]}`
+}
+
+/** The exact version this release pins for the Go `tool`, `v` prefix included. */
+export function pinnedGoVersion(tool: PinnedGoTool): string {
+  return GO_TOOL_MANIFEST[tool]
+}
+
+/**
+ * The `import-path@version` spec `go run` resolves, e.g.
+ * `golang.org/x/vuln/cmd/govulncheck@v1.7.0`. Pass this to `go run`, never a
+ * bare import path — that form means `@latest`.
+ */
+export function pinnedGoSpec(tool: PinnedGoTool): string {
+  return `${tool}@${GO_TOOL_MANIFEST[tool]}`
 }
 
 /** The exact version this release pins for the Python `tool`. */
