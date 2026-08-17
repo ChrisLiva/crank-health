@@ -5,6 +5,7 @@ import { mergeReachability } from './adapters/common/govulncheck.ts'
 import { forgetBuilds } from './adapters/csharp/build.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
+import { applyDependencyScopes } from './core/dep-scope.ts'
 import type { RootShell } from './core/discover.ts'
 import {
   countPhysicalLines,
@@ -222,11 +223,21 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
     ...(options.changedFiles === undefined ? {} : { changedFiles: options.changedFiles }),
     deep: options.deep === true,
   })
-  // The one thing a runner cannot do for itself: reachability is a verdict
-  // *about another tool's finding*, and runners never see each other. Folded in
-  // here, once, before anything is graded or rendered — so the rollup, every
-  // project and both sides of a PR delta read the same merged set.
-  const scan: ScanResult = { ...raw, findings: mergeReachability(raw.findings) }
+  // The two things a runner cannot do for itself, both folded in here, once,
+  // before anything is graded or rendered — so the rollup, every project and
+  // both sides of a PR delta read the same set.
+  //
+  // Reachability is a verdict *about another tool's finding*, and runners never
+  // see each other. Dependency scope is a fact about the repo's lockfile rather
+  // than about any tool's output, and the lockfile is read once for the scan
+  // instead of once per finding. Scope goes second: it stamps a field on the
+  // advisories a merge may just have combined.
+  const merged = await applyDependencyScopes(options.repoRoot, mergeReachability(raw.findings))
+  const scan: ScanResult = {
+    ...raw,
+    findings: merged.findings,
+    warnings: [...raw.warnings, ...merged.warnings],
+  }
 
   const selected = options.only === undefined ? CATEGORIES : options.only
   // The rollup's denominator: the whole tree, or — under `--project` — the

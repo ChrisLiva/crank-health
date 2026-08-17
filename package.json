@@ -33,7 +33,8 @@
   },
   "dependencies": {
     "execa": "10.0.1",
-    "picocolors": "1.1.1"
+    "picocolors": "1.1.1",
+    "yaml": "2.9.0"
   },
   "devDependencies": {
     "@types/node": "26.1.2",

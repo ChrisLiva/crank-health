@@ -288,6 +288,20 @@ without `go` gives no verdicts, so every Go advisory grades exactly as it would 
 are recorded verbatim; govulncheck over-claims when a database record carries no symbol information,
 and second-guessing it locally would replace a checkable answer with an unfalsifiable one.
 
+**npm advisories say which half of `package.json` ships them.** A vulnerability in a build tool that
+never leaves the repo is not the same exposure as one in the code a user runs, so crank-health reads
+the repo's own lockfile and records `packageAdvisories[].scope`. `pnpm-lock.yaml` records scope only
+at the importers, so the runtime closure is walked from every importer's `dependencies` and
+`optionalDependencies` — following peer-suffixed snapshot keys, resolving aliased installs under the
+name they are published as, and treating an optional dependency of a runtime dependency as shipped
+(a resolved optional _peer_ lands there too, which is why a `typescript` a runtime package can load
+counts as `prod`). `package-lock.json` needs no walk: npm marks every entry, and only `dev: true`
+demotes — `optional` and `devOptional` both ship. A package the lockfile reaches only from a
+`devDependency` is `scope: "dev"` and moves to `advisories[]`; `prod` stays graded. **Every
+uncertainty grades.** A lockfile format this does not read (`yarn.lock`), one that would not parse,
+one that is not there, a package the lockfile never mentions — all of them leave the finding graded
+with no `scope` at all, because a parse error must never be able to quiet a security finding.
+
 **`related[]` says when two categories are talking about one place.** A finding whose file and line
 range overlap another finding's, in a _different_ category — the function over the complexity ceiling
 that also fails the type checker — carries that finding's id, and it carries yours. Sorted, absent
