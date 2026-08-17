@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
 import { banditRunner } from '../src/adapters/common/bandit.ts'
@@ -9,9 +9,12 @@ import { govulncheckRunner } from '../src/adapters/common/govulncheck.ts'
 import {
   JSCPD_TOOL,
   ignoreGlobs as jscpdIgnore,
+  inheritanceNote,
+  inheritedIgnoreGlobs,
   invocationArgs as jscpdArgs,
   jscpdRunner,
 } from '../src/adapters/common/jscpd.ts'
+import { readRepoExcludes } from '../src/adapters/jsts/repo-excludes.ts'
 import { commonAdapter } from '../src/adapters/common/index.ts'
 import {
   invocationArgs as opengrepArgs,
@@ -656,6 +659,286 @@ describe('whose config decided a duplication grade', () => {
     },
     SCAN_TIMEOUT_MS,
   )
+})
+
+/**
+ * The thresholds that turn a percentage into a letter stay crank-health's own
+ * (see "whose config decided a duplication grade" above); what a repo's own
+ * configs are allowed to narrow is the *file set*. A generated tree the repo
+ * already told Biome or fallow to skip is not duplication anybody wrote, and
+ * grading it marks a repo down for owning a code generator.
+ *
+ * So the excludes are read from the configs the project owns — nearest
+ * ancestor first, the ownership rule detection already uses — translated only
+ * where the translation is faithful, and named on the tool row so a reader can
+ * see which file narrowed the measurement.
+ */
+/** A throwaway tree of literal files; directories are created as needed. */
+const withRepo = async (
+  files: Readonly<Record<string, string>>,
+  body: (root: string) => Promise<void>,
+) => {
+  const root = await mkdtemp(join(tmpdir(), 'crank-excludes-'))
+  try {
+    for (const [file, contents] of Object.entries(files)) {
+      // eslint-disable-next-line no-await-in-loop
+      await mkdir(dirname(join(root, file)), { recursive: true })
+      // eslint-disable-next-line no-await-in-loop
+      await writeFile(join(root, file), contents, 'utf8')
+    }
+    await body(root)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+const biomeConfig = (includes: readonly string[]) =>
+  JSON.stringify({ files: { includes } }, null, 2)
+
+describe('duplication excludes inherited from the repo’s own configs', () => {
+  it('reads biome’s negated includes, and nothing else in the list', async () => {
+    await withRepo(
+      { 'biome.json': biomeConfig(['**', 'src/**', '!gen/**', '!src/legacy/**']) },
+      async (root) => {
+        const excludes = await readRepoExcludes(root)
+        expect(excludes.patterns).toEqual(['gen/**', 'src/legacy/**'])
+        expect(excludes.sources).toEqual([
+          { config: 'biome.json', patterns: ['gen/**', 'src/legacy/**'] },
+        ])
+        expect(excludes.unreadable).toEqual([])
+      },
+    )
+  })
+
+  it('reads .fallowrc.json’s ignorePatterns', async () => {
+    await withRepo(
+      { '.fallowrc.json': JSON.stringify({ ignorePatterns: ['generated/**'] }) },
+      async (root) => {
+        const excludes = await readRepoExcludes(root)
+        expect(excludes.patterns).toEqual(['generated/**'])
+        expect(excludes.sources).toEqual([{ config: '.fallowrc.json', patterns: ['generated/**'] }])
+      },
+    )
+  })
+
+  /** Both contributing is one note, and the order is the read order, not disk order. */
+  it('names both configs in one note, in a stable order', async () => {
+    await withRepo(
+      {
+        '.fallowrc.json': JSON.stringify({ ignorePatterns: ['generated/**'] }),
+        'biome.json': biomeConfig(['**', '!gen/**']),
+      },
+      async (root) => {
+        const excludes = await readRepoExcludes(root)
+        expect(excludes.sources.map((source) => source.config)).toEqual([
+          'biome.json',
+          '.fallowrc.json',
+        ])
+        expect(inheritanceNote(excludes)).toBe(
+          'duplication excludes inherited from biome.json, .fallowrc.json',
+        )
+      },
+    )
+  })
+
+  /**
+   * A config crank-health cannot read is a config it cannot honor, and guessing
+   * at half of it would narrow the measurement by an amount nobody wrote. It
+   * inherits nothing from that file and says so, rather than throwing or
+   * silently measuring more than the repo asked for.
+   */
+  it('skips inheritance from a config it cannot parse, and says so', async () => {
+    await withRepo({ 'biome.json': '{ "files": { "includes": ["**", // nope\n' }, async (root) => {
+      const excludes = await readRepoExcludes(root)
+      expect(excludes.patterns).toEqual([])
+      expect(excludes.sources).toEqual([])
+      expect(excludes.unreadable).toEqual(['biome.json'])
+      expect(inheritanceNote(excludes)).toBe(
+        'no duplication excludes inherited from biome.json: not readable as JSON',
+      )
+    })
+  })
+
+  it('still inherits from the config it can read when the other is malformed', async () => {
+    await withRepo(
+      {
+        '.fallowrc.json': JSON.stringify({ ignorePatterns: ['generated/**'] }),
+        'biome.json': 'not json at all',
+      },
+      async (root) => {
+        const excludes = await readRepoExcludes(root)
+        expect(excludes.patterns).toEqual(['generated/**'])
+        expect(inheritanceNote(excludes)).toBe(
+          'duplication excludes inherited from .fallowrc.json; ' +
+            'no duplication excludes inherited from biome.json: not readable as JSON',
+        )
+      },
+    )
+  })
+
+  it('inherits nothing, and says nothing, when the repo owns neither config', async () => {
+    await withRepo({ 'package.json': '{}\n' }, async (root) => {
+      const excludes = await readRepoExcludes(root)
+      expect(excludes).toEqual({ patterns: [], sources: [], unreadable: [] })
+      expect(inheritanceNote(excludes)).toBeUndefined()
+      expect(inheritedIgnoreGlobs(root, excludes.patterns)).toEqual([])
+    })
+  })
+
+  /** A config that excludes nothing has narrowed nothing; a note would be noise. */
+  it('says nothing when a config it read declares no excludes', async () => {
+    await withRepo(
+      {
+        'biome.json': biomeConfig(['src/**']),
+        '.fallowrc.json': JSON.stringify({ entryPoints: ['src/index.ts'] }),
+      },
+      async (root) => {
+        const excludes = await readRepoExcludes(root)
+        expect(excludes.sources).toEqual([])
+        expect(excludes.unreadable).toEqual([])
+        expect(inheritanceNote(excludes)).toBeUndefined()
+      },
+    )
+  })
+
+  /**
+   * Ownership inherits from ancestors, so a package with no config of its own is
+   * configured by the one above it — and the patterns are read relative to the
+   * directory that declared them, never to the project that inherited them.
+   */
+  it('takes the nearest config, and an ancestor’s where the project has none', async () => {
+    await withRepo(
+      {
+        'biome.json': biomeConfig(['**', '!gen/**']),
+        'packages/web/biome.json': biomeConfig(['**', '!build/**']),
+      },
+      async (root) => {
+        expect((await readRepoExcludes(root, 'packages/api')).patterns).toEqual(['gen/**'])
+        expect((await readRepoExcludes(root, 'packages/web')).patterns).toEqual([
+          'packages/web/build/**',
+        ])
+      },
+    )
+  })
+
+  /**
+   * `!**\/dist` names a directory, and jscpd matches files — so the pattern as
+   * written would exclude nothing at all. Both forms go in: what the repo wrote,
+   * and the files under it, which is what it meant.
+   */
+  it('excludes the files under a directory the config named', async () => {
+    await withRepo({ 'biome.json': biomeConfig(['**', '!**/dist']) }, async (root) => {
+      expect((await readRepoExcludes(root)).patterns).toEqual(['**/dist', '**/dist/**'])
+    })
+  })
+
+  /**
+   * A pattern that cannot be translated faithfully is dropped rather than
+   * approximated: an exclude that reaches further than the repo's own config
+   * meant would hide real duplication behind a grade nobody can audit.
+   */
+  it('skips a pattern it cannot translate without widening it', async () => {
+    await withRepo(
+      {
+        'biome.json': biomeConfig(['**', '!../outside/**', '!/abs/**', '!', '!!odd/**', '!ok/**']),
+      },
+      async (root) => {
+        expect((await readRepoExcludes(root)).patterns).toEqual(['ok/**'])
+      },
+    )
+  })
+
+  /** Determinism: the config jscpd is handed must not depend on config order. */
+  it('sorts and dedupes the inherited patterns', async () => {
+    await withRepo(
+      {
+        'biome.json': biomeConfig(['**', '!z/**', '!a/**', '!z/**']),
+        '.fallowrc.json': JSON.stringify({ ignorePatterns: ['a/**'] }),
+      },
+      async (root) => {
+        const excludes = await readRepoExcludes(root)
+        expect(excludes.patterns).toEqual(['a/**', 'z/**'])
+        expect(excludes.sources.map((source) => source.patterns)).toEqual([
+          ['a/**', 'z/**'],
+          ['a/**'],
+        ])
+      },
+    )
+  })
+
+  /**
+   * Anchored to the repo root, not to the scanned directory: the pattern is
+   * relative to the config that declared it, and the config can sit above the
+   * project being measured. The prefix is escaped for the same reason every
+   * other glob's is — see "escapes glob metacharacters in the path it anchors to".
+   */
+  it('anchors an inherited pattern to the repo root, escaping the literal prefix', () => {
+    expect(inheritedIgnoreGlobs('/src/br[ack]et', ['gen/**'])).toEqual([
+      String.raw`/src/br\[ack\]et/gen/**`,
+    ])
+  })
+
+  /**
+   * The end of the wire, against the real binary: a clone planted inside the
+   * `gen/` tree biome.json excludes is neither reported nor counted, the same
+   * clone in `src/` still is, and the row says which config narrowed the run.
+   * The second scan is the discriminator — without the config, `gen/` is
+   * measured like anything else.
+   */
+  it('leaves a clone inside a biome-excluded gen/ unmeasured, and says which config did it', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-excludes-'))
+    try {
+      const fixture = join(import.meta.dirname, 'fixtures', 'sec-basic', 'src')
+      const [handler, report] = await Promise.all([
+        readFile(join(fixture, 'handler.js'), 'utf8'),
+        readFile(join(fixture, 'report.js'), 'utf8'),
+      ])
+      const files = ['src/a.js', 'src/b.js', 'gen/a.js', 'gen/b.js']
+
+      const scanOf = async (name: string, config: Record<string, string>) => {
+        const root = join(base, name)
+        const scratch = join(base, `${name}-scratch`)
+        await mkdir(scratch, { recursive: true })
+        await Promise.all(
+          ['src', 'gen'].map(async (directory) => {
+            await mkdir(join(root, directory), { recursive: true })
+            await Promise.all([
+              writeFile(join(root, directory, 'a.js'), handler, 'utf8'),
+              writeFile(join(root, directory, 'b.js'), report, 'utf8'),
+            ])
+          }),
+        )
+        for (const [file, contents] of Object.entries(config)) {
+          // eslint-disable-next-line no-await-in-loop
+          await writeFile(join(root, file), contents, 'utf8')
+        }
+        return jscpdRunner.run({
+          repoRoot: root,
+          project: makeProject(files),
+          files,
+          scratch,
+          runScratch: scratch,
+          detection: null,
+          timeoutMs: 120_000,
+          deep: false,
+        })
+      }
+
+      const excluded = await scanOf('excluded', {
+        'biome.json': biomeConfig(['**', '!gen/**']),
+      })
+      expect(excluded.state).toBe('ok')
+      expect(excluded.findings.filter((finding) => finding.file.startsWith('gen/'))).toEqual([])
+      expect(excluded.findings.some((finding) => finding.file.startsWith('src/'))).toBe(true)
+      expect(excluded.reason).toBe('duplication excludes inherited from biome.json')
+
+      const measured = await scanOf('measured', {})
+      expect(measured.findings.some((finding) => finding.file.startsWith('gen/'))).toBe(true)
+      expect(measured.reason).toBeUndefined()
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
+  }, 240_000)
 })
 
 describe('osv-scanner degradation', () => {

@@ -12,6 +12,7 @@ import type {
 } from '../../core/types.ts'
 import { pinnedVersion } from '../../manifest.ts'
 import { detectNodeTool } from '../jsts/node-package.ts'
+import { type RepoExcludes, readRepoExcludes } from '../jsts/repo-excludes.ts'
 import {
   asArray,
   asNumber,
@@ -142,6 +143,49 @@ export function ignoreGlobs(scanRoot: string, nested: readonly string[] = []): s
   )
 }
 
+/**
+ * The repo's own excludes ({@link readRepoExcludes}), anchored the way every
+ * other rule here is — but to the *repo root* rather than the scanned
+ * directory, because that is what the patterns are relative to: a config above
+ * a package configures the package, and its `gen/**` is the declaring
+ * directory's. Anchoring is still what confines each rule to the repo, so a
+ * checkout under a hidden or bracketed path cannot turn one into a rule about
+ * its own address.
+ *
+ * Exported so the invocation tests can read the list without running anything.
+ *
+ * @param repoRoot absolute path of the repo the patterns are relative to
+ * @param patterns repo-relative posix globs, already sorted and deduped
+ */
+export function inheritedIgnoreGlobs(repoRoot: string, patterns: readonly string[]): string[] {
+  const root = escapeGlob(repoRoot)
+  return patterns.map((pattern) => `${root}/${pattern}`)
+}
+
+/**
+ * What the tool row says about a narrowed file set, or `undefined` when nothing
+ * narrowed it. Two clauses, because they are two different facts: what was
+ * inherited, and what could not be. A repo whose config crank-health cannot read
+ * is measured as though it had none — the honest outcome, said out loud rather
+ * than left to look like a config that excluded nothing.
+ *
+ * Exported so the wording is asserted without running jscpd.
+ */
+export function inheritanceNote(excludes: RepoExcludes): string | undefined {
+  const clauses: string[] = []
+  if (excludes.sources.length > 0) {
+    clauses.push(
+      `duplication excludes inherited from ${excludes.sources.map((source) => source.config).join(', ')}`,
+    )
+  }
+  if (excludes.unreadable.length > 0) {
+    clauses.push(
+      `no duplication excludes inherited from ${excludes.unreadable.join(', ')}: not readable as JSON`,
+    )
+  }
+  return clauses.length === 0 ? undefined : clauses.join('; ')
+}
+
 /** Where jscpd's own report lands, under the scratch dir. */
 const REPORT_DIRECTORY = 'jscpd'
 const REPORT_FILE = 'jscpd-report.json'
@@ -196,11 +240,19 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
 
   const output = join(ctx.scratch, REPORT_DIRECTORY)
   const scanRoot = join(ctx.repoRoot, ctx.project.path)
+  // The one thing a repo's own config gets to decide about its duplication
+  // grade: which files are in it. See `repo-excludes.ts`.
+  const excludes = await readRepoExcludes(ctx.repoRoot, ctx.project.path)
   // Scratch-confined, like every other write this runner makes.
   const config = join(ctx.scratch, CONFIG_FILE)
   await writeFile(
     config,
-    JSON.stringify({ ignore: ignoreGlobs(scanRoot, ctx.nestedProjects ?? []) }),
+    JSON.stringify({
+      ignore: [
+        ...ignoreGlobs(scanRoot, ctx.nestedProjects ?? []),
+        ...inheritedIgnoreGlobs(ctx.repoRoot, excludes.patterns),
+      ],
+    }),
     'utf8',
   )
   const command =
@@ -266,6 +318,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
   }
 
   const analyzed = new Set(ctx.files)
+  const note = inheritanceNote(excludes)
   return {
     state: 'ok',
     findings: await identify(
@@ -276,7 +329,10 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       ? { toolVersion: pinnedVersion(JSCPD_PACKAGE) }
       : { toolVersion: ctx.detection.version }),
     rawFiles,
+    // Still ours: the thresholds and every other setting came from the config
+    // above, and only the file set narrowed. `reason` is where the row says so.
     configOwned: false,
+    ...(note === undefined ? {} : { reason: note }),
     metrics: { duplicationPercent: report.duplicationPercent },
   }
 }
