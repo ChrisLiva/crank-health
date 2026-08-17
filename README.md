@@ -181,13 +181,21 @@ by KLOC of analyzed source. Only `gradeScope` findings count.
 
 Security is never normalized — one leaked secret is an F in a million-line repo:
 
-| Grade | Condition                                       |
-| ----- | ----------------------------------------------- |
-| F     | Any secret, or any critical finding             |
-| D     | Any high-severity finding                       |
-| C     | More than 2 medium or more than 10 low findings |
-| B     | Some findings, at or under those counts         |
-| A     | None                                            |
+| Grade | Condition                                            |
+| ----- | ---------------------------------------------------- |
+| F     | Any graded secret, or any graded critical finding    |
+| D     | Any graded high-severity finding                     |
+| C     | More than 2 graded medium or more than 10 graded low |
+| B     | Some findings, at or under those counts              |
+| A     | No findings at all — graded or advisory              |
+
+Every row but the last counts **graded** findings. A demoted one — a dependency no published
+version fixes, a package govulncheck says the code never imports — is work that does not exist or
+exposure nobody has, and a D minted from it is a mark no amount of real work can clear. Its receipt
+is the `advisories[]` entry, with the missing fix or the reachability verdict in its own message.
+The A row still reads everything, which is the floor that matters: a report can never say "nothing
+here" over a list of findings. Secrets are never demoted by any runner, so a leaked credential is
+always graded and always an F.
 
 Two severities are remapped before that table is applied. zizmor's `unpinned-uses` and
 `unpinned-images` are a chore — pin the digest — rather than a weakness someone can reach today, so
@@ -263,8 +271,8 @@ advisory against it under `packageAdvisories[]` (`{id, aliases, severity, summar
 sorted by id). The message is the rollup — `lodash@4.17.15 (npm): 4 advisories; fix: upgrade to
 ≥4.18.0` — because one upgrade answers all four. `fixedIn` is walked out of the OSV record's
 affected ranges; a package **no** published version fixes is not work anyone can do, so it goes to
-`advisories[]` saying `no fixed version available` (its severity still holds the security grade
-down — that tier reads every finding, graded or not). Identity is `package@version`, so a CVE
+`advisories[]` saying `no fixed version available` — reported, and not graded, because a grade
+nobody can move is not a grade. Identity is `package@version`, so a CVE
 published against a pin nobody touched is not a new finding on the next PR scan.
 
 **Go advisories say whether the code can reach them.** Where the repo has a `go.mod` and `go` is on

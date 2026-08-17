@@ -443,11 +443,11 @@ export const OSV_PACKAGE_RULE = 'osv/package'
  *
  * Scope is the one thing an advisory decides: a package no published version
  * fixes is not work anyone can do, so it lands in `advisories[]` with the
- * receipt in its message. That is a *grading* demotion only for the B/C split —
- * `gradeAbsolute` reads every security finding's severity whatever its scope, so
- * an unfixable high-severity vulnerability still holds the category at D.
- * Provenance never changes scope here: a known vulnerability in a declared
- * dependency is not a matter of configuration taste.
+ * receipt in its message — and out of every grading tier but the one that
+ * reserves A for a clean scan (`core/grade.ts`). A D nobody can clear is a mark
+ * rather than a grade. Provenance never changes scope here: a known
+ * vulnerability in a declared dependency is not a matter of configuration
+ * taste.
  */
 export function toPendingFindings(
   vulnerabilities: readonly OsvVulnerability[],

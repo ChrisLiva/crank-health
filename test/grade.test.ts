@@ -213,21 +213,35 @@ describe('absolute grades (security)', () => {
   })
 
   /**
-   * The one place advisory findings still decide a grade. Spec §3's absolute
-   * shape says "any secret or critical → F" with no qualifier, and a report
-   * reading `security: A` above a listed critical finding is the failure mode
-   * this whole category exists to prevent. The tiers read every finding; only
-   * the B/C split — how much low-grade noise is tolerable — counts graded ones.
+   * A demoted finding does not mint a letter. A dependency no published version
+   * fixes, a vulnerable package the code never imports, a dev-only one — each is
+   * work nobody can do or a weakness nobody can reach, and each already carries
+   * its receipt in `advisories[]`. Minting D off it was the "security D from an
+   * unreachable dependency" defect: the letter said "someone is exposed" about
+   * evidence saying the opposite, and no amount of real work could clear it.
    */
-  it('grades the severity tiers on every finding, advisory or not', () => {
-    expect(gradeAbsolute('security', unscoped('critical'))).toBe('F')
-    expect(gradeAbsolute('security', unscoped('error'))).toBe('D')
+  it('mints F and D off graded findings only', () => {
+    expect(gradeAbsolute('security', unscoped('critical'))).not.toBe('F')
+    expect(gradeAbsolute('security', unscoped('error'))).not.toBe('D')
   })
 
-  /** A is a clean scan, not a scan whose findings nobody graded. */
+  /** …while a graded one still mints them; a secret is never demoted. */
+  it('still mints F for a graded critical and D for a graded error', () => {
+    expect(gradeAbsolute('security', security('critical'))).toBe('F')
+    expect(gradeAbsolute('security', security('error'))).toBe('D')
+    expect(gradeAbsolute('security', [...security('error'), ...unscoped('critical')])).toBe('D')
+  })
+
+  /**
+   * A is a clean scan, not a scan whose findings nobody graded. The B floor is
+   * what the old severity read was really protecting: a report must never say
+   * "nothing here" over a list of findings, and it still cannot.
+   */
   it('reserves A for a category with no findings at all', () => {
     expect(gradeAbsolute('security', unscoped('info'))).toBe('B')
     expect(gradeAbsolute('security', unscoped('warning', 9))).toBe('B')
+    expect(gradeAbsolute('security', unscoped('critical'))).toBe('B')
+    expect(gradeAbsolute('security', unscoped('error', 40))).toBe('B')
   })
 
   it('counts only graded findings for the B/C split', () => {

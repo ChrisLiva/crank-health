@@ -146,8 +146,14 @@ export const GRADE_TABLE = {
   /**
    * Never normalized: one leaked secret is an F in a million-line repo.
    * Secrets are mapped to `critical` by their adapters.
-   * any critical → F · any error (high) → D · zero findings → A ·
-   * otherwise B while the medium/low counts stay at or under `b`, else C.
+   * any graded critical → F · any graded error (high) → D · zero findings of
+   * any kind → A · otherwise B while the graded medium/low counts stay at or
+   * under `b`, else C.
+   *
+   * Every tier but the A reads graded findings only; see {@link gradeAbsolute}
+   * for why a demoted advisory stopped minting D. The probe cells below already
+   * quote *graded* counts ("4 error of 131 graded"), so that change moves none
+   * of the calibration recorded here.
    *
    * Calibration: all four probe repos graded D, and none of them reached `b` —
    * the B/C split is the one constant here that real repos never exercised. The
@@ -268,30 +274,47 @@ export function gradeRatio(category: Category, percent: number): Grade {
 }
 
 /**
- * Security, never normalized (spec §3): any secret or critical → F; any high →
- * at best D; else A/B/C by the medium/low counts, and **A means zero findings**.
+ * Security, never normalized (spec §3): any graded secret or critical → F; any
+ * graded high → at best D; else A/B/C by the medium/low counts, and **A means
+ * zero findings of any kind**.
  *
- * The one place `gradeScope` does not decide, and deliberately. Everywhere else
- * an advisory finding is a tool's opinion the repo never signed up for, and
- * dropping it is what keeps a default config from grading a repo on style. A
- * credential-class finding is not an opinion: spec §3 says "any secret or
- * critical → F" with no qualifier, and a report that says `security: A` while
- * listing a critical finding is the one output nobody would look at twice and
- * the one that matters most. So the severity tiers here read *every* finding in
- * the category, whatever its scope, and only the B/C split — which is about how
- * much low-grade noise is tolerable — counts graded findings alone.
+ * **Why the tiers count graded findings only.** They did not always. Under
+ * schema 1 every finding lived in one `findings[]` array behind a `gradeScope`
+ * boolean, so "the grade ignored it" and "the report barely mentioned it" were
+ * nearly the same thing — and a category reading `security: A` above a listed
+ * critical was the failure this whole shape exists to prevent. Reading every
+ * severity was the cheap guard against that.
  *
- * A is therefore reserved for a category with nothing in it at all. A repo with
- * advisory findings and no graded ones lands at B: something was found, and the
- * grade should not read the same as a clean scan.
+ * It bought the guard at a price the guard did not need to cost. A finding is
+ * demoted for exactly one kind of reason: the work does not exist or nobody is
+ * exposed — a dependency no published version fixes, a vulnerable package the
+ * module never imports (`adapters/common/govulncheck.ts`), a dev-only one. A D
+ * minted from those says "someone is exposed here" over evidence saying the
+ * opposite, and — this is the part that made it a defect rather than a
+ * conservative choice — *no amount of real work could clear it*. A grade nobody
+ * can move is not a grade; it is a permanent mark, and readers learn to ignore
+ * the category rather than act on it.
+ *
+ * Schema 2 removed the reason for the old guard. Graded rows are `findings[]`
+ * and demoted ones are `advisories[]`, each with its receipt — the missing fix,
+ * the reachability verdict — in its own message. The honest record is the
+ * `advisories[]` entry, not a letter that misdescribes it.
+ *
+ * What survives unchanged is the floor the guard was really protecting: **A is
+ * reserved for a category with nothing in it at all**, and that check still
+ * reads every finding whatever its scope. A repo with advisory findings and no
+ * graded ones lands at B — something was found, and the grade must not read the
+ * same as a clean scan. A secret is never demoted by any runner, so a leaked
+ * credential still arrives here graded and still mints F.
  */
 export function gradeAbsolute(category: Category, findings: readonly Finding[]): Grade {
   const rule = ruleOfShape(category, 'absolute')
   const inCategory = findings.filter((finding) => finding.category === category)
-  if (inCategory.some((finding) => finding.severity === 'critical')) return 'F'
-  if (inCategory.some((finding) => finding.severity === 'error')) return 'D'
-  if (inCategory.length === 0) return 'A'
   const counted = graded(findings, category)
+  if (counted.some((finding) => finding.severity === 'critical')) return 'F'
+  if (counted.some((finding) => finding.severity === 'error')) return 'D'
+  // Deliberately every finding, not the graded ones: see above.
+  if (inCategory.length === 0) return 'A'
   const warnings = counted.filter((finding) => finding.severity === 'warning').length
   const infos = counted.filter((finding) => finding.severity === 'info').length
   return warnings <= rule.b.warning && infos <= rule.b.info ? 'B' : 'C'
