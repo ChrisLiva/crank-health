@@ -93,6 +93,7 @@ export function renderReportMarkdown(report: Report, options: ReportMarkdownOpti
     ...CATEGORIES.filter((category) => !omit.includes(category)).flatMap((category) =>
       categorySection(report, all, category, limit, delta),
     ),
+    ...referenceSection(omit),
     trailer(report),
   ]
   return `${blocks.join('\n\n')}\n`
@@ -469,15 +470,10 @@ function categorySection(
   const blocks: string[] = [
     `## ${CATEGORY_LABELS[category]} — ${stateLabel(state)}`,
     state.status === 'graded'
-      ? `${gradeBasis(rollupScope(findings, report), category, delta)}\n\nGraded on ${bandText(category)}`
+      ? gradeBasis(rollupScope(findings, report), category, delta)
       : `Not graded: ${state.reason}`,
   ]
 
-  // Remediation only where there is something to remediate: a category at A
-  // does not need advice, and advice under one reads as a demand.
-  if (state.status === 'graded' && state.grade !== 'A') {
-    blocks.push(`**Remediation.** ${REMEDIATION[category]}`)
-  }
   if (tools.length > 0) {
     blocks.push(toolTable(collapseToolRows(tools), report.projects.length))
   }
@@ -701,6 +697,30 @@ function severityBreakdown(findings: readonly Finding[]): string {
     .filter(([, count]) => count > 0)
     .map(([severity, count]) => `${count} ${severity}`)
   return parts.length === 0 ? '' : ` (${parts.join(', ')})`
+}
+
+/**
+ * How every category is graded and what fixing one means, once, at the end.
+ *
+ * Both are fixed text: the same bands and the same advice in every report
+ * crank-health has ever written. Printed under each of eight headings they are
+ * the longest thing in the document and the least specific to the repo it is
+ * about; here they are a reference a reader consults when a letter surprises
+ * them.
+ *
+ * The categories `--only` left out have no row, for the same reason they have
+ * no section.
+ */
+function referenceSection(omit: readonly Category[]): string[] {
+  const rows = CATEGORIES.filter((category) => !omit.includes(category)).map((category) =>
+    row([CATEGORY_LABELS[category], bandText(category), REMEDIATION[category]]),
+  )
+  if (rows.length === 0) return []
+  return [
+    '## Reference',
+    'How each category is graded, and what fixing it means — the same in every report.',
+    table(['Category', 'Graded on', 'Remediation'], rows),
+  ]
 }
 
 /** The category's own bands, read off the one constant table (spec §3). */

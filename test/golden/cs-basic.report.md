@@ -48,10 +48,6 @@ Not graded: not assessed — run `--deep`
 
 18.4% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade.
 
-Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
-
-**Remediation.** Extract the duplicated block into one shared function or module and call it from both sites. The grade is the duplicated-token share, so the largest clones move it most.
-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
@@ -71,10 +67,6 @@ Not graded: not assessed — run `--deep`
 
 1 of 8 checked files fail the formatter (12.5%).
 
-Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
-
-**Remediation.** Run the repo’s formatter over the listed files. Keep format-only changes in their own commit so they do not hide a behaviour change.
-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | dotnet-format | ok | [repo-config] | — (pinned 10.0.203) | — |
@@ -89,5 +81,20 @@ Evidence: [raw/root/dotnet-format.json](raw/root/dotnet-format.json)
 ## test quality — not assessed
 
 Not graded: not assessed — run `--deep`
+
+## Reference
+
+How each category is graded, and what fixing it means — the same in every report.
+
+| Category | Graded on | Remediation |
+| --- | --- | --- |
+| security | absolute counts, never normalized: any critical → F, any error → D, no graded finding → A, otherwise B or C by the warning and info counts. | Treat a leaked credential as compromised: rotate it first, then remove it from the code and from history. For the rest, fix the flagged call site, upgrade the affected dependency, and pin third-party actions to a commit sha. |
+| types | weighted findings per KLOC: A ≤0, B ≤1, C ≤5, D ≤15, else F. | Fix the reported errors where they are raised. Widening a type or adding a suppression moves the grade without changing what the code does wrong. |
+| dead code | weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F. | Delete the unused export, file or dependency — or wire it up, if it was meant to be used. Check each one for dynamic or external use an analyzer cannot see before deleting it. |
+| complexity | the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F. | Split the flagged functions: extract branch-heavy parts into named helpers and replace nested conditionals with early returns. The ceiling is cognitive complexity 15. |
+| duplication | the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F. | Extract the duplicated block into one shared function or module and call it from both sites. The grade is the duplicated-token share, so the largest clones move it most. |
+| lint | weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F. | Fix the reported violations. Where a rule is wrong for this repo, configure it in the repo’s own lint config rather than suppressing it line by line. |
+| format | the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F. | Run the repo’s formatter over the listed files. Keep format-only changes in their own commit so they do not hide a behaviour change. |
+| test quality | the measured percentage: A ≥80, B ≥65, C ≥50, D ≥35, else F. | Strengthen the tests covering the code the mutation run survived: assert on observable behaviour rather than on the implementation. |
 
 ---

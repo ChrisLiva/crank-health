@@ -72,8 +72,6 @@ This project declares no tool of its own: it was analyzed on crank-health’s de
 
 Nothing counted toward the grade.
 
-Graded on absolute counts, never normalized: any critical → F, any error → D, no graded finding → A, otherwise B or C by the warning and info counts.
-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | bandit | ok | [default-config] | 1.9.4 | (services/api) |
@@ -88,10 +86,6 @@ Evidence: [raw/services/api/bandit.json](raw/services/api/bandit.json)
 ## types — F
 
 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2).
-
-Graded on weighted findings per KLOC: A ≤0, B ≤1, C ≤5, D ≤15, else F.
-
-**Remediation.** Fix the reported errors where they are raised. Widening a type or adding a suppression moves the grade without changing what the code does wrong.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
@@ -109,8 +103,6 @@ Evidence: [raw/services/api/ty.gitlab.json](raw/services/api/ty.gitlab.json)
 
 Nothing counted toward the grade.
 
-Graded on weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F.
-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | fallow-dead-code | ok | [default-config] | 3.14.0 | (services/web) |
@@ -122,8 +114,6 @@ Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-
 ## complexity — A
 
 0 of 3 functions over cognitive complexity 15 (0.0%).
-
-Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
@@ -137,8 +127,6 @@ Evidence: [raw/services/api/complexipy.json](raw/services/api/complexipy.json) �
 
 0.0% of tokens duplicated.
 
-Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | jscpd | ok | [default-config] | 5.0.14 | — |
@@ -148,10 +136,6 @@ Evidence: [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json) · [raw/servi
 ## lint — F
 
 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2).
-
-Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
-
-**Remediation.** Fix the reported violations. Where a rule is wrong for this repo, configure it in the repo’s own lint config rather than suppressing it line by line.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
@@ -171,8 +155,6 @@ Evidence: [raw/services/web/oxlint.sarif.json](raw/services/web/oxlint.sarif.jso
 
 0 of 4 checked files fail the formatter (0.0%).
 
-Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | prettier | ok | [default-config] | 3.9.6 | (services/web) |
@@ -183,5 +165,20 @@ Evidence: [raw/services/web/prettier.txt](raw/services/web/prettier.txt) · [raw
 ## test quality — not assessed
 
 Not graded: not assessed — run `--deep`
+
+## Reference
+
+How each category is graded, and what fixing it means — the same in every report.
+
+| Category | Graded on | Remediation |
+| --- | --- | --- |
+| security | absolute counts, never normalized: any critical → F, any error → D, no graded finding → A, otherwise B or C by the warning and info counts. | Treat a leaked credential as compromised: rotate it first, then remove it from the code and from history. For the rest, fix the flagged call site, upgrade the affected dependency, and pin third-party actions to a commit sha. |
+| types | weighted findings per KLOC: A ≤0, B ≤1, C ≤5, D ≤15, else F. | Fix the reported errors where they are raised. Widening a type or adding a suppression moves the grade without changing what the code does wrong. |
+| dead code | weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F. | Delete the unused export, file or dependency — or wire it up, if it was meant to be used. Check each one for dynamic or external use an analyzer cannot see before deleting it. |
+| complexity | the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F. | Split the flagged functions: extract branch-heavy parts into named helpers and replace nested conditionals with early returns. The ceiling is cognitive complexity 15. |
+| duplication | the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F. | Extract the duplicated block into one shared function or module and call it from both sites. The grade is the duplicated-token share, so the largest clones move it most. |
+| lint | weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F. | Fix the reported violations. Where a rule is wrong for this repo, configure it in the repo’s own lint config rather than suppressing it line by line. |
+| format | the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F. | Run the repo’s formatter over the listed files. Keep format-only changes in their own commit so they do not hide a behaviour change. |
+| test quality | the measured percentage: A ≥80, B ≥65, C ≥50, D ≥35, else F. | Strengthen the tests covering the code the mutation run survived: assert on observable behaviour rather than on the implementation. |
 
 ---

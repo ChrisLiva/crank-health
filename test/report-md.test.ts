@@ -321,10 +321,33 @@ describe('renderReportMarkdown', () => {
     expect(markdown).not.toContain('src/unformatted.js:1')
   })
 
-  it('offers remediation where there is something to remediate, and not otherwise', async () => {
-    const markdown = await render('js-basic')
-    expect(section(markdown, '## lint — F')).toContain('**Remediation.**')
-    expect(section(markdown, '## duplication — A')).not.toContain('**Remediation.**')
+  /**
+   * How a category is graded and what fixing it means are the same sentences in
+   * every report ever generated. Repeated under eight headings they are most of
+   * the document; said once at the end they are a reference a reader consults.
+   */
+  it('states the bands and the remediation once each, in a reference section', async () => {
+    const markdown = await render('sec-basic')
+    expect(markdown.split('any critical → F')).toHaveLength(2)
+    expect(markdown.split('Treat a leaked credential as compromised')).toHaveLength(2)
+    expect(markdown.indexOf('## Reference')).toBeGreaterThan(markdown.indexOf('## test quality'))
+    expect(section(markdown, '## security — D')).not.toContain('Graded on ')
+    expect(section(markdown, '## lint — F')).not.toContain('**Remediation.**')
+  })
+
+  /** A `--only` run has no reference rows for the categories nobody asked about. */
+  it('names only the categories it graded in the reference section', () => {
+    const reference = section(
+      renderReportMarkdown(
+        makeReport({
+          selected: ['lint'],
+          categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'B' } },
+        }),
+      ),
+      '## Reference',
+    )
+    expect(reference).toContain('| lint |')
+    expect(reference).not.toContain('| security |')
   })
 
   it('links the raw evidence with run-directory-relative paths', async () => {
