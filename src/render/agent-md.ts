@@ -402,10 +402,15 @@ function mergeDuplicates(
     })
 }
 
-/** `1 lint finding` / `1 lint finding and 2 type findings` — what a merge added. */
+/**
+ * `1 finding in lint` / `1 finding in lint and 2 findings in types` — what a
+ * merge added. The category goes after the noun because {@link CATEGORY_LABELS}
+ * is not always a singular adjective ("types", "dead code"), and one spelling of
+ * a category name across the renderers is worth more than a smoother sentence.
+ */
 function alsoHere(merged: readonly Theme[]): string {
-  const counts = merged.map((theme) =>
-    plural(theme.findings.length, `${CATEGORY_LABELS[theme.category]} finding`),
+  const counts = merged.map(
+    (theme) => `${plural(theme.findings.length, 'finding')} in ${CATEGORY_LABELS[theme.category]}`,
   )
   const last = counts.at(-1) ?? ''
   return counts.length < 2 ? last : `${counts.slice(0, -1).join(', ')} and ${last}`

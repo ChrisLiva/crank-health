@@ -386,7 +386,7 @@ describe('cross-category duplicates', () => {
     })
     const tasks = buildAgentTasks(report)
     expect(tasks.map((task) => [task.category, task.title])).toEqual([
-      ['types', 'Fix 1 `TS2322` type error, and 1 lint finding at the same place'],
+      ['types', 'Fix 1 `TS2322` type error, and 1 finding in lint at the same place'],
     ])
     // The lint row is under it, not lost: the place has two things wrong with it.
     expect(tasks[0]?.findings.map((finding) => finding.rule)).toEqual(['TS2322', 'no-unused-vars'])
