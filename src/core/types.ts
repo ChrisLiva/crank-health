@@ -464,6 +464,19 @@ export interface ToolRunner {
    */
   readonly deepOnly?: boolean
   /**
+   * This runner's own wall-clock budget, in milliseconds, when the quick tier's
+   * shared one ({@link import('./orchestrator.ts').DEFAULT_TIMEOUT_MS}) is not
+   * the right number for it — a tool that loads a whole package graph, or
+   * fetches its own analyzer before it can start, is not slow because something
+   * is wrong.
+   *
+   * A user's explicit `--timeout` still wins: naming a budget is a statement
+   * about the whole scan, and a runner's default cannot outrank it. So is
+   * {@link deepOnly}'s much larger budget, which is about a different tier
+   * rather than about one tool.
+   */
+  readonly timeoutMs?: number
+  /**
    * Set when this runner answers about the repo rather than about a project: a
    * secret, a vulnerable dependency or a badly written workflow is a property of
    * the repo, and scanning for one per project would scan the same tree N times

@@ -5,7 +5,12 @@ import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
 import type { RunRecord } from '../src/core/orchestrator.ts'
-import { runScan, sortFindings } from '../src/core/orchestrator.ts'
+import {
+  DEEP_TIMEOUT_MS,
+  DEFAULT_TIMEOUT_MS,
+  runScan,
+  sortFindings,
+} from '../src/core/orchestrator.ts'
 import { rawPrefix } from '../src/core/output.ts'
 import { REPO_SCOPE } from '../src/core/types.ts'
 import type {
@@ -857,6 +862,36 @@ describe('runScan context', () => {
       timeoutMs: 4321,
       detection: null,
     })
+  })
+
+  it('gives a runner that declares its own budget that budget, not the default', async () => {
+    const slow = fakeRunner('govulncheck', 'security', async () => ok())
+    const plain = fakeRunner('gitleaks', 'security', async () => ok())
+
+    await runScan(REPO, [adapter('common', [{ ...slow, timeoutMs: 300_000 }, plain])])
+
+    expect(slow.calls[0]?.timeoutMs).toBe(300_000)
+    expect(plain.calls[0]?.timeoutMs).toBe(DEFAULT_TIMEOUT_MS)
+  })
+
+  it('lets an explicit --timeout override a runner that declares its own', async () => {
+    const slow = fakeRunner('govulncheck', 'security', async () => ok())
+
+    await runScan(REPO, [adapter('common', [{ ...slow, timeoutMs: 300_000 }])], {
+      timeoutMs: 4321,
+    })
+
+    expect(slow.calls[0]?.timeoutMs).toBe(4321)
+  })
+
+  it('never lets a runner budget outrank the deep tier', async () => {
+    const deep = fakeRunner('stryker', 'test-quality', async () => ok())
+
+    await runScan(REPO, [adapter('js-ts', [{ ...deep, deepOnly: true, timeoutMs: 1 }])], {
+      deep: true,
+    })
+
+    expect(deep.calls[0]?.timeoutMs).toBe(DEEP_TIMEOUT_MS)
   })
 
   it('passes a repo-owned detection through to the runner', async () => {

@@ -143,6 +143,9 @@ export async function runScan(
   const budgets: Budgets = {
     normal: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     deep: options.deepTimeoutMs ?? DEEP_TIMEOUT_MS,
+    // A budget the caller named is the caller's, and no runner's own default
+    // may quietly exceed it; see `ToolRunner.timeoutMs`.
+    quickIsExplicit: options.timeoutMs !== undefined,
   }
   const requested = options.only === undefined ? CATEGORIES : dedupe(options.only)
   const warnings: string[] = []
@@ -725,6 +728,20 @@ function stoodDown(record: RunRecord, graded: readonly RunRecord[]): RunRecord {
 interface Budgets {
   readonly normal: number
   readonly deep: number
+  /** True when `--timeout` set {@link normal}, rather than the default. */
+  readonly quickIsExplicit: boolean
+}
+
+/**
+ * One runner's wall-clock budget, in the order the three claims outrank each
+ * other: the deep tier is a different profile and decides for its own runners;
+ * an explicit `--timeout` is the user's statement about this scan; only then
+ * does a runner's declared budget apply, and otherwise the quick default does.
+ */
+function budgetFor(runner: ToolRunner, budgets: Budgets): number {
+  if (runner.deepOnly === true) return budgets.deep
+  if (budgets.quickIsExplicit || runner.timeoutMs === undefined) return budgets.normal
+  return runner.timeoutMs
 }
 
 /** What the profile adds to every {@link RunContext} this scan builds. */
@@ -749,7 +766,7 @@ async function execute(
   profile: Profile,
 ): Promise<RunRecord> {
   const startedAt = Date.now()
-  const timeoutMs = job.runner.deepOnly === true ? budgets.deep : budgets.normal
+  const timeoutMs = budgetFor(job.runner, budgets)
   const project = attributionOf(job)
   const scratch = join(repo.scratch, ...rawPrefix(project, job.repoWide).split('/'))
   await mkdir(scratch, { recursive: true })
