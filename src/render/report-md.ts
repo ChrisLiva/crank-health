@@ -26,9 +26,11 @@ import {
   plural,
   projectLabel,
   rootShellNote,
+  standInNote,
   stateLabel,
   unselectedCategories,
 } from './display.ts'
+import type { CollapsedTool } from './display.ts'
 import type {
   Report,
   ReportDelta,
@@ -452,7 +454,9 @@ function categorySection(
   if (state.status === 'graded' && state.grade !== 'A') {
     blocks.push(`**Remediation.** ${REMEDIATION[category]}`)
   }
-  if (tools.length > 0) blocks.push(toolTable(collapseToolRows(tools)))
+  if (tools.length > 0) {
+    blocks.push(toolTable(collapseToolRows(tools), report.projects.length))
+  }
   blocks.push(...findingList('Findings', graded, limit))
   blocks.push(
     ...findingList('Advisory findings — reported, not counted toward the grade', advisory, limit),
@@ -469,7 +473,7 @@ function categorySection(
  * tools behind it: security can be graded `D` while three scanners never ran,
  * and the reader has to be able to see that without opening `report.json`.
  */
-function toolTable(tools: readonly ReportTool[]): string {
+function toolTable(tools: readonly CollapsedTool[], projectCount: number): string {
   // In PR mode the same tool ran twice, and which run a row is about is the
   // difference between "this change fixed it" and "the base scan failed".
   const sided = tools.some((tool) => tool.side !== undefined)
@@ -480,10 +484,20 @@ function toolTable(tools: readonly ReportTool[]): string {
       tool.state === 'not-available' ? 'not available' : tool.state,
       `[${tool.provenance}]`,
       versionCell(tool),
-      tool.reason ?? '—',
+      notesCell(tool, projectCount),
     ]),
   )
   return table(['Tool', ...(sided ? ['Scan'] : []), 'State', 'Config', 'Version', 'Notes'], rows)
+}
+
+/**
+ * Why the tool says what it says, and — where the row stands in for more than
+ * its own package — which projects that is about. A row with neither still has
+ * a cell, because a markdown table has no empty ones.
+ */
+function notesCell(tool: CollapsedTool, projectCount: number): string {
+  const parts = [tool.reason, standInNote(tool, projectCount)].filter((part) => part !== null)
+  return parts.length === 0 ? '—' : parts.join(' ')
 }
 
 /** What ran, and what this release pins — the two can differ for PATH tools. */

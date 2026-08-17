@@ -65,6 +65,20 @@ export function hasProjectMovement(project: ReportProjectMovement): boolean {
 }
 
 /**
+ * A tool row as a reader sees it: the row that survived the collapse, plus the
+ * projects it now answers for. Render-only — `report.json` keeps one record per
+ * run, and {@link ReportTool} is that contract.
+ */
+export interface CollapsedTool extends ReportTool {
+  /**
+   * The projects whose runs this row stands in for, in the order the report
+   * carries them, each named once. Empty when no per-project run is behind it —
+   * a repo-spanning scan answers for the repo, not for a list of packages.
+   */
+  readonly projects: readonly string[]
+}
+
+/**
  * The tool rows a reader sees, with the ones that say the same thing twice
  * removed: in a thirty-package monorepo "opengrep is not on PATH" is one fact,
  * not thirty rows of it (spec §9).
@@ -76,12 +90,16 @@ export function hasProjectMovement(project: ReportProjectMovement): boolean {
  * them: what a run was about is `report.json`'s answer, and the per-project
  * toolchain table's.
  *
+ * Removal alone would lose which packages the survivor is about, so it carries
+ * them: {@link CollapsedTool.projects} is every project of the group, and
+ * {@link standInNote} is how the two renderers spell it.
+ *
  * The first row of a group survives and the input order is kept, so the report
  * stays the deterministic order {@link buildReport} put the runs in.
  */
-export function collapseToolRows(tools: readonly ReportTool[]): readonly ReportTool[] {
-  const seen = new Set<string>()
-  return tools.filter((tool) => {
+export function collapseToolRows(tools: readonly ReportTool[]): readonly CollapsedTool[] {
+  const groups = new Map<string, { readonly first: ReportTool; readonly projects: Set<string> }>()
+  for (const tool of tools) {
     const key = JSON.stringify([
       tool.tool,
       tool.category,
@@ -94,10 +112,28 @@ export function collapseToolRows(tools: readonly ReportTool[]): readonly ReportT
       tool.version,
       tool.pinned,
     ])
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+    const group = groups.get(key) ?? { first: tool, projects: new Set<string>() }
+    // A repo-spanning run is nobody's project; see {@link CollapsedTool.projects}.
+    if (tool.repoWide !== true) group.projects.add(tool.project)
+    groups.set(key, group)
+  }
+  // Map iteration is insertion order, so the first row of each group survives
+  // where it stood.
+  return [...groups.values()].map(({ first, projects }) => ({ ...first, projects: [...projects] }))
+}
+
+/**
+ * Which projects a collapsed row stands in for, as a reader reads it —
+ * `(repo root, packages/api)` — or `null` where naming them would say nothing:
+ *
+ * - a repo-spanning row: its scope is the repo, and a list of packages under it
+ *   would read as the per-package claim it is not;
+ * - a repo with one project: every row is that project's, so the list is a
+ *   tautology repeated on every line.
+ */
+export function standInNote(tool: CollapsedTool, projectCount: number): string | null {
+  if (tool.repoWide === true || tool.projects.length === 0 || projectCount < 2) return null
+  return `(${tool.projects.map(projectLabel).join(', ')})`
 }
 
 /**

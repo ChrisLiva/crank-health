@@ -333,9 +333,9 @@ describe('renderReportMarkdown', () => {
   })
 
   /**
-   * Collapsing is removal and nothing else: no count marker, no suffix, no list
-   * of the projects that were folded in. The table reads as if the run had
-   * happened once.
+   * In a single-project repo, collapsing is removal and nothing else: no count
+   * marker, no suffix, no list of the projects that were folded in. Every row is
+   * that one project's, so naming it would be a tautology on every line.
    */
   it('adds no count, suffix or project list to a collapsed row', () => {
     const one = renderReportMarkdown(makeReport({ runs: [missingScan('packages/api')] }))
@@ -346,6 +346,27 @@ describe('renderReportMarkdown', () => {
     )
     expect(toolTable(many, 'security')).toBe(toolTable(one, 'security'))
     expect(toolTable(one, 'security')).toContain('| opengrep | not available |')
+  })
+
+  /**
+   * In a monorepo it is removal *and* attribution: the one surviving row says
+   * which packages it stands in for, because "opengrep is not on PATH" over two
+   * packages of a workspace is not the same fact as over all of them.
+   */
+  it('names the projects a collapsed row stands in for, in a monorepo', () => {
+    const markdown = renderReportMarkdown(
+      makeReport({
+        projects: [
+          makeProjectScan({ project: projectAt('packages/api') }),
+          makeProjectScan({ project: projectAt('packages/web') }),
+        ],
+        runs: [missingScan('packages/api'), missingScan('packages/web')],
+      }),
+    )
+    expect(toolTable(markdown, 'security').split('\n')).toEqual([
+      '| opengrep | not available | [default-config] | — (pinned 1.26.0) | ' +
+        'opengrep is not on PATH (packages/api, packages/web) |',
+    ])
   })
 
   /**

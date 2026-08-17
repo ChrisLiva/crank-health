@@ -185,7 +185,7 @@ describe('quick scan of the js-basic fixture', () => {
         project: 'repo',
         repoWide: true,
         state: 'not-available',
-        reason: 'no Python files in this repo, so bandit assessed nothing',
+        reason: 'no Python files, so bandit assessed nothing',
       },
     ])
   })

@@ -95,18 +95,23 @@ const QUOTED_LITERAL = /(['"])(?:(?!\1).)*\1/g
 const REDACTED = '<redacted>'
 
 /**
- * What a common-adapter runner says when the repo has nothing of its kind in
- * it — and why that is `not-available` rather than `ok` with no findings.
+ * What a common-adapter runner says when what it was given holds nothing of its
+ * kind — and why that is `not-available` rather than `ok` with no findings.
  *
  * A category is `graded` as soon as one of its runners returns `ok`
- * (`aggregate` in the orchestrator). bandit finding nothing in a repo with no
- * Python is not evidence that the repo is secure, and reporting it as `ok`
+ * (`aggregate` in the orchestrator). bandit finding nothing where there is no
+ * Python is not evidence that the code is secure, and reporting it as `ok`
  * would put "security: A" on a JavaScript repo whose secrets scanner never ran.
  * The language runners have no such problem — their adapter only detects when
  * its language is present — but the `common` adapter runs against every repo,
  * so each of its runners has to say for itself whether it assessed anything.
+ *
+ * The sentence names no scope, because this runner has two: one job per project
+ * where the repo has Python, and a single repo-spanning job where it has none
+ * (`unitsFor` in the orchestrator). Which projects a row stands for is the tool
+ * table's answer (`standInNote`), not a claim baked into the reason.
  */
-const NOTHING_TO_SCAN = 'no Python files in this repo, so bandit assessed nothing'
+const NOTHING_TO_SCAN = 'no Python files, so bandit assessed nothing'
 
 /** bandit exits 0 with nothing to report and 1 when it found something. */
 const EXPECTED_EXIT_CODES: ReadonlySet<number> = new Set([0, 1])

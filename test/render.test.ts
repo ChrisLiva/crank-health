@@ -444,8 +444,12 @@ describe('collapseToolRows', () => {
       toolRow({ project: 'packages/api' }),
       toolRow({ project: 'packages/cli' }),
     ])
-    // The survivor is the first occurrence, and nothing was re-sorted.
-    expect(collapsed).toEqual([first, gitleaks])
+    // The survivor is the first occurrence, and nothing was re-sorted — and it
+    // carries the projects it now stands in for, in that same order.
+    expect(collapsed).toEqual([
+      { ...first, projects: ['packages/web', 'packages/api', 'packages/cli'] },
+      { ...gitleaks, projects: ['packages/web'] },
+    ])
   })
 
   /** The four fields no tool table renders: they cannot keep two rows apart. */
@@ -465,7 +469,7 @@ describe('collapseToolRows', () => {
       }),
       toolRow({ raw: ['raw/packages/api/opengrep.json'] }),
     ])
-    expect(collapsed).toEqual([toolRow()])
+    expect(collapsed).toEqual([{ ...toolRow(), projects: ['packages/web', 'packages/api'] }])
   })
 
   /** …and every field a tool table does render keeps two rows apart. */
@@ -490,7 +494,8 @@ describe('collapseToolRows', () => {
 
   /**
    * A reason carrying a project-local path is a different sentence, so it is a
-   * different row however alike the two runs otherwise are.
+   * different row however alike the two runs otherwise are — and each row then
+   * stands in for its own project and no one else's.
    */
   it('keeps two rows apart when only their reason names a different project', () => {
     const rows = [
@@ -505,10 +510,16 @@ describe('collapseToolRows', () => {
         reason: 'no tsconfig.json under packages/api',
       }),
     ]
-    expect(collapseToolRows(rows)).toEqual(rows)
+    expect(collapseToolRows(rows)).toEqual([
+      { ...rows[0], projects: ['packages/web'] },
+      { ...rows[1], projects: ['packages/api'] },
+    ])
   })
 
-  /** The repo-wide duplication pass renders as its per-project runs do. */
+  /**
+   * The repo-wide duplication pass renders as its per-project runs do — and
+   * contributes no project to the list, because `repo` is not one.
+   */
   it('collapses a repo-wide row into the per-project row it renders as', () => {
     const perProject = toolRow({
       tool: 'jscpd',
@@ -517,7 +528,15 @@ describe('collapseToolRows', () => {
       reason: null,
     })
     const repoWide = { ...perProject, project: 'repo', repoWide: true }
-    expect(collapseToolRows([perProject, repoWide])).toEqual([perProject])
+    expect(collapseToolRows([perProject, repoWide])).toEqual([
+      { ...perProject, projects: ['packages/web'] },
+    ])
+  })
+
+  /** A row no per-project run stands behind names no project at all. */
+  it('lists no project for a group of repo-spanning rows', () => {
+    const repoWide = toolRow({ project: 'repo', repoWide: true })
+    expect(collapseToolRows([repoWide, repoWide])).toEqual([{ ...repoWide, projects: [] }])
   })
 })
 
@@ -671,6 +690,82 @@ describe('renderTerminal', () => {
     expect(degraded.split('\n').filter((line) => line.includes('opengrep'))).toEqual([
       '  not-available opengrep: opengrep is not on PATH',
     ])
+  })
+
+  /**
+   * …but the one line says whose packages it is about. Collapsing four rows
+   * into one is only honest if the survivor still names the four: "opengrep is
+   * not on PATH" over two packages of five is a different fact from over all
+   * five, and the reader cannot tell which without the list.
+   */
+  it('names the projects a collapsed row stands in for, in a monorepo', () => {
+    const missing = (project: string): { record: RunRecord; raw: string[] } => ({
+      record: {
+        ...record(),
+        tool: 'opengrep',
+        category: 'security',
+        scope: 'common',
+        project,
+        result: {
+          state: 'not-available',
+          findings: [],
+          rawFiles: [],
+          reason: 'opengrep is not on PATH',
+        },
+      },
+      raw: [],
+    })
+    const text = renderTerminal(
+      buildReport(
+        input({
+          projects: [
+            makeProjectScan({ project: projectAt('packages/api') }),
+            makeProjectScan({ project: projectAt('packages/web') }),
+          ],
+          runs: [missing('packages/api'), missing('packages/web')],
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+
+    const [, degraded = ''] = text.split('Tools that did not complete')
+    expect(degraded.split('\n').filter((line) => line.includes('opengrep'))).toEqual([
+      '  not-available opengrep: opengrep is not on PATH (packages/api, packages/web)',
+    ])
+  })
+
+  /**
+   * A single-project repo has no such ambiguity: every row is that project's,
+   * and naming it would be a tautology on every line.
+   */
+  it('names no project where the repo has only one', () => {
+    const text = renderTerminal(
+      buildReport(
+        input({
+          runs: [
+            {
+              record: {
+                ...record(),
+                tool: 'opengrep',
+                category: 'security',
+                scope: 'common',
+                result: {
+                  state: 'not-available',
+                  findings: [],
+                  rawFiles: [],
+                  reason: 'opengrep is not on PATH',
+                },
+              },
+              raw: [],
+            },
+          ],
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+    expect(text).toContain('  not-available opengrep: opengrep is not on PATH\n')
   })
 
   it('emits no escape sequences when colour is off, and some when it is on', () => {

@@ -103,9 +103,9 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
       findings: [],
       rawFiles: [],
       reason:
-        `this repo configures ESLint through ${detection.configFiles.join(', ')}, which ` +
+        `this project configures ESLint through ${detection.configFiles.join(', ')}, which ` +
         `ESLint ${pinnedVersion(ESLINT_PACKAGE)} no longer reads — run \`npm install\` so ` +
-        'crank-health can use the repo’s own ESLint, or migrate to a flat `eslint.config.*`',
+        'crank-health can use the ESLint it declares, or migrate to a flat `eslint.config.*`',
     }
   }
 

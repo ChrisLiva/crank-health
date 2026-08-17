@@ -11,6 +11,7 @@ import {
   plural,
   projectLabel,
   rootShellNote,
+  standInNote,
   stateLabel,
   unselectedCategories,
 } from './display.ts'
@@ -87,8 +88,10 @@ export function renderTerminal(
     lines.push('', color.bold('Tools that did not complete'))
     for (const tool of degraded) {
       const side = tool.side === undefined ? '' : ` (${tool.side} scan)`
+      const stands = standInNote(tool, report.projects.length)
       lines.push(
-        `  ${color.red(tool.state)} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}`,
+        `  ${color.red(tool.state)} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}` +
+          `${stands === null ? '' : ` ${stands}`}`,
       )
     }
   }

@@ -140,7 +140,7 @@ describe('quick scan of the cs-basic fixture', () => {
         project: 'repo',
         repoWide: true,
         state: 'not-available',
-        reason: 'no Python files in this repo, so bandit assessed nothing',
+        reason: 'no Python files, so bandit assessed nothing',
       },
     ])
   })
@@ -182,7 +182,7 @@ describe('quick scan of the cs-basic fixture', () => {
       'gitleaks is not on PATH',
       'no JavaScript, TypeScript or Python files, so opengrep assessed nothing',
       'no GitHub Actions workflows or composite actions, so zizmor assessed nothing',
-      'no Python files in this repo, so bandit assessed nothing',
+      'no Python files, so bandit assessed nothing',
       'osv-scanner is not on PATH',
     ]
     for (const clause of clauses) expect(reason).toContain(clause)

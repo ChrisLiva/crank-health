@@ -111,7 +111,7 @@ async function runStryker(ctx: RunContext): Promise<ToolResult> {
   if (detection === null) return unavailable(STRYKER_SETUP_HINT)
   if (!detection.installed || detection.binPath === undefined) {
     return unavailable(
-      'this repo declares StrykerJS but has not installed it — run `npm install` so ' +
+      'this project declares StrykerJS but has not installed it — run `npm install` so ' +
         'Stryker and the test-runner plugins its config names are present',
     )
   }
