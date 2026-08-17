@@ -578,16 +578,8 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
       timeoutMs: ctx.timeoutMs,
       env: goEnv(),
     })
-    if (execution.stdout.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      rawFiles.push(await writeScratchRaw(ctx.scratch, rawName(goMod, 'json'), execution.stdout))
-    }
-    if (execution.stderr.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      rawFiles.push(
-        await writeScratchRaw(ctx.scratch, rawName(goMod, 'stderr.txt'), execution.stderr),
-      )
-    }
+    // eslint-disable-next-line no-await-in-loop
+    rawFiles.push(...(await stage(ctx.scratch, goMod, execution)))
     if (execution.failure !== undefined) {
       failures.push(explainGo(execution.failure))
       continue
@@ -616,6 +608,23 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
     configOwned: false,
     ...(failures.length === 0 ? {} : { reason: reasonsOf(failures) }),
   }
+}
+
+/**
+ * One module's evidence, staged: the stream it produced and anything it said on
+ * stderr. Both, because the run that failed is the one whose evidence a reader
+ * most needs — and `go` says why on stderr while stdout carries only the
+ * `config` and `progress` records it managed before giving up.
+ */
+async function stage(scratch: string, goMod: string, execution: ToolExecution): Promise<string[]> {
+  const staged: string[] = []
+  if (execution.stdout.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, rawName(goMod, 'json'), execution.stdout))
+  }
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, rawName(goMod, 'stderr.txt'), execution.stderr))
+  }
+  return staged
 }
 
 /**
