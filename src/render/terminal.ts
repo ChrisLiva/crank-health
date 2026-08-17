@@ -15,7 +15,14 @@ import {
   stateLabel,
   unselectedCategories,
 } from './display.ts'
-import type { Report, ReportDelta, ReportProject, ReportProjectMovement } from './json.ts'
+import type {
+  Report,
+  ReportCoverage,
+  ReportDelta,
+  ReportProject,
+  ReportProjectMovement,
+  ReportUnassessed,
+} from './json.ts'
 import { reportFindings, withGradeScope } from './json.ts'
 
 /**
@@ -59,6 +66,11 @@ export function renderTerminal(
   // Graded and advisory rows are two arrays in the schema and one glance here;
   // the split is what `report.json` is for.
   const all = reportFindings(report)
+
+  // What the grades are a statement about, directly above them: every
+  // denominator under this line is the assessed half of it.
+  const coverage = coverageLine(report.coverage)
+  if (coverage !== null) lines.push(color.dim(coverage))
 
   // The categories `--only` left out are one line under the ones it kept, not a
   // line each: rows saying "nobody asked" are what a `--only` run came here to
@@ -124,6 +136,53 @@ export function renderTerminal(
 }
 
 type Colors = ReturnType<typeof pc.createColors>
+
+/** How many extensions the unassessed remainder is named by before it is summed. */
+const MAX_UNASSESSED = 5
+
+/** A remainder this many lines or more is worth a line count beside its files. */
+const LINES_WORTH_NAMING = 1000
+
+/**
+ * How much of the tree the grades under it are about: the assessed share, then
+ * what the remainder is made of.
+ *
+ * Every denominator in the report is the *assessed* count, so a repo can be
+ * graded A across the board while a third of it was never read by any tool. A
+ * scan whose inventory is empty says nothing here — "assessed 0 of 0 files" is
+ * not a fact about coverage.
+ */
+function coverageLine(coverage: ReportCoverage): string | null {
+  if (coverage.files.total === 0) return null
+  const assessed = `  assessed ${coverage.files.assessed} of ${plural(coverage.files.total, 'file')}`
+  if (coverage.unassessed.length === 0) return assessed
+
+  const ranked = coverage.unassessed.toSorted(byWeight)
+  const named = ranked.slice(0, MAX_UNASSESSED).map((entry) => unassessedPart(entry))
+  const rest = ranked.length - named.length
+  return `${assessed}; not assessed: ${named.join(', ')}${rest === 0 ? '' : `, +${rest} more`}`
+}
+
+/**
+ * Biggest remainder first — the part a reader would want named — with the line
+ * count and then the extension as total tiebreakers, so two runs cannot order
+ * two equal remainders differently.
+ */
+function byWeight(a: ReportUnassessed, b: ReportUnassessed): number {
+  return b.files - a.files || b.lines - a.lines || (a.extension < b.extension ? -1 : 1)
+}
+
+/**
+ * `28 .go (2.4k lines)`. The line count is named only where it reaches a
+ * thousand: under that the file count is the whole story, and a count beside
+ * every extension is the noise the glance exists to leave out.
+ */
+function unassessedPart(entry: ReportUnassessed): string {
+  const what = entry.extension === '' ? 'without an extension' : entry.extension
+  const lines =
+    entry.lines < LINES_WORTH_NAMING ? '' : ` (${(entry.lines / 1000).toFixed(1)}k lines)`
+  return `${entry.files} ${what}${lines}`
+}
 
 /**
  * The PR delta at a glance (spec §4): the three counts, then the categories

@@ -741,6 +741,58 @@ describe('renderTerminal', () => {
     expect(text).toMatch(/types\s+error\s+tsc crashed/)
   })
 
+  /**
+   * A grade divides by what was assessed, so the glance has to say how much of
+   * the tree that was — above the grades, because it is how they are read.
+   */
+  it('says how much of the tree the grades are about, above them', () => {
+    const text = renderTerminal(
+      buildReport(
+        input({
+          coverage: {
+            files: { total: 40, assessed: 6 },
+            lines: { total: 5000, assessed: 900 },
+            unassessed: [
+              { extension: '.sql', files: 6, lines: 120 },
+              { extension: '.go', files: 28, lines: 2400 },
+            ],
+          },
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+    const lines = text.split('\n')
+    const at = lines.findIndex((line) => line.startsWith('  assessed '))
+    // The biggest remainder first, and a line count only where it reaches a
+    // thousand — under that the file count is the whole story.
+    expect(lines[at]).toBe('  assessed 6 of 40 files; not assessed: 28 .go (2.4k lines), 6 .sql')
+    expect(at).toBeLessThan(lines.findIndex((line) => line.includes('security')))
+  })
+
+  it('names no remainder where every file was assessed', () => {
+    const text = renderTerminal(
+      buildReport(
+        input({
+          coverage: {
+            files: { total: 6, assessed: 6 },
+            lines: { total: 900, assessed: 900 },
+            unassessed: [],
+          },
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+    expect(text).toContain('  assessed 6 of 6 files\n')
+  })
+
+  it('says nothing about coverage where the scan found no files at all', () => {
+    expect(renderTerminal(buildReport(input()), paths, { color: false })).not.toContain(
+      '  assessed ',
+    )
+  })
+
   /** Spec §9: a run writes four artifacts, and the glance names all of them. */
   it('points at every artifact the run wrote', () => {
     const text = renderTerminal(report, paths, { color: false })
