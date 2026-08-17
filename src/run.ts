@@ -1,6 +1,7 @@
 import { mkdtemp, realpath, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { mergeReachability } from './adapters/common/govulncheck.ts'
 import { forgetBuilds } from './adapters/csharp/build.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import { CliUsageError } from './args.ts'
@@ -213,7 +214,7 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
     allProjects: discovery.projects,
   }
 
-  const scan = await runScan(repo, options.adapters ?? ADAPTERS, {
+  const raw = await runScan(repo, options.adapters ?? ADAPTERS, {
     ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     ...(options.deepTimeoutMs === undefined ? {} : { deepTimeoutMs: options.deepTimeoutMs }),
@@ -221,6 +222,11 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
     ...(options.changedFiles === undefined ? {} : { changedFiles: options.changedFiles }),
     deep: options.deep === true,
   })
+  // The one thing a runner cannot do for itself: reachability is a verdict
+  // *about another tool's finding*, and runners never see each other. Folded in
+  // here, once, before anything is graded or rendered — so the rollup, every
+  // project and both sides of a PR delta read the same merged set.
+  const scan: ScanResult = { ...raw, findings: mergeReachability(raw.findings) }
 
   const selected = options.only === undefined ? CATEGORIES : options.only
   // The rollup's denominator: the whole tree, or — under `--project` — the

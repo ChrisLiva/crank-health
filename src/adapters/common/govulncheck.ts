@@ -1,4 +1,4 @@
-import type { FindingPackage, PackageAdvisory, PendingFinding } from '../../core/types.ts'
+import type { Finding, FindingPackage, PackageAdvisory, PendingFinding } from '../../core/types.ts'
 import { asArray, asRecord, asString, byLocation, compare } from '../support.ts'
 import { OSV_PACKAGE_RULE, severityOf, summarizePackage } from './osv-scanner.ts'
 
@@ -318,4 +318,103 @@ export function demotionOf(advisories: readonly PackageAdvisory[]): string | und
     advisories.some((advisory) => advisory.reachability === verdict),
   )
   return strongest === undefined ? undefined : VERDICT_TEXT[strongest]
+}
+
+/**
+ * Folds govulncheck's verdicts into the dependency findings a lockfile audit
+ * already produced, over the whole scan's findings at once.
+ *
+ * Runners never see each other (`core/types.ts`), and reachability is *about*
+ * another tool's finding: osv-scanner names the advisory, its severity and its
+ * fix, govulncheck says whether the repo can reach it. So the join happens once
+ * downstream, in `run.ts`, where both tools' results are in hand.
+ *
+ * **The join key is the advisory, not the row.** A Go module's finding is
+ * matched by `name@version` — with Go's `v` prefix normalized away, because
+ * osv-scanner strips it and govulncheck keeps it — and inside it each advisory
+ * is matched by *alias intersection*: govulncheck reports `GO-2026-4945`,
+ * osv-scanner files the same advisory under `GHSA-78h2-9frx-2jm8` and lists the
+ * `GO-` id among its aliases. An advisory only govulncheck knows is appended
+ * rather than dropped, and the package's sentence is re-derived from the
+ * combined set so its count and its fix cannot go stale.
+ *
+ * Severity is the host finding's throughout: govulncheck publishes no CVSS, so
+ * an appended advisory is `info` and cannot make a package look worse than the
+ * scored advisories against it already do.
+ *
+ * A govulncheck finding nothing matched stays as its own row — that is the
+ * `complementary` contract (a union, never a suppression), and it is what a
+ * repo whose lockfile audit could not run still gets.
+ *
+ * @returns the findings in the order given, minus the govulncheck rows folded in
+ */
+export function mergeReachability(findings: readonly Finding[]): Finding[] {
+  const hosts = new Map<string, Finding>()
+  for (const finding of findings) {
+    const key = finding.tool === GOVULNCHECK_TOOL ? undefined : packageKey(finding)
+    if (key !== undefined && !hosts.has(key)) hosts.set(key, finding)
+  }
+
+  const folded = new Set<Finding>()
+  const contributions = new Map<Finding, PackageAdvisory[]>()
+  for (const finding of findings) {
+    if (finding.tool !== GOVULNCHECK_TOOL) continue
+    const key = packageKey(finding)
+    const host = key === undefined ? undefined : hosts.get(key)
+    if (host === undefined) continue
+    folded.add(finding)
+    contributions.set(host, [
+      ...(contributions.get(host) ?? []),
+      ...(finding.packageAdvisories ?? []),
+    ])
+  }
+
+  return findings.flatMap((finding) => {
+    if (folded.has(finding)) return []
+    const contributed = contributions.get(finding)
+    return [contributed === undefined ? finding : annotated(finding, contributed)]
+  })
+}
+
+/**
+ * A Go dependency finding's identity as both tools can state it, or `undefined`
+ * for every finding that is not one. The `v` prefix is Go's own and osv-scanner
+ * drops it, so `v1.0.0` and `1.0.0` are the same pin.
+ */
+function packageKey(finding: Finding): string | undefined {
+  const pkg = finding.package
+  if (finding.rule !== OSV_PACKAGE_RULE || pkg === undefined) return undefined
+  if (pkg.ecosystem !== GO_ECOSYSTEM) return undefined
+  return `${pkg.name}@${pkg.version.replace(/^v/, '')}`
+}
+
+/** One host finding with the verdicts merged in and its sentence re-derived. */
+function annotated(host: Finding, contributed: readonly PackageAdvisory[]): Finding {
+  const known = host.packageAdvisories ?? []
+  const merged = known.map((advisory) => {
+    const verdict = contributed.find((entry) => sameAdvisory(advisory, entry))?.reachability
+    return verdict === undefined ? advisory : { ...advisory, reachability: verdict }
+  })
+  const extra = contributed.filter(
+    (entry) => !known.some((advisory) => sameAdvisory(advisory, entry)),
+  )
+  const advisories = [...merged, ...extra].toSorted((a, b) => compare(a.id, b.id))
+
+  const pkg = host.package
+  if (pkg === undefined) return host
+  const summary = summarizePackage(pkg, advisories)
+  const demotion = demotionOf(advisories)
+  return {
+    ...host,
+    message: summary.message + (demotion === undefined ? '' : `; advisory only: ${demotion}`),
+    gradeScope: summary.gradeScope && demotion === undefined,
+    packageAdvisories: advisories,
+    fixHint: summary.fixHint,
+  }
+}
+
+/** Two advisories are one when any id either publishes is shared. */
+function sameAdvisory(one: PackageAdvisory, other: PackageAdvisory): boolean {
+  const ids = new Set([one.id, ...one.aliases])
+  return [other.id, ...other.aliases].some((id) => ids.has(id))
 }

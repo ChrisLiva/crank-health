@@ -1,13 +1,21 @@
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { GoVulnerability } from '../src/adapters/common/govulncheck.ts'
 import {
   GOVULNCHECK_TOOL,
+  mergeReachability,
   parseGovulncheckStream,
   toPendingFindings,
 } from '../src/adapters/common/govulncheck.ts'
-import { OSV_PACKAGE_RULE } from '../src/adapters/common/osv-scanner.ts'
+import { OSV_PACKAGE_RULE, OSV_SCANNER_TOOL } from '../src/adapters/common/osv-scanner.ts'
+import type { Finding, ToolRunner } from '../src/core/types.ts'
+import { scanTree } from '../src/run.ts'
+import { makeFinding } from './factories.ts'
+import type { FixtureRepo } from './support/fixture.ts'
+import { createFixtureRepo } from './support/fixture.ts'
 
 /**
  * govulncheck — the Go reachability analyzer.
@@ -214,5 +222,215 @@ describe('toPendingFindings', () => {
 
   it('reports nothing for no vulnerabilities', () => {
     expect(toPendingFindings([], 'go.mod')).toEqual([])
+  })
+})
+
+/** An osv-scanner package finding, as `toPendingFindings` there builds one. */
+function packageFinding(overrides: Partial<Finding> = {}): Finding {
+  return makeFinding({
+    category: 'security',
+    tool: OSV_SCANNER_TOOL,
+    rule: OSV_PACKAGE_RULE,
+    severity: 'error',
+    file: 'go.mod',
+    message: 'example.com/m@1.0.0 (Go): 1 advisory; fix: upgrade to ≥1.2.0',
+    package: { name: 'example.com/m', version: '1.0.0', ecosystem: 'Go' },
+    packageAdvisories: [
+      {
+        id: 'GHSA-aaaa',
+        aliases: ['CVE-1', 'GO-1'],
+        severity: 'error',
+        summary: 'the advisory',
+        fixedIn: '1.2.0',
+      },
+    ],
+    ...overrides,
+  })
+}
+
+/** The govulncheck half of the same dependency. */
+function goFinding(vulnerabilities: readonly GoVulnerability[] = [vulnerability()]): Finding {
+  const [pending] = toPendingFindings(vulnerabilities, 'go.mod')
+  if (pending === undefined) throw new Error('no finding built')
+  const { anchor: _anchor, ...rest } = pending
+  return { id: 'govulncheckfinding', ...rest }
+}
+
+describe('mergeReachability', () => {
+  it('annotates the osv-scanner advisory an alias joins it to, and drops its own row', () => {
+    const merged = mergeReachability([packageFinding(), goFinding()])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.id).toBe('deadbeefdeadbeef')
+    expect(merged[0]?.tool).toBe(OSV_SCANNER_TOOL)
+    expect(merged[0]?.severity).toBe('error')
+    expect(merged[0]?.packageAdvisories).toEqual([
+      {
+        id: 'GHSA-aaaa',
+        aliases: ['CVE-1', 'GO-1'],
+        severity: 'error',
+        summary: 'the advisory',
+        fixedIn: '1.2.0',
+        reachability: 'symbol-reachable',
+      },
+    ])
+  })
+
+  it('joins across the `v` prefix Go uses and osv-scanner strips', () => {
+    const merged = mergeReachability([
+      packageFinding({ package: { name: 'example.com/m', version: '1.0.0', ecosystem: 'Go' } }),
+      goFinding([vulnerability({ version: 'v1.0.0' })]),
+    ])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.packageAdvisories?.[0]?.reachability).toBe('symbol-reachable')
+  })
+
+  it('appends an advisory only govulncheck knows, still sorted by id', () => {
+    const merged = mergeReachability([
+      packageFinding(),
+      goFinding([
+        vulnerability({ osv: 'GO-1', aliases: [] }),
+        vulnerability({ osv: 'GO-0', aliases: [], summary: 'go only', fixedIn: '1.9.0' }),
+      ]),
+    ])
+
+    expect(merged[0]?.packageAdvisories?.map((advisory) => advisory.id)).toEqual([
+      'GHSA-aaaa',
+      'GO-0',
+    ])
+    expect(merged[0]?.packageAdvisories?.[1]).toMatchObject({
+      id: 'GO-0',
+      severity: 'info',
+      summary: 'go only',
+      fixedIn: '1.9.0',
+      reachability: 'symbol-reachable',
+    })
+    // The count and the fix are re-derived, never patched.
+    expect(merged[0]?.message).toContain('2 advisories')
+    expect(merged[0]?.message).toContain('fix: upgrade to ≥1.9.0')
+  })
+
+  it('demotes a merged finding whose every advisory is unreachable', () => {
+    const merged = mergeReachability([
+      packageFinding(),
+      goFinding([vulnerability({ reachability: 'not-imported' })]),
+    ])
+
+    expect(merged[0]?.gradeScope).toBe(false)
+    expect(merged[0]?.message).toContain('advisory only: not-imported')
+  })
+
+  it('keeps a merged finding graded when one advisory has no verdict', () => {
+    const merged = mergeReachability([
+      packageFinding({
+        packageAdvisories: [
+          {
+            id: 'GHSA-aaaa',
+            aliases: ['GO-1'],
+            severity: 'error',
+            summary: 'joined',
+            fixedIn: '1.2.0',
+          },
+          {
+            id: 'GHSA-bbbb',
+            aliases: [],
+            severity: 'error',
+            summary: 'govulncheck never saw this one',
+            fixedIn: '1.1.0',
+          },
+        ],
+      }),
+      goFinding([vulnerability({ reachability: 'not-imported' })]),
+    ])
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.gradeScope).toBe(true)
+    expect(merged[0]?.message).not.toContain('advisory only')
+  })
+
+  it('leaves a govulncheck finding no lockfile audit matched standing on its own', () => {
+    const merged = mergeReachability([
+      packageFinding({ package: { name: 'example.com/other', version: '1.0.0', ecosystem: 'Go' } }),
+      goFinding(),
+    ])
+
+    expect(merged.map((finding) => finding.tool)).toEqual([OSV_SCANNER_TOOL, GOVULNCHECK_TOOL])
+  })
+
+  it('leaves every other finding exactly as it was', () => {
+    const lint = makeFinding()
+    const npm = packageFinding({
+      package: { name: 'lodash', version: '4.17.15', ecosystem: 'npm' },
+    })
+
+    expect(mergeReachability([lint, npm])).toEqual([lint, npm])
+  })
+
+  it('keeps the findings in the order it was given them', () => {
+    const first = packageFinding({ file: 'a/go.mod' })
+    const second = packageFinding({
+      file: 'b/go.mod',
+      package: { name: 'example.com/second', version: '2.0.0', ecosystem: 'Go' },
+    })
+    const merged = mergeReachability([first, goFinding(), second])
+
+    expect(merged.map((finding) => finding.file)).toEqual(['a/go.mod', 'b/go.mod'])
+  })
+})
+
+/**
+ * The merge is a property of a whole scan and not of one runner, so the wiring
+ * is asserted where it lives: two stand-in runners in one adapter, the same Go
+ * dependency reported by each, and one row in the graded result.
+ */
+const emitting = (tool: string, findings: readonly Finding[]): ToolRunner => ({
+  tool,
+  category: 'security',
+  pinnedVersion: '0.0.0',
+  complementary: true,
+  detect: () => Promise.resolve(null),
+  run: () => Promise.resolve({ state: 'ok', findings, rawFiles: [] }),
+})
+
+describe('the scan pipeline', () => {
+  let fixture: FixtureRepo
+  let scratch: string
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('js-basic')
+    scratch = await mkdtemp(join(tmpdir(), 'crank-govulncheck-'))
+  })
+
+  afterAll(async () => {
+    await fixture.remove()
+    await rm(scratch, { recursive: true, force: true })
+  })
+
+  it('merges govulncheck onto the lockfile audit before anything is graded', async () => {
+    const tree = await scanTree({
+      repoRoot: fixture.root,
+      scratch,
+      only: ['security'],
+      adapters: [
+        {
+          language: 'common',
+          detect: () => Promise.resolve(true),
+          runners: [
+            emitting(OSV_SCANNER_TOOL, [packageFinding()]),
+            emitting(GOVULNCHECK_TOOL, [
+              goFinding([vulnerability({ reachability: 'not-imported' })]),
+            ]),
+          ],
+        },
+      ],
+    })
+
+    expect(tree.scan.findings).toHaveLength(1)
+    expect(tree.scan.findings[0]?.tool).toBe(OSV_SCANNER_TOOL)
+    expect(tree.scan.findings[0]?.packageAdvisories?.[0]?.reachability).toBe('not-imported')
+    // Demoted by the verdict, so the security grade is not counting it.
+    expect(tree.scan.findings[0]?.gradeScope).toBe(false)
+    expect(tree.gradeBasis.security).toMatchObject({ value: 0 })
   })
 })
