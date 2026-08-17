@@ -14,6 +14,7 @@ npx crank-health
 ```
 crank-health 0.2.0 · /path/to/repo @ 9676d651 · quick
 
+  assessed 24 of 31 files; not assessed: 5 .yaml, 2 .sql
   security      A             no findings
   types         F             1 graded finding
   dead code     A             no findings
