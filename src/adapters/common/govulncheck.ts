@@ -1,4 +1,6 @@
-import { asArray, asRecord, asString, compare } from '../support.ts'
+import type { FindingPackage, PackageAdvisory, PendingFinding } from '../../core/types.ts'
+import { asArray, asRecord, asString, byLocation, compare } from '../support.ts'
+import { OSV_PACKAGE_RULE, severityOf, summarizePackage } from './osv-scanner.ts'
 
 /**
  * govulncheck — the Go vulnerability analyzer from `golang.org/x/vuln`.
@@ -17,6 +19,11 @@ import { asArray, asRecord, asString, compare } from '../support.ts'
  * check; the verdict is on every advisory in `report.json`, so a reader can.
  */
 
+export const GOVULNCHECK_TOOL = 'govulncheck'
+
+/** The advisory database Go modules are reported under, in OSV's vocabulary. */
+export const GO_ECOSYSTEM = 'Go'
+
 /** The reachability verdicts govulncheck's trace granularity distinguishes. */
 export type Reachability = 'symbol-reachable' | 'imported-no-call' | 'not-imported'
 
@@ -24,7 +31,11 @@ export type Reachability = 'symbol-reachable' | 'imported-no-call' | 'not-import
  * Deepest first: a module reported at several granularities is as reachable as
  * its deepest trace says, which is what govulncheck's own summary reports.
  */
-const GRANULARITY: readonly Reachability[] = ['symbol-reachable', 'imported-no-call', 'not-imported']
+const GRANULARITY: readonly Reachability[] = [
+  'symbol-reachable',
+  'imported-no-call',
+  'not-imported',
+]
 
 /** One advisory govulncheck reported against one module, with its verdict. */
 export interface GoVulnerability {
@@ -177,4 +188,134 @@ function parseObject(text: string): Record<string, unknown> | undefined {
   } catch {
     return undefined
   }
+}
+
+/**
+ * The verdicts that leave a finding in the graded set: a reachable symbol, and
+ * no verdict at all.
+ *
+ * "No verdict" is the honest default rather than a gap. An advisory nothing
+ * analyzed for reachability — every advisory outside Go, and every Go one on a
+ * machine with no `go` — is graded exactly as it always was; only a reachability
+ * analyzer's explicit "this cannot be reached from here" demotes one. That is
+ * what keeps a missing toolchain from quietly improving a grade.
+ */
+export function isGraded(reachability: string | undefined): boolean {
+  return reachability === undefined || reachability === 'symbol-reachable'
+}
+
+/**
+ * What a demoted finding's message says it was demoted for. The verdict token
+ * itself leads, so the reason in the human report and the `reachability` field
+ * in `report.json` are searchable as one string.
+ */
+const VERDICT_TEXT: Readonly<Record<Reachability, string>> = {
+  'symbol-reachable': 'symbol-reachable — govulncheck traced a call to a vulnerable symbol',
+  'imported-no-call': 'imported-no-call — govulncheck traced no call to a vulnerable symbol',
+  'not-imported': 'not-imported — govulncheck found no import of a vulnerable package',
+}
+
+/**
+ * govulncheck's vulnerabilities → the core's vocabulary, **one finding per
+ * vulnerable module**, matching `osv-scanner.ts`'s shape exactly: same rule,
+ * same `package@version` anchor, same one-line message. That is what lets
+ * {@link mergeReachability} fold one into the other where both tools saw the
+ * same dependency, and what makes a Go-only repo's row read the same as an
+ * npm repo's when only govulncheck ran.
+ *
+ * **Severity is `info`.** The Go vulnerability database publishes no CVSS
+ * score, so there is nothing to map (spec §2) and inventing one would be the
+ * local inference this runner exists to avoid. Where osv-scanner also saw the
+ * package it supplies the severity and govulncheck supplies the reachability —
+ * the division of labour that makes the two `complementary` rather than
+ * alternatives.
+ *
+ * @param goMod repo-relative path of the `go.mod` these modules are pinned by:
+ * the file a reader edits, and the file identity is hashed from
+ */
+export function toPendingFindings(
+  vulnerabilities: readonly GoVulnerability[],
+  goMod: string,
+): (PendingFinding & { readonly anchor: string })[] {
+  return [...byModule(vulnerabilities).values()]
+    .map((group) => moduleFinding(group, goMod))
+    .toSorted(byLocation)
+}
+
+/** One module's advisories, keyed so two versions of one module never merge. */
+function byModule(vulnerabilities: readonly GoVulnerability[]): Map<string, GoVulnerability[]> {
+  const groups = new Map<string, GoVulnerability[]>()
+  for (const vulnerability of vulnerabilities) {
+    const key = `${vulnerability.module} ${vulnerability.version}`
+    const group = groups.get(key)
+    if (group === undefined) groups.set(key, [vulnerability])
+    else group.push(vulnerability)
+  }
+  return new Map([...groups].toSorted(([a], [b]) => compare(a, b)))
+}
+
+function moduleFinding(
+  group: readonly GoVulnerability[],
+  goMod: string,
+): PendingFinding & { readonly anchor: string } {
+  const first = group[0]
+  if (first === undefined) throw new Error('a module group cannot be empty')
+  const pkg: FindingPackage = {
+    name: first.module,
+    version: first.version,
+    ecosystem: GO_ECOSYSTEM,
+  }
+  const advisories = group
+    .map((vulnerability) => advisoryOf(vulnerability))
+    .toSorted((a, b) => compare(a.id, b.id))
+  const summary = summarizePackage(pkg, advisories)
+  const demotion = demotionOf(advisories)
+
+  return {
+    category: 'security',
+    tool: GOVULNCHECK_TOOL,
+    rule: OSV_PACKAGE_RULE,
+    severity: severityOf(undefined),
+    file: goMod,
+    range: { startLine: 1, startCol: 1, endLine: 1, endCol: 1 },
+    message: summary.message + (demotion === undefined ? '' : `; advisory only: ${demotion}`),
+    // Nobody configures a vulnerability into a repo: this is our tool, run on
+    // its own defaults, and the pinned module is a fact either way.
+    provenance: 'default-config',
+    gradeScope: summary.gradeScope && demotion === undefined,
+    package: pkg,
+    packageAdvisories: advisories,
+    anchor: summary.anchor,
+    fixHint: summary.fixHint,
+  }
+}
+
+function advisoryOf(vulnerability: GoVulnerability): PackageAdvisory {
+  return {
+    id: vulnerability.osv,
+    aliases: vulnerability.aliases,
+    severity: severityOf(undefined),
+    summary: vulnerability.summary,
+    ...(vulnerability.fixedIn === undefined ? {} : { fixedIn: vulnerability.fixedIn }),
+    reachability: vulnerability.reachability,
+  }
+}
+
+/**
+ * Why a package's whole advisory set is out of the graded count, or `undefined`
+ * when any one of them still counts.
+ *
+ * The deepest verdict present is the one named: a package with one
+ * `imported-no-call` advisory and fifteen `not-imported` ones is imported, and
+ * saying it is not would be the stronger claim than the evidence supports.
+ * Reachability alone decides this — a package with no published fix is demoted
+ * by `summarizePackage` for a different reason, and quoting a verdict there
+ * would blame the wrong thing.
+ */
+export function demotionOf(advisories: readonly PackageAdvisory[]): string | undefined {
+  if (advisories.some((advisory) => isGraded(advisory.reachability))) return undefined
+  const strongest = GRANULARITY.find((verdict) =>
+    advisories.some((advisory) => advisory.reachability === verdict),
+  )
+  return strongest === undefined ? undefined : VERDICT_TEXT[strongest]
 }

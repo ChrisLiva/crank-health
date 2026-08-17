@@ -2,6 +2,7 @@ import { basename, join } from 'node:path'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
+  FindingPackage,
   PackageAdvisory,
   PendingFinding,
   DetectContext,
@@ -481,13 +482,17 @@ function packageFinding(
   group: readonly OsvVulnerability[],
   repoConfig: boolean,
 ): PendingFinding & { readonly anchor: string } {
-  const [first] = group
+  const first = group[0]
   if (first === undefined) throw new Error('a package group cannot be empty')
-  const pinned = `${first.packageName}@${first.packageVersion}`
+  const pinned = {
+    name: first.packageName,
+    version: first.packageVersion,
+    ecosystem: first.ecosystem,
+  }
   const advisories = group
     .map((vulnerability) => advisoryOf(vulnerability))
     .toSorted((a, b) => compare(a.id, b.id))
-  const fixedIn = highestFix(advisories)
+  const summary = summarizePackage(pinned, advisories)
 
   return {
     category: 'security',
@@ -496,23 +501,53 @@ function packageFinding(
     severity: severityOf(highestScore(group)),
     file: first.file,
     range: { startLine: 1, startCol: 1, endLine: 1, endCol: 1 },
+    message: summary.message,
+    provenance: repoConfig ? 'repo-config' : 'default-config',
+    gradeScope: summary.gradeScope,
+    package: pinned,
+    packageAdvisories: advisories,
+    anchor: summary.anchor,
+    fixHint: summary.fixHint,
+  }
+}
+
+/** What a package's advisories add up to, as a finding says it. */
+export interface PackageSummary {
+  /** `name@version` — the finding's anchor, and the head of its message. */
+  readonly anchor: string
+  readonly message: string
+  readonly fixHint: string
+  /** False when no published version clears every advisory; see below. */
+  readonly gradeScope: boolean
+}
+
+/**
+ * The one-line reading of a vulnerable package, derived from its advisories
+ * alone.
+ *
+ * Exported because a second tool now reports package-level findings —
+ * `govulncheck.ts` — and because merging its advisories into an osv-scanner
+ * finding changes the count and can change the fix, so the sentence has to be
+ * re-derived rather than patched. One function means the two tools' rows read
+ * identically and cannot drift apart.
+ */
+export function summarizePackage(
+  pkg: FindingPackage,
+  advisories: readonly PackageAdvisory[],
+): PackageSummary {
+  const anchor = `${pkg.name}@${pkg.version}`
+  const fixedIn = highestFix(advisories)
+  return {
+    anchor,
     message:
-      `${pinned} (${first.ecosystem}): ` +
+      `${anchor} (${pkg.ecosystem}): ` +
       `${advisories.length} ${advisories.length === 1 ? 'advisory' : 'advisories'}; ` +
       `${fixedIn === undefined ? 'no fixed version available' : `fix: upgrade to ≥${fixedIn}`}`,
-    provenance: repoConfig ? 'repo-config' : 'default-config',
-    gradeScope: fixedIn !== undefined,
-    package: {
-      name: first.packageName,
-      version: first.packageVersion,
-      ecosystem: first.ecosystem,
-    },
-    packageAdvisories: advisories,
-    anchor: pinned,
     fixHint:
       fixedIn === undefined
-        ? `No fixed version is published for ${first.packageName} — replace it, or vendor a patched fork; see ${advisoryUrl(advisories)}`
-        : `Upgrade ${first.packageName} to ≥${fixedIn}; see ${advisoryUrl(advisories)}`,
+        ? `No fixed version is published for ${pkg.name} — replace it, or vendor a patched fork; see ${advisoryUrl(advisories)}`
+        : `Upgrade ${pkg.name} to ≥${fixedIn}; see ${advisoryUrl(advisories)}`,
+    gradeScope: fixedIn !== undefined,
   }
 }
 
