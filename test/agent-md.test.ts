@@ -133,9 +133,15 @@ describe('task priority', () => {
         lint: { status: 'error', reason: 'oxlint crashed' },
       },
       findings: [
-        makeFinding({ id: 'a', category: 'lint' }),
-        makeFinding({ id: 'b', category: 'types', tool: 'tsc', rule: 'TS1000' }),
-        makeFinding({ id: 'c', category: 'dead-code', tool: 'knip', rule: 'knip/unused-exports' }),
+        makeFinding({ id: 'a', category: 'lint', file: 'src/lint.ts' }),
+        makeFinding({ id: 'b', category: 'types', tool: 'tsc', rule: 'TS1000', file: 'src/t.ts' }),
+        makeFinding({
+          id: 'c',
+          category: 'dead-code',
+          tool: 'knip',
+          rule: 'knip/unused-exports',
+          file: 'src/dead.ts',
+        }),
       ],
     })
     expect(buildAgentTasks(report).map((task) => task.category)).toEqual([
@@ -187,7 +193,19 @@ describe('what counts as a task', () => {
       findings: [clone('src/a.ts'), makeFinding({ id: 'l', file: 'src/a.ts' })],
     })
     expect(report.advisories[0]?.related).toEqual(['l'])
-    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['duplication', 'lint'])
+    // The same place, so the two are one task — and the clone is in it.
+    expect(buildAgentTasks(report).map((task) => task.findings.map((f) => f.rule))).toEqual([
+      ['jscpd/duplicate-block', 'no-unused-vars'],
+    ])
+  })
+
+  /** The clone alone stays out, so the cross-link is what carried it. */
+  it('leaves the same advisory finding out when nothing is graded at that place', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      findings: [clone('src/a.ts'), makeFinding({ id: 'l', file: 'src/b.ts' })],
+    })
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['lint'])
   })
 
   it('leaves a theme whose only eligible finding is in generated code out', () => {
@@ -228,6 +246,79 @@ describe('what counts as a task', () => {
     ])
   })
 })
+
+/**
+ * Two categories can answer for the same place — `related` is the report's own
+ * record of it — and two tasks over one line is the same sitting read twice.
+ * They merge into one, under the category spec §10 ranks first, and the absorbed
+ * rows are listed under it so nothing about the place goes missing.
+ */
+describe('cross-category duplicates', () => {
+  const HERE = { file: 'src/a.ts', range: { startLine: 4, startCol: 1, endLine: 6, endCol: 1 } }
+
+  it('merges two themes that answer for the same places into one task', () => {
+    const report = makeReport({
+      categories: allGraded(),
+      findings: [
+        makeFinding({ id: 'lint', ...HERE }),
+        makeFinding({ id: 'type', category: 'types', tool: 'tsc', rule: 'TS2322', ...HERE }),
+      ],
+    })
+    const tasks = buildAgentTasks(report)
+    expect(tasks.map((task) => [task.category, task.title])).toEqual([
+      ['types', 'Fix 1 `TS2322` type error, and 1 lint finding at the same place'],
+    ])
+    // The lint row is under it, not lost: the place has two things wrong with it.
+    expect(tasks[0]?.findings.map((finding) => finding.rule)).toEqual(['TS2322', 'no-unused-vars'])
+  })
+
+  /**
+   * Overlap is not duplication. A theme spread over places another theme only
+   * meets at one of them is its own work, and folding it in would hide the rest.
+   */
+  it('keeps two themes that only meet at one place apart', () => {
+    const report = makeReport({
+      categories: allGraded(),
+      findings: [
+        makeFinding({ id: 'lint-here', ...HERE }),
+        makeFinding({ id: 'lint-there', file: 'src/b.ts' }),
+        makeFinding({ id: 'type', category: 'types', tool: 'tsc', rule: 'TS2322', ...HERE }),
+      ],
+    })
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['types', 'lint'])
+  })
+
+  /** Two packages are two sittings under two configs, whatever the line numbers. */
+  it('never merges across projects', () => {
+    const report = makeReport({
+      categories: allGraded(),
+      projects: [
+        makeProjectScan({ project: projectAt('packages/api'), categories: allGraded() }),
+        makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
+      ],
+      findings: [
+        makeFinding({ id: 'w', file: 'packages/web/src/a.ts', project: 'packages/web' }),
+        makeFinding({
+          id: 'a',
+          category: 'types',
+          tool: 'tsc',
+          rule: 'TS2322',
+          file: 'packages/web/src/a.ts',
+          project: 'packages/api',
+        }),
+      ],
+    })
+    expect(buildAgentTasks(report).map((task) => [task.project, task.category])).toEqual([
+      ['packages/api', 'types'],
+      ['packages/web', 'lint'],
+    ])
+  })
+})
+
+/** A one-line range, so two findings in one file are two places. */
+function atLine(line: number): Pick<Finding, 'range'> {
+  return { range: { startLine: line, startCol: 1, endLine: line, endCol: 2 } }
+}
 
 /** A jscpd clone: reported so a reader knows where, never counted (spec §3). */
 function clone(file: string): Finding {
@@ -876,7 +967,13 @@ describe('boilerplate per run of identical tasks', () => {
         lint: { status: 'graded', grade: 'F' },
       },
       findings: [
-        makeFinding({ id: 'd', category: 'dead-code', tool: 'knip', rule: 'knip/unused-exports' }),
+        makeFinding({
+          id: 'd',
+          category: 'dead-code',
+          tool: 'knip',
+          rule: 'knip/unused-exports',
+          file: 'src/dead.ts',
+        }),
         makeFinding({ id: 'l' }),
       ],
     })
@@ -1088,10 +1185,22 @@ function skewedGrades(): Report {
     findings: [
       ...reportFindings(manyLintRules(25)),
       ...Array.from({ length: 3 }, (_, index) =>
-        makeFinding({ id: `t${index}`, category: 'types', tool: 'tsc', rule: `TS100${index}` }),
+        makeFinding({
+          id: `t${index}`,
+          category: 'types',
+          tool: 'tsc',
+          rule: `TS100${index}`,
+          file: `src/t${index}.ts`,
+        }),
       ),
       ...Array.from({ length: 2 }, (_, index) =>
-        makeFinding({ id: `s${index}`, category: 'security', tool: 'bandit', rule: `B60${index}` }),
+        makeFinding({
+          id: `s${index}`,
+          category: 'security',
+          tool: 'bandit',
+          rule: `B60${index}`,
+          file: `src/s${index}.py`,
+        }),
       ),
     ],
   })
@@ -1116,6 +1225,7 @@ function buriedFailure(): Report {
           category: 'security',
           tool: 'bandit',
           rule: `B${String(index).padStart(3, '0')}`,
+          file: `src/s${index}.py`,
         }),
       ),
       makeFinding({ id: 'l', rule: 'no-shadow' }),
@@ -1142,9 +1252,23 @@ function ungradedRollup(): Report {
       makeProjectScan({ project: projectAt('packages/web'), categories: allGraded() }),
     ],
     findings: [
-      makeFinding({ id: 'l', ...inApi }),
-      makeFinding({ id: 's', category: 'security', tool: 'bandit', rule: 'B602', ...inApi }),
-      makeFinding({ id: 't', category: 'types', tool: 'tsc', rule: 'TS1000', ...inApi }),
+      makeFinding({ id: 'l', ...inApi, ...atLine(1) }),
+      makeFinding({
+        id: 's',
+        category: 'security',
+        tool: 'bandit',
+        rule: 'B602',
+        ...inApi,
+        ...atLine(20),
+      }),
+      makeFinding({
+        id: 't',
+        category: 'types',
+        tool: 'tsc',
+        rule: 'TS1000',
+        ...inApi,
+        ...atLine(40),
+      }),
     ],
   })
 }

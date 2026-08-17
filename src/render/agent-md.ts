@@ -193,12 +193,15 @@ export function buildAgentTasks(
   )
   const written = handWritten(reportFindings(report), excludes ?? [])
 
-  const themes = CATEGORIES.flatMap((category) =>
-    themesOf(
-      category,
-      findings.filter((finding) => finding.category === category),
-    ),
-  ).filter((theme) => isWork(theme, written))
+  const themes = mergeDuplicates(
+    CATEGORIES.flatMap((category) =>
+      themesOf(
+        category,
+        findings.filter((finding) => finding.category === category),
+      ),
+    ).filter((theme) => isWork(theme, written)),
+    new Map(findings.map((finding, index) => [finding.id, index])),
+  )
 
   return themes
     .toSorted(
@@ -244,6 +247,89 @@ function isWork(theme: Theme, written: (finding: Finding) => boolean): boolean {
   if (rows.length === 0) return false
   if (rows.every((finding) => finding.package !== undefined)) return rows.some(hasFix)
   return rows.some((finding) => written(finding))
+}
+
+/**
+ * Two themes in different categories reporting *the same places* are one piece
+ * of work, and `related` is the report's own record of which places those are
+ * (`core/fingerprint.ts`: same file, overlapping lines, another category).
+ *
+ * Mutual and total, or not at all: every finding on each side has to answer for
+ * a finding on the other. A theme spread over ten places that meets another at
+ * one of them is not its duplicate, and absorbing it would hide the other nine
+ * inside a task about something else. Same project, too — one rule broken in two
+ * packages is two sittings under two configs however the lines line up.
+ *
+ * The survivor is the theme whose category spec §10 ranks first, which is a
+ * property of the two categories rather than of the ranking this feeds, so the
+ * merge cannot move with it. It keeps its own Verify command — one command can
+ * only check one category — and its title says what came with it, because a task
+ * listing rows its heading does not account for reads like a rendering bug.
+ */
+function mergeDuplicates(
+  themes: readonly Theme[],
+  order: ReadonlyMap<string, number>,
+): readonly Theme[] {
+  const canonical = themes.toSorted(
+    (a, b) =>
+      categoryRank(a.category) - categoryRank(b.category) ||
+      compare(a.key, b.key) ||
+      compare(a.project ?? '', b.project ?? ''),
+  )
+  const absorbed = new Set<Theme>()
+  const grown = new Map<Theme, Theme[]>()
+  for (const [index, winner] of canonical.entries()) {
+    if (absorbed.has(winner)) continue
+    for (const other of canonical.slice(index + 1)) {
+      if (absorbed.has(other) || !duplicates(winner, other)) continue
+      absorbed.add(other)
+      grown.set(winner, [...(grown.get(winner) ?? []), other])
+    }
+  }
+  return themes
+    .filter((theme) => !absorbed.has(theme))
+    .map((theme) => {
+      const merged = grown.get(theme)
+      if (merged === undefined) return theme
+      return {
+        ...theme,
+        title: `${theme.title}, and ${alsoHere(merged)} at the same place`,
+        // Back into the report's own order, so a merged task reads like every
+        // other one and two runs cannot disagree about the list.
+        findings: [theme, ...merged]
+          .flatMap((one) => one.findings)
+          .toSorted(
+            (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0) || compare(a.id, b.id),
+          ),
+      }
+    })
+}
+
+/** `1 lint finding` / `1 lint finding and 2 type findings` — what a merge added. */
+function alsoHere(merged: readonly Theme[]): string {
+  const counts = merged.map((theme) =>
+    plural(theme.findings.length, `${CATEGORY_LABELS[theme.category]} finding`),
+  )
+  const last = counts.at(-1) ?? ''
+  return counts.length < 2 ? last : `${counts.slice(0, -1).join(', ')} and ${last}`
+}
+
+/** Whether two themes are the same places seen from two categories. */
+function duplicates(one: Theme, other: Theme): boolean {
+  return (
+    one.category !== other.category &&
+    one.project === other.project &&
+    answersFor(one, other) &&
+    answersFor(other, one)
+  )
+}
+
+/** Whether every finding of `one` is cross-linked to a finding of `other`. */
+function answersFor(one: Theme, other: Theme): boolean {
+  const ids = new Set(other.findings.map((finding) => finding.id))
+  return one.findings.every((finding) =>
+    (finding.related ?? []).some((related) => ids.has(related)),
+  )
 }
 
 /** Whether some advisory against this dependency names a version that fixes it. */
