@@ -1,0 +1,2095 @@
+{
+  "config": {
+    "protocol_version": "v1.0.0",
+    "scanner_name": "govulncheck",
+    "scanner_version": "v1.7.0",
+    "db": "https://vuln.go.dev",
+    "db_last_modified": "2026-08-14T16:22:54Z",
+    "go_version": "go1.26.6",
+    "scan_level": "symbol",
+    "scan_mode": "source"
+  }
+}
+{
+  "SBOM": {
+    "go_version": "go1.26.6",
+    "modules": [
+      {
+        "path": "example.com/app/api"
+      },
+      {
+        "path": "connectrpc.com/connect",
+        "version": "v1.20.0"
+      },
+      {
+        "path": "connectrpc.com/cors",
+        "version": "v0.1.0"
+      },
+      {
+        "path": "github.com/clerk/clerk-sdk-go/v2",
+        "version": "v2.7.0"
+      },
+      {
+        "path": "github.com/dustin/go-humanize",
+        "version": "v1.0.1"
+      },
+      {
+        "path": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4"
+      },
+      {
+        "path": "github.com/google/uuid",
+        "version": "v1.6.0"
+      },
+      {
+        "path": "github.com/mattn/go-isatty",
+        "version": "v0.0.20"
+      },
+      {
+        "path": "github.com/ncruces/go-strftime",
+        "version": "v1.0.0"
+      },
+      {
+        "path": "github.com/remyoudompheng/bigfft",
+        "version": "v0.0.0-20230129092748-24d4a6f8daec"
+      },
+      {
+        "path": "github.com/rs/cors",
+        "version": "v1.11.1"
+      },
+      {
+        "path": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      },
+      {
+        "path": "golang.org/x/sys",
+        "version": "v0.47.0"
+      },
+      {
+        "path": "google.golang.org/protobuf",
+        "version": "v1.36.11"
+      },
+      {
+        "path": "modernc.org/libc",
+        "version": "v1.73.4"
+      },
+      {
+        "path": "modernc.org/mathutil",
+        "version": "v1.7.1"
+      },
+      {
+        "path": "modernc.org/memory",
+        "version": "v1.11.0"
+      },
+      {
+        "path": "modernc.org/sqlite",
+        "version": "v1.53.0"
+      },
+      {
+        "path": "stdlib",
+        "version": "v1.26.6"
+      }
+    ],
+    "roots": [
+      "example.com/app/api/gen/brewpg/dnd/v1",
+      "example.com/app/api/gen/brewpg/dnd/v1/dndv1connect",
+      "example.com/app/api/gen/brewpg/feedback/v1",
+      "example.com/app/api/gen/brewpg/feedback/v1/feedbackv1connect",
+      "example.com/app/api/gen/brewpg/nimble/v1",
+      "example.com/app/api/gen/brewpg/nimble/v1/nimblev1connect",
+      "example.com/app/api/gen/dnddb",
+      "example.com/app/api/gen/feedbackdb",
+      "example.com/app/api/gen/nimbledb",
+      "example.com/app/api"
+    ]
+  }
+}
+{
+  "progress": {
+    "message": "Fetching vulnerabilities from the database..."
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2021-0067",
+    "modified": "2024-05-20T16:03:47Z",
+    "published": "2021-04-14T20:04:52Z",
+    "aliases": [
+      "CVE-2021-27919"
+    ],
+    "summary": "Panic when opening archives in archive/zip",
+    "details": "Using Reader.Open on an archive containing a file with a path prefixed by \"../\" will cause a panic due to a stack overflow. If parsing user supplied archives, this may be used as a denial of service vector.",
+    "affected": [
+      {
+        "package": {
+          "name": "stdlib",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "1.16.0-0"
+              },
+              {
+                "fixed": "1.16.1"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "archive/zip",
+              "symbols": [
+                "toValidName"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/300489"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.googlesource.com/go/+/cd3b4ca9f20fd14187ed4cdfdee1a02ea87e5cd8"
+      },
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/44916"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/MfiLYjG-RAw/m/zzhWj5jPAQAJ"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2021-0067",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2021-0069",
+    "modified": "2024-05-20T16:03:47Z",
+    "published": "2021-04-14T20:04:52Z",
+    "aliases": [
+      "CVE-2020-28362"
+    ],
+    "summary": "Panic during division of very large numbers in math/big",
+    "details": "A number of math/big.Int methods can panic when provided large inputs due to a flawed division method.",
+    "affected": [
+      {
+        "package": {
+          "name": "stdlib",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "1.14.0-0"
+              },
+              {
+                "fixed": "1.14.12"
+              },
+              {
+                "introduced": "1.15.0-0"
+              },
+              {
+                "fixed": "1.15.5"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "math/big",
+              "symbols": [
+                "nat.divRecursiveStep"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/269657"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.googlesource.com/go/+/1e1fa5903b760c6714ba17e50bf850b01f49135c"
+      },
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/42552"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/NpBGTTmKzpM/m/fLguyiM2CAAJ"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2021-0069",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-4945",
+    "modified": "2026-05-26T22:49:18Z",
+    "published": "2026-05-26T22:49:18Z",
+    "aliases": [
+      "CVE-2026-34986",
+      "GHSA-78h2-9frx-2jm8"
+    ],
+    "summary": "Go JOSE Panics in JWE decryption in github.com/go-jose/go-jose",
+    "details": "The go-jose package is subject to a panic when decrypting certain JSON Web Encryption (JWE) tokens. This occurs when an attacker can provide a maliciously crafted JWE token that triggers an unhandled exception during the decryption process, leading to a denial-of-service.",
+    "affected": [
+      {
+        "package": {
+          "name": "github.com/go-jose/go-jose/v3",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "3.0.5"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "github.com/go-jose/go-jose/v3"
+            }
+          ]
+        }
+      },
+      {
+        "package": {
+          "name": "github.com/go-jose/go-jose/v4",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "4.1.4"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "github.com/go-jose/go-jose/v4"
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://github.com/go-jose/go-jose/security/advisories/GHSA-78h2-9frx-2jm8"
+      },
+      {
+        "type": "WEB",
+        "url": "https://pkg.go.dev/github.com/go-jose/go-jose/v4#pkg-constants"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Datadog's Security team"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-4945",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2025-4134",
+    "modified": "2025-11-20T16:52:31Z",
+    "published": "2025-11-19T20:11:57Z",
+    "aliases": [
+      "CVE-2025-58181",
+      "GHSA-j5w8-q4qc-rx2x"
+    ],
+    "summary": "Unbounded memory consumption in golang.org/x/crypto/ssh",
+    "details": "SSH servers parsing GSSAPI authentication requests do not validate the number of mechanisms specified in the request, allowing an attacker to cause unbounded memory consumption.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.45.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "NewServerConn",
+                "parseGSSAPIPayload"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://groups.google.com/g/golang-announce/c/w-oX3UxNcZA"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/721961"
+      },
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/76363"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Jakub Ciolek"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2025-4134",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2025-4135",
+    "modified": "2025-11-20T16:52:31Z",
+    "published": "2025-11-19T20:11:57Z",
+    "aliases": [
+      "CVE-2025-47914",
+      "GHSA-f6x5-jh6r-wrfv"
+    ],
+    "summary": "Malformed constraint may cause denial of service in golang.org/x/crypto/ssh/agent",
+    "details": "SSH Agent servers do not validate the size of messages when processing new identity requests, which may cause the program to panic if the message is malformed due to an out of bounds read.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.45.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh/agent",
+              "symbols": [
+                "ForwardToAgent",
+                "ServeAgent",
+                "parseConstraints"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "ADVISORY",
+        "url": "https://groups.google.com/g/golang-announce/c/w-oX3UxNcZA"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/721960"
+      },
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/76364"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Jakub Ciolek"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2025-4135",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5005",
+    "modified": "2026-08-11T21:06:47Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39833",
+      "GHSA-jppx-rxg9-jmrx"
+    ],
+    "summary": "Invoking key constraints not enforced in golang.org/x/crypto/ssh/agent",
+    "details": "The in-memory keyring returned by NewKeyring() silently accepted keys with the ConfirmBeforeUse constraint but never enforced it. The key would sign without any confirmation prompt, with no indication to the caller that the constraint was not in effect. NewKeyring() now returns an error when unsupported constraints are requested.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh/agent",
+              "symbols": [
+                "keyring.Add"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79436"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/778642"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5005",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5006",
+    "modified": "2026-08-11T21:06:47Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39832",
+      "GHSA-f5wc-c3c7-36mc"
+    ],
+    "summary": "Invoking agent constraints dropped when forwarding keys in golang.org/x/crypto/ssh/agent",
+    "details": "When adding a key to a remote agent constraint extensions such as restrict-destination-v00@openssh.com were not serialized in the request. Destination restrictions were silently stripped when forwarding keys, allowing unrestricted use of the key on the remote host. The client now serializes all constraint extensions. Additionally, the in-memory keyring returned by NewKeyring() now rejects keys with unsupported constraint extensions instead of silently ignoring them.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh/agent",
+              "symbols": [
+                "client.Add",
+                "keyring.Add"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79435"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/778640"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/778641"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5006",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5013",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-46597"
+    ],
+    "summary": "Invoking byte arithmetic causes underflow and panic in golang.org/x/crypto/ssh",
+    "details": "An incorrectly placed cast from bytes to int allowed for server-side panic in the AES-GCM packet decoder for well-crafted inputs.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "Dial",
+                "NewClientConn",
+                "NewServerConn",
+                "curve25519sha256.Client",
+                "curve25519sha256.Server",
+                "dhGEXSHA.Client",
+                "dhGEXSHA.Server",
+                "dhGroup.Client",
+                "dhGroup.Server",
+                "ecdh.Client",
+                "ecdh.Server",
+                "gcmCipher.readCipherPacket",
+                "mlkem768WithCurve25519sha256.Client",
+                "mlkem768WithCurve25519sha256.Server"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79561"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781620"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Maciej Kawka"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5013",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5014",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39828"
+    ],
+    "summary": "Invoking bypass of certificate restrictions in golang.org/x/crypto/ssh",
+    "details": "When an SSH server authentication callback returned PartialSuccessError with non-nil Permissions, those permissions were silently discarded, potentially dropping certificate restrictions such as force-command after a second factor succeeded. Returning non-nil Permissions with PartialSuccessError now results in a connection error.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "NewServerConn",
+                "connection.serverAuthenticate"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79562"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781621"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5014",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5015",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39835"
+    ],
+    "summary": "Invoking server panic during CheckHostKey/Authenticate in golang.org/x/crypto/ssh",
+    "details": "SSH servers which use CertChecker as a public key callback without setting IsUserAuthority or IsHostAuthority could be caused to panic by a client presenting a certificate. CertChecker now returns an error instead of panicking when these callbacks are nil.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "CertChecker.Authenticate",
+                "CertChecker.CheckHostKey"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79563"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781660"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5015",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5016",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39827"
+    ],
+    "summary": "Invoking memory leak when rejecting channels can lead to DoS in golang.org/x/crypto/ssh",
+    "details": "An authenticated SSH client that repeatedly opened channels which were rejected by the server caused unbounded memory growth, eventually crashing the server process and affecting all connected users. Rejected channels are now properly removed from the connection's internal state and released for garbage collection.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "channel.Reject"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/35127"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781320"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Ziyan Zhou"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5016",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5017",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39830"
+    ],
+    "summary": "Invoking client can cause server deadlock on unexpected responses in golang.org/x/crypto/ssh",
+    "details": "A malicious SSH peer could send unsolicited global request responses to fill an internal buffer, blocking the connection's read loop. The blocked goroutine could not be released by calling Close(), resulting in a resource leak per connection. Unsolicited global responses are now discarded.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "Client.Listen",
+                "Client.ListenTCP",
+                "Client.ListenUnix",
+                "Dial",
+                "NewClientConn",
+                "NewServerConn",
+                "Session.CombinedOutput",
+                "Session.Output",
+                "Session.RequestPty",
+                "Session.RequestSubsystem",
+                "Session.Run",
+                "Session.SendRequest",
+                "Session.Setenv",
+                "Session.Shell",
+                "Session.Signal",
+                "Session.Start",
+                "Session.WindowChange",
+                "channel.SendRequest",
+                "channel.handlePacket",
+                "mux.SendRequest",
+                "mux.handleGlobalPacket",
+                "tcpListener.Close",
+                "unixListener.Close"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79564"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781640"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781664"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5017",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5018",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39829"
+    ],
+    "summary": "Invoking pathological RSA/DSA parameters may cause DoS in golang.org/x/crypto/ssh",
+    "details": "The RSA and DSA public key parsers did not enforce size limits on key parameters. A crafted public key with an excessively large modulus or DSA parameter could cause several minutes of CPU consumption during signature verification. This could be triggered by unauthenticated clients during public key authentication. RSA moduli are now limited to 8192 bits, and DSA parameters are validated per FIPS 186-2.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "Dial",
+                "NewClientConn",
+                "NewServerConn",
+                "NewSignerFromKey",
+                "ParseAuthorizedKey",
+                "ParseKnownHosts",
+                "ParsePrivateKey",
+                "ParsePrivateKeyWithPassphrase",
+                "ParsePublicKey",
+                "ParseRawPrivateKey",
+                "ParseRawPrivateKeyWithPassphrase",
+                "checkDSAParams",
+                "parseDSA",
+                "parseRSA"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79565"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781641"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781661"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5018",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5019",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39831"
+    ],
+    "summary": "Invoking bypass of FIDO/U2F security keys physical interaction in golang.org/x/crypto/ssh",
+    "details": "The Verify() method for FIDO/U2F security key types (sk-ecdsa-sha2-nistp256@openssh.com, sk-ssh-ed25519@openssh.com) did not check the User Presence flag. Signatures generated without physical touch were accepted, allowing unattended use of a hardware security key. To restore the previous behavior, return a \"no-touch-required\" extension in Permissions.Extensions from PublicKeyCallback.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "CertChecker.Authenticate",
+                "CertChecker.CheckCert",
+                "CertChecker.CheckHostKey",
+                "Certificate.Verify",
+                "Dial",
+                "NewClientConn",
+                "NewServerConn",
+                "connection.serverAuthenticate",
+                "skECDSAPublicKey.Verify",
+                "skEd25519PublicKey.Verify"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79566"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781662"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5019",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5020",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-39834"
+    ],
+    "summary": "Invoking infinite loop on large channel writes in golang.org/x/crypto/ssh",
+    "details": "When writing data larger than 4GB in a single Write call on an SSH channel, an integer overflow in the internal payload size calculation caused the write loop to spin indefinitely, sending empty packets without making progress. The size comparison now uses int64 to prevent truncation.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "Dial",
+                "NewClientConn",
+                "NewServerConn",
+                "Session.CombinedOutput",
+                "Session.Output",
+                "Session.Run",
+                "Session.Shell",
+                "Session.Start",
+                "channel.Write",
+                "channel.WriteExtended",
+                "curve25519sha256.Client",
+                "curve25519sha256.Server",
+                "dhGEXSHA.Client",
+                "dhGEXSHA.Server",
+                "dhGroup.Client",
+                "dhGroup.Server",
+                "ecdh.Client",
+                "ecdh.Server",
+                "extChannel.Write",
+                "mlkem768WithCurve25519sha256.Client",
+                "mlkem768WithCurve25519sha256.Server"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79567"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781663"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5020",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5021",
+    "modified": "2026-08-14T16:22:54Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-42508",
+      "GHSA-5cgq-3rg8-m6cv"
+    ],
+    "summary": "Invoking auth bypass via unenforced @revoked status in golang.org/x/crypto/ssh/knownhosts",
+    "details": "Previously, a revoked 'SignatureKey' belonging to a CA was not correctly checked for revocation. Now, both the 'key' and 'key.SignatureKey' are checked for @revoked.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh/knownhosts",
+              "symbols": [
+                "hostKeyDB.IsRevoked"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79568"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781220"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      }
+    ],
+    "credits": [
+      {
+        "name": "Omar Khaleel Ibrahim - mr3okk"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5021",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5023",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-46595"
+    ],
+    "summary": "Invoking VerifiedPublicKeyCallback permissions skip enforcement in golang.org/x/crypto/ssh",
+    "details": "Previously, CVE-2024-45337 fixed an authorization bypass for misused ssh server configurations; if any other type of callback is passed other than public key, then the source-address validation would be skipped.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh",
+              "symbols": [
+                "NewServerConn",
+                "connection.serverAuthenticate"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79570"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781642"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5023",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5033",
+    "modified": "2026-05-22T02:08:34Z",
+    "published": "2026-05-22T02:08:34Z",
+    "aliases": [
+      "CVE-2026-46598"
+    ],
+    "summary": "Invoking pathological inputs can lead to client panic in golang.org/x/crypto/ssh/agent",
+    "details": "For certain crafted inputs, a 'ed25519.PrivateKey' was created by casting malformed wire bytes, leading to a panic when used.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              },
+              {
+                "fixed": "0.52.0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/ssh/agent",
+              "symbols": [
+                "ForwardToAgent",
+                "ServeAgent",
+                "parseEd25519Cert",
+                "parseEd25519Key"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/79596"
+      },
+      {
+        "type": "FIX",
+        "url": "https://go.dev/cl/781360"
+      },
+      {
+        "type": "WEB",
+        "url": "https://groups.google.com/g/golang-announce/c/a082jnz-LvI"
+      }
+    ],
+    "credits": [
+      {
+        "name": "NCC Group Cryptography Services, sponsored by Teleport"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5033",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "osv": {
+    "schema_version": "1.3.1",
+    "id": "GO-2026-5932",
+    "modified": "2026-07-07T22:15:29Z",
+    "published": "2026-07-07T22:15:29Z",
+    "summary": "The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design, and has known security issues",
+    "details": "The golang.org/x/crypto/openpgp package is unsafe by design, has numerous known security issues, is not maintained, and should not be used.\n\nIf you are required to interoperate with OpenPGP systems and need a maintained package, consider github.com/ProtonMail/go-crypto/openpgp which is a maintained fork that aims to be a drop-in replacement for this package.",
+    "affected": [
+      {
+        "package": {
+          "name": "golang.org/x/crypto",
+          "ecosystem": "Go"
+        },
+        "ranges": [
+          {
+            "type": "SEMVER",
+            "events": [
+              {
+                "introduced": "0"
+              }
+            ]
+          }
+        ],
+        "ecosystem_specific": {
+          "imports": [
+            {
+              "path": "golang.org/x/crypto/openpgp"
+            },
+            {
+              "path": "golang.org/x/crypto/openpgp/packet"
+            },
+            {
+              "path": "golang.org/x/crypto/openpgp/armor"
+            },
+            {
+              "path": "golang.org/x/crypto/openpgp/clearsign"
+            },
+            {
+              "path": "golang.org/x/crypto/openpgp/errors"
+            },
+            {
+              "path": "golang.org/x/crypto/openpgp/elgamal"
+            },
+            {
+              "path": "golang.org/x/crypto/openpgp/s2k"
+            }
+          ]
+        }
+      }
+    ],
+    "references": [
+      {
+        "type": "REPORT",
+        "url": "https://go.dev/issue/44226"
+      }
+    ],
+    "database_specific": {
+      "url": "https://pkg.go.dev/vuln/GO-2026-5932",
+      "review_status": "REVIEWED"
+    }
+  }
+}
+{
+  "progress": {
+    "message": "Checking the code against the vulnerabilities..."
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-4945",
+    "fixed_version": "v3.0.5",
+    "trace": [
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2025-4134",
+    "fixed_version": "v0.45.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2025-4135",
+    "fixed_version": "v0.45.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5005",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5006",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5013",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5014",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5015",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5016",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5017",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5018",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5019",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5020",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5021",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5023",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5033",
+    "fixed_version": "v0.52.0",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-5932",
+    "trace": [
+      {
+        "module": "golang.org/x/crypto",
+        "version": "v0.43.0"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-4945",
+    "fixed_version": "v3.0.5",
+    "trace": [
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3"
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-4945",
+    "fixed_version": "v3.0.5",
+    "trace": [
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3",
+        "function": "Verify",
+        "receiver": "JSONWebSignature",
+        "position": {
+          "filename": "signing.go",
+          "offset": 10680,
+          "line": 358,
+          "column": 29
+        }
+      },
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3/jwt",
+        "function": "Claims",
+        "receiver": "*JSONWebToken",
+        "position": {
+          "filename": "jwt/jwt.go",
+          "offset": 1241,
+          "line": 42,
+          "column": 21
+        }
+      },
+      {
+        "module": "github.com/clerk/clerk-sdk-go/v2",
+        "version": "v2.7.0",
+        "package": "github.com/clerk/clerk-sdk-go/v2/jwt",
+        "function": "Verify",
+        "position": {
+          "filename": "jwt/jwt.go",
+          "offset": 3899,
+          "line": 116,
+          "column": 26
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "Verify",
+        "receiver": "*clerkVerifier",
+        "position": {
+          "filename": "auth.go",
+          "offset": 2761,
+          "line": 76,
+          "column": 27
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "authInterceptor$1$1",
+        "position": {
+          "filename": "auth.go",
+          "offset": 1876,
+          "line": 48,
+          "column": 28
+        }
+      },
+      {
+        "module": "connectrpc.com/connect",
+        "version": "v1.20.0",
+        "package": "connectrpc.com/connect",
+        "function": "NewClient[example.com/app/api/gen/brewpg/nimble/v1.ListSpellsRequest, example.com/app/api/gen/brewpg/nimble/v1.ListSpellsResponse]$2",
+        "position": {
+          "filename": "client.go",
+          "offset": 5031,
+          "line": 135,
+          "column": 29
+        }
+      },
+      {
+        "module": "connectrpc.com/connect",
+        "version": "v1.20.0",
+        "package": "connectrpc.com/connect",
+        "function": "CallUnary",
+        "receiver": "*Client[example.com/app/api/gen/brewpg/nimble/v1.ListSpellsRequest, example.com/app/api/gen/brewpg/nimble/v1.ListSpellsResponse]",
+        "position": {
+          "filename": "client.go",
+          "offset": 5485,
+          "line": 153,
+          "column": 20
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api/gen/brewpg/nimble/v1/nimblev1connect",
+        "function": "ListSpells",
+        "receiver": "*spellServiceClient",
+        "position": {
+          "filename": "gen/brewpg/nimble/v1/nimblev1connect/spell.connect.go",
+          "offset": 3857,
+          "line": 82,
+          "column": 31
+        }
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-4945",
+    "fixed_version": "v3.0.5",
+    "trace": [
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3",
+        "function": "UnsafePayloadWithoutVerification",
+        "receiver": "JSONWebSignature",
+        "position": {
+          "filename": "signing.go",
+          "offset": 11028,
+          "line": 369,
+          "column": 29
+        }
+      },
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3/jwt",
+        "function": "UnsafeClaimsWithoutVerification",
+        "receiver": "*JSONWebToken",
+        "position": {
+          "filename": "jwt/jwt.go",
+          "offset": 1800,
+          "line": 63,
+          "column": 31
+        }
+      },
+      {
+        "module": "github.com/clerk/clerk-sdk-go/v2",
+        "version": "v2.7.0",
+        "package": "github.com/clerk/clerk-sdk-go/v2/jwt",
+        "function": "Decode",
+        "position": {
+          "filename": "jwt/jwt.go",
+          "offset": 7099,
+          "line": 227,
+          "column": 51
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "jwkFor",
+        "receiver": "*clerkVerifier",
+        "position": {
+          "filename": "auth.go",
+          "offset": 3455,
+          "line": 94,
+          "column": 31
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "Verify",
+        "receiver": "*clerkVerifier",
+        "position": {
+          "filename": "auth.go",
+          "offset": 2685,
+          "line": 72,
+          "column": 22
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "authInterceptor$1$1",
+        "position": {
+          "filename": "auth.go",
+          "offset": 1876,
+          "line": 48,
+          "column": 28
+        }
+      },
+      {
+        "module": "connectrpc.com/connect",
+        "version": "v1.20.0",
+        "package": "connectrpc.com/connect",
+        "function": "NewClient[example.com/app/api/gen/brewpg/nimble/v1.ListSpellsRequest, example.com/app/api/gen/brewpg/nimble/v1.ListSpellsResponse]$2",
+        "position": {
+          "filename": "client.go",
+          "offset": 5031,
+          "line": 135,
+          "column": 29
+        }
+      },
+      {
+        "module": "connectrpc.com/connect",
+        "version": "v1.20.0",
+        "package": "connectrpc.com/connect",
+        "function": "CallUnary",
+        "receiver": "*Client[example.com/app/api/gen/brewpg/nimble/v1.ListSpellsRequest, example.com/app/api/gen/brewpg/nimble/v1.ListSpellsResponse]",
+        "position": {
+          "filename": "client.go",
+          "offset": 5485,
+          "line": 153,
+          "column": 20
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api/gen/brewpg/nimble/v1/nimblev1connect",
+        "function": "ListSpells",
+        "receiver": "*spellServiceClient",
+        "position": {
+          "filename": "gen/brewpg/nimble/v1/nimblev1connect/spell.connect.go",
+          "offset": 3857,
+          "line": 82,
+          "column": 31
+        }
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-4945",
+    "fixed_version": "v3.0.5",
+    "trace": [
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3",
+        "function": "ParseSigned",
+        "position": {
+          "filename": "jws.go",
+          "offset": 2643,
+          "line": 79,
+          "column": 6
+        }
+      },
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3/jwt",
+        "function": "ParseSigned",
+        "position": {
+          "filename": "jwt/jwt.go",
+          "offset": 2304,
+          "line": 88,
+          "column": 30
+        }
+      },
+      {
+        "module": "github.com/clerk/clerk-sdk-go/v2",
+        "version": "v2.7.0",
+        "package": "github.com/clerk/clerk-sdk-go/v2/jwt",
+        "function": "Verify",
+        "position": {
+          "filename": "jwt/jwt.go",
+          "offset": 3032,
+          "line": 84,
+          "column": 37
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "Verify",
+        "receiver": "*clerkVerifier",
+        "position": {
+          "filename": "auth.go",
+          "offset": 2761,
+          "line": 76,
+          "column": 27
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "authInterceptor$1$1",
+        "position": {
+          "filename": "auth.go",
+          "offset": 1876,
+          "line": 48,
+          "column": 28
+        }
+      },
+      {
+        "module": "connectrpc.com/connect",
+        "version": "v1.20.0",
+        "package": "connectrpc.com/connect",
+        "function": "NewClient[example.com/app/api/gen/brewpg/nimble/v1.ListSpellsRequest, example.com/app/api/gen/brewpg/nimble/v1.ListSpellsResponse]$2",
+        "position": {
+          "filename": "client.go",
+          "offset": 5031,
+          "line": 135,
+          "column": 29
+        }
+      },
+      {
+        "module": "connectrpc.com/connect",
+        "version": "v1.20.0",
+        "package": "connectrpc.com/connect",
+        "function": "CallUnary",
+        "receiver": "*Client[example.com/app/api/gen/brewpg/nimble/v1.ListSpellsRequest, example.com/app/api/gen/brewpg/nimble/v1.ListSpellsResponse]",
+        "position": {
+          "filename": "client.go",
+          "offset": 5485,
+          "line": 153,
+          "column": 20
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api/gen/brewpg/nimble/v1/nimblev1connect",
+        "function": "ListSpells",
+        "receiver": "*spellServiceClient",
+        "position": {
+          "filename": "gen/brewpg/nimble/v1/nimblev1connect/spell.connect.go",
+          "offset": 3857,
+          "line": 82,
+          "column": 31
+        }
+      }
+    ]
+  }
+}
+{
+  "finding": {
+    "osv": "GO-2026-4945",
+    "fixed_version": "v3.0.5",
+    "trace": [
+      {
+        "module": "github.com/go-jose/go-jose/v3",
+        "version": "v3.0.4",
+        "package": "github.com/go-jose/go-jose/v3",
+        "function": "init",
+        "position": {
+          "filename": "asymmetric.go",
+          "offset": 597,
+          "line": 17,
+          "column": 1
+        }
+      },
+      {
+        "module": "github.com/clerk/clerk-sdk-go/v2",
+        "version": "v2.7.0",
+        "package": "github.com/clerk/clerk-sdk-go/v2",
+        "function": "init",
+        "position": {
+          "filename": "jwk.go",
+          "offset": 64,
+          "line": 8,
+          "column": 2
+        }
+      },
+      {
+        "module": "example.com/app/api",
+        "package": "example.com/app/api",
+        "function": "init",
+        "position": {
+          "filename": "auth.go",
+          "offset": 100,
+          "line": 12,
+          "column": 2
+        }
+      }
+    ]
+  }
+}
