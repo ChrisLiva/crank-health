@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `1ef990be72b477df6dfdf1ea506c796cdcea30ca` · crank-health 0.8.0 · quick profile
+`<repo>` @ `1ef990be72b477df6dfdf1ea506c796cdcea30ca` · crank-health 0.9.0 · quick profile
 
 Grades: security not assessed · types not assessed · dead code F · complexity D · duplication A · lint F · format C · test quality not assessed
 
@@ -35,7 +35,17 @@ Evidence: [raw/root/fallow-health.json](raw/root/fallow-health.json) · [raw/roo
 
 Verify: `npx crank-health --only complexity --fail-under A`
 
-### T3 — Fix 1 `eslint(no-const-assign)` finding
+### T3 — Format 1 file
+
+Grade impact: format · C → A
+
+- `src/unformatted.js` `prettier/format` — File does not match prettier’s default formatting
+
+Evidence: [raw/root/prettier.txt](raw/root/prettier.txt)
+
+Verify: `npx crank-health --only format --fail-under A`
+
+### T4 — Fix 1 `eslint(no-const-assign)` finding
 
 Grade impact: lint · F → A
 
@@ -45,7 +55,7 @@ Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
-### T4 — Fix 1 `eslint(no-dupe-keys)` finding
+### T5 — Fix 1 `eslint(no-dupe-keys)` finding
 
 Grade impact: lint · F → A
 
@@ -55,7 +65,7 @@ Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
-### T5 — Fix 1 `eslint(no-unreachable)` finding
+### T6 — Fix 1 `eslint(no-unreachable)` finding
 
 Grade impact: lint · F → A
 
@@ -64,16 +74,6 @@ Grade impact: lint · F → A
 Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
-
-### T6 — Format 1 file
-
-Grade impact: format · C → A
-
-- `src/unformatted.js` `prettier/format` — File does not match prettier’s default formatting
-
-Evidence: [raw/root/prettier.txt](raw/root/prettier.txt)
-
-Verify: `npx crank-health --only format --fail-under A`
 
 ---
 

@@ -1,18 +1,18 @@
 # Codebase health
 
-`<repo>` @ `3048f450a6c1c828d5fd777d2b188c80877db803` · crank-health 0.8.0 · quick profile
+`<repo>` @ `63a85c9608c26de869f36a70eee7d0f8ca7d78b7` · crank-health 0.9.0 · quick profile
 
 ## Grades
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | A | Nothing counted toward the grade. |
-| types | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
-| dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 3 functions over cognitive complexity 15 (0.0%). |
-| duplication | A | 0.0% of tokens duplicated. |
-| lint | F | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
-| format | A | 0 of 4 checked files fail the formatter (0.0%). |
+| security | A — 0 graded findings | Nothing counted toward the grade. |
+| types | F — 5 weighted findings per 0.02 KLOC | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
+| dead code | A — 0 weighted findings per 0.02 KLOC | Nothing counted toward the grade. |
+| complexity | A — 0 of 3 functions over cognitive complexity 15 | 0 of 3 functions over cognitive complexity 15 (0.0%). |
+| duplication | A — 0.0% of tokens duplicated | 0.0% of tokens duplicated. |
+| lint | F — 10 weighted findings per 0.02 KLOC | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). |
+| format | A — 0 of 4 files failing the formatter | 0 of 4 checked files fail the formatter (0.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 ### Findings by language
@@ -77,6 +77,7 @@ Nothing counted toward the grade.
 | bandit | ok | [default-config] | 1.9.4 | (services/api) |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing (services/web) |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
+| govulncheck | not available | [repo-config] | — (pinned v1.7.0) | Go toolchain absent — Go advisories graded conservatively (reachability unknown) |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (services/api, services/web) |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
@@ -109,7 +110,7 @@ Nothing counted toward the grade.
 | knip | error | [default-config] | — (pinned 6.31.0) | could not parse knip output: Unexpected token 'R', " Run `knip "... is not valid JSON (services/web) |
 | vulture | ok | [default-config] | 2.16 | (services/api) |
 
-Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-code.json) · [raw/services/web/fallow-dead-code.stderr.txt](raw/services/web/fallow-dead-code.stderr.txt) · [raw/services/web/knip.json](raw/services/web/knip.json) · [raw/services/web/knip.stderr.txt](raw/services/web/knip.stderr.txt) · [raw/services/api/vulture.txt](raw/services/api/vulture.txt)
+Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-code.json) · [raw/services/web/fallow-dead-code.stderr.txt](raw/services/web/fallow-dead-code.stderr.txt) · [raw/services/web/knip.json](raw/services/web/knip.json) · [raw/services/web/knip.stderr.txt](raw/services/web/knip.stderr.txt)
 
 ## complexity — A
 
@@ -160,7 +161,7 @@ Evidence: [raw/services/web/oxlint.sarif.json](raw/services/web/oxlint.sarif.jso
 | prettier | ok | [default-config] | 3.9.6 | (services/web) |
 | ruff-format | ok | [default-config] | 0.16.1 | (services/api) |
 
-Evidence: [raw/services/web/prettier.txt](raw/services/web/prettier.txt) · [raw/services/api/ruff-format.json](raw/services/api/ruff-format.json)
+Evidence: [raw/services/api/ruff-format.json](raw/services/api/ruff-format.json)
 
 ## test quality — not assessed
 

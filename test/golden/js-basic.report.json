@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.8.0",
+  "crankHealth": "0.9.0",
   "repo": {
     "path": "<repo>",
     "commit": "1ef990be72b477df6dfdf1ea506c796cdcea30ca"
@@ -20,7 +20,7 @@
   "categories": {
     "security": {
       "status": "not-assessed",
-      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected"
+      "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected; no go.mod in this repo, so govulncheck assessed no Go dependencies"
     },
     "types": {
       "status": "not-assessed",
@@ -51,6 +51,33 @@
       "reason": "not assessed — run `--deep`"
     }
   },
+  "gradeBasis": {
+    "dead-code": {
+      "value": 2,
+      "denominator": 0.1,
+      "unit": "weighted findings per KLOC"
+    },
+    "complexity": {
+      "value": 1,
+      "denominator": 9,
+      "unit": "functions over cognitive complexity 15"
+    },
+    "duplication": {
+      "value": 0,
+      "denominator": null,
+      "unit": "% of tokens duplicated"
+    },
+    "lint": {
+      "value": 15,
+      "denominator": 0.1,
+      "unit": "weighted findings per KLOC"
+    },
+    "format": {
+      "value": 1,
+      "denominator": 9,
+      "unit": "files failing the formatter"
+    }
+  },
   "metrics": {
     "complexity": {
       "functionsTotal": 9,
@@ -70,6 +97,28 @@
       "lint": 4,
       "format": 1
     }
+  },
+  "coverage": {
+    "files": {
+      "total": 11,
+      "assessed": 9
+    },
+    "lines": {
+      "total": 128,
+      "assessed": 100
+    },
+    "unassessed": [
+      {
+        "extension": ".json",
+        "files": 1,
+        "lines": 7
+      },
+      {
+        "extension": ".md",
+        "files": 1,
+        "lines": 21
+      }
+    ]
   },
   "projects": [
     {
@@ -158,6 +207,21 @@
       "detection": null,
       "state": "not-available",
       "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "govulncheck",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "v1.7.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no go.mod in this repo, so govulncheck assessed no Go dependencies",
       "raw": []
     },
     {

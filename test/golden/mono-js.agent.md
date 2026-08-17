@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.8.0 · quick profile
+`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.9.0 · quick profile
 
 Grades: security not assessed · types not assessed · dead code A · complexity A · duplication D · lint D · format B · test quality not assessed
 
@@ -16,7 +16,19 @@ Grades: security not assessed · types not assessed · dead code A · complexity
 
 ## Tasks
 
-### T1 — Fix 1 `eslint(no-const-assign)` finding
+### T1 — Format 1 file
+
+Project: packages/api
+
+Grade impact: format · C → A
+
+- `packages/api/src/unformatted.js` `prettier/format` — File does not match the repo’s prettier configuration
+
+Evidence: [raw/packages/api/prettier.txt](raw/packages/api/prettier.txt)
+
+Verify: `npx crank-health --only format --project packages/api --fail-under A`
+
+### T2 — Fix 1 `eslint(no-const-assign)` finding
 
 Project: packages/api
 
@@ -28,7 +40,7 @@ Evidence: [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.jso
 
 Verify: `npx crank-health --only lint --project packages/api --fail-under A`
 
-### T2 — Fix 1 `no-unused-vars` finding
+### T3 — Fix 1 `no-unused-vars` finding
 
 Project: packages/web
 
@@ -39,18 +51,6 @@ Grade impact: lint · D → A
 Evidence: [raw/packages/web/eslint.json](raw/packages/web/eslint.json)
 
 Verify: `npx crank-health --only lint --project packages/web --fail-under A`
-
-### T3 — Format 1 file
-
-Project: packages/api
-
-Grade impact: format · C → A
-
-- `packages/api/src/unformatted.js` `prettier/format` — File does not match the repo’s prettier configuration
-
-Evidence: [raw/packages/api/prettier.txt](raw/packages/api/prettier.txt)
-
-Verify: `npx crank-health --only format --project packages/api --fail-under A`
 
 ---
 

@@ -125,8 +125,9 @@ alone.
   of standing aside — counted only if no owner graded the category. A standby exists only where
   crank-health has a default of its own, which today means lint, format and types.
 
-Every finding carries `provenance: "repo-config" | "default-config"` and a `gradeScope` flag, and
-when a default tool steps aside for a repo-owned one, `report.json` records that it did.
+Every finding carries `provenance: "repo-config" | "default-config"`, and whether it counted toward
+a grade is the list it is in — `findings[]` or `advisories[]`, see the schema below. When a default
+tool steps aside for a repo-owned one, `report.json` records that it did.
 
 ## Monorepos
 
@@ -168,7 +169,8 @@ usage error (exit 2) whose message lists the projects discovery did find.
 
 Three formula shapes, one constant table (`src/core/grade.ts`), no composite score. Density
 categories weight findings by severity — critical and error ×5, warning ×1, info ×0.2 — and divide
-by KLOC of analyzed source. Only `gradeScope` findings count.
+by KLOC of analyzed source. Only the graded findings count — the rows in `findings[]`, never the
+advisory ones.
 
 | Category     | Measure                                     | A     | B    | C    | D    | F    |
 | ------------ | ------------------------------------------- | ----- | ---- | ---- | ---- | ---- |
@@ -217,7 +219,7 @@ and the reasoning, are in the comments on `GRADE_TABLE`. Changing a threshold is
 One rule depends on what the repo _is_ rather than on what is in it. A root `package.json` that
 declares `exports`, `module` or `types` — or a `main` without `private: true` — marks the repo a
 **library**, whose published surface is its product rather than dead code. An unused
-export in a library is therefore advisory — reported, `gradeScope` false — rather than graded, and
+export in a library is therefore advisory — reported in `advisories[]` — rather than graded, and
 no repo is marked down for publishing what it exists to publish. A repo-owned dead-code config
 overrides that: a repo that configured knip or fallow itself has already declared where its entry
 points are, so its own tool's findings count. Changing this rule is a version bump too.

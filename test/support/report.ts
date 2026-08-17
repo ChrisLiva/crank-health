@@ -98,7 +98,5 @@ const FIXED_TIMINGS = {
 export async function readGoldenReport(name: string): Promise<Report> {
   const url = new URL(`../golden/${name}.report.json`, import.meta.url)
   const golden = JSON.parse(await readFile(url, 'utf8')) as Report
-  // A report carrying no `gradeBasis` says no category has one — the empty map
-  // rather than a missing key, so the renderers read a well-formed report.
-  return { ...golden, gradeBasis: golden.gradeBasis ?? {}, timings: FIXED_TIMINGS }
+  return { ...golden, timings: FIXED_TIMINGS }
 }

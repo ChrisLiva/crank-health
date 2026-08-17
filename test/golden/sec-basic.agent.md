@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `1cb090abdb6af232c7f51dac1b38b5ec22c2e25f` · crank-health 0.8.0 · quick profile
+`<repo>` @ `1cb090abdb6af232c7f51dac1b38b5ec22c2e25f` · crank-health 0.9.0 · quick profile
 
 Grades: security D · types A · dead code A · complexity A · duplication F · lint F · format A · test quality not assessed
 
@@ -14,7 +14,27 @@ Grades: security D · types A · dead code A · complexity A · duplication F ·
 
 ## Tasks
 
-### T1 — Fix 1 `B602` finding reported by bandit
+### T1 — De-duplicate 1 copied block
+
+Grade impact: duplication · F → A
+
+- `src/handler.js:5` `jscpd/duplicate-block` — 11 lines (111 tokens) duplicated from src/report.js:1-11 [advisory]
+
+Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
+
+Verify: `npx crank-health --only duplication --fail-under A`
+
+### T2 — Fix 1 `eslint(no-eval)` finding
+
+Grade impact: lint · F → A
+
+- `src/handler.js:2` `eslint(no-eval)` — eval can be harmful.
+
+Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
+
+Verify: `npx crank-health --only lint --fail-under A`
+
+### T3 — Fix 1 `B602` finding reported by bandit
 
 Grade impact: security · D → A
 
@@ -24,7 +44,7 @@ Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T2 — Fix 1 `dangerous-triggers` finding reported by zizmor
+### T4 — Fix 1 `dangerous-triggers` finding reported by zizmor
 
 Grade impact: security · D → A
 
@@ -34,7 +54,7 @@ Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stder
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T3 — Fix 1 `artipacked` finding reported by zizmor
+### T5 — Fix 1 `artipacked` finding reported by zizmor
 
 Grade impact: security · D → A
 
@@ -44,7 +64,7 @@ Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stder
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T4 — Fix 1 `excessive-permissions` finding reported by zizmor
+### T6 — Fix 1 `excessive-permissions` finding reported by zizmor
 
 Grade impact: security · D → A
 
@@ -54,7 +74,7 @@ Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stder
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T5 — Fix 1 `unpinned-uses` finding reported by zizmor
+### T7 — Fix 1 `unpinned-uses` finding reported by zizmor
 
 Grade impact: security · D → A
 
@@ -64,15 +84,16 @@ Evidence: [raw/repo/zizmor.json](raw/repo/zizmor.json) · [raw/repo/zizmor.stder
 
 Verify: `npx crank-health --only security --fail-under A`
 
-### T6 — Fix 1 `eslint(no-eval)` finding
+### T8 — Reduce the complexity of 2 functions
 
-Grade impact: lint · F → A
+Grade impact: complexity · A → A
 
-- `src/handler.js:2` `eslint(no-eval)` — eval can be harmful.
+- `src/handler.js:5` `fallow/complexity` — Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15 [advisory]
+- `src/report.js:1` `fallow/complexity` — Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15 [advisory]
 
-Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
+Evidence: [raw/root/fallow-health.json](raw/root/fallow-health.json) · [raw/root/fallow-health.stderr.txt](raw/root/fallow-health.stderr.txt)
 
-Verify: `npx crank-health --only lint --fail-under A`
+Verify: `npx crank-health --only complexity --fail-under A`
 
 ---
 

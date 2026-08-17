@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.8.0",
+  "crankHealth": "0.9.0",
   "repo": {
     "path": "<repo>",
     "commit": "1cb090abdb6af232c7f51dac1b38b5ec22c2e25f"
@@ -51,6 +51,43 @@
       "reason": "not assessed — run `--deep`"
     }
   },
+  "gradeBasis": {
+    "security": {
+      "value": 5,
+      "denominator": null,
+      "unit": "graded findings"
+    },
+    "types": {
+      "value": 0,
+      "denominator": 0.057,
+      "unit": "weighted findings per KLOC"
+    },
+    "dead-code": {
+      "value": 0,
+      "denominator": 0.057,
+      "unit": "weighted findings per KLOC"
+    },
+    "complexity": {
+      "value": 0,
+      "denominator": 5,
+      "unit": "functions over cognitive complexity 15"
+    },
+    "duplication": {
+      "value": 47.03389830508475,
+      "denominator": null,
+      "unit": "% of tokens duplicated"
+    },
+    "lint": {
+      "value": 5,
+      "denominator": 0.057,
+      "unit": "weighted findings per KLOC"
+    },
+    "format": {
+      "value": 0,
+      "denominator": 5,
+      "unit": "files failing the formatter"
+    }
+  },
   "metrics": {
     "complexity": {
       "functionsTotal": 5,
@@ -72,6 +109,33 @@
     "python": {
       "security": 2
     }
+  },
+  "coverage": {
+    "files": {
+      "total": 9,
+      "assessed": 5
+    },
+    "lines": {
+      "total": 139,
+      "assessed": 57
+    },
+    "unassessed": [
+      {
+        "extension": ".json",
+        "files": 2,
+        "lines": 29
+      },
+      {
+        "extension": ".md",
+        "files": 1,
+        "lines": 42
+      },
+      {
+        "extension": ".yml",
+        "files": 1,
+        "lines": 11
+      }
+    ]
   },
   "projects": [
     {
@@ -162,6 +226,21 @@
       "detection": null,
       "state": "not-available",
       "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "govulncheck",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "v1.7.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no go.mod in this repo, so govulncheck assessed no Go dependencies",
       "raw": []
     },
     {
@@ -300,9 +379,7 @@
       "detection": null,
       "state": "ok",
       "reason": null,
-      "raw": [
-        "raw/root/vulture.txt"
-      ]
+      "raw": []
     },
     {
       "tool": "complexipy",
@@ -428,9 +505,7 @@
       "detection": null,
       "state": "ok",
       "reason": null,
-      "raw": [
-        "raw/root/prettier.txt"
-      ]
+      "raw": []
     },
     {
       "tool": "ruff-format",
@@ -592,7 +667,10 @@
         "endCol": 7
       },
       "message": "Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15",
-      "provenance": "default-config"
+      "provenance": "default-config",
+      "related": [
+        "f648d0bedc2bbfc0"
+      ]
     },
     {
       "id": "1a049eddda02e343",
@@ -627,6 +705,9 @@
       },
       "message": "11 lines (111 tokens) duplicated from src/report.js:1-11",
       "provenance": "default-config",
+      "related": [
+        "63fe04c8cfe6dfd3"
+      ],
       "fixHint": "Extract the duplicated block into a shared function or module"
     }
   ],

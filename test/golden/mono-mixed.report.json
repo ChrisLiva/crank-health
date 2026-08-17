@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.8.0",
+  "crankHealth": "0.9.0",
   "repo": {
     "path": "<repo>",
-    "commit": "3048f450a6c1c828d5fd777d2b188c80877db803"
+    "commit": "63a85c9608c26de869f36a70eee7d0f8ca7d78b7"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -51,6 +51,43 @@
       "reason": "not assessed — run `--deep`"
     }
   },
+  "gradeBasis": {
+    "security": {
+      "value": 0,
+      "denominator": null,
+      "unit": "graded findings"
+    },
+    "types": {
+      "value": 5,
+      "denominator": 0.02,
+      "unit": "weighted findings per KLOC"
+    },
+    "dead-code": {
+      "value": 0,
+      "denominator": 0.02,
+      "unit": "weighted findings per KLOC"
+    },
+    "complexity": {
+      "value": 0,
+      "denominator": 3,
+      "unit": "functions over cognitive complexity 15"
+    },
+    "duplication": {
+      "value": 0,
+      "denominator": null,
+      "unit": "% of tokens duplicated"
+    },
+    "lint": {
+      "value": 10,
+      "denominator": 0.02,
+      "unit": "weighted findings per KLOC"
+    },
+    "format": {
+      "value": 0,
+      "denominator": 4,
+      "unit": "files failing the formatter"
+    }
+  },
   "metrics": {
     "complexity": {
       "functionsTotal": 3,
@@ -71,6 +108,38 @@
       "types": 1,
       "lint": 1
     }
+  },
+  "coverage": {
+    "files": {
+      "total": 8,
+      "assessed": 4
+    },
+    "lines": {
+      "total": 66,
+      "assessed": 20
+    },
+    "unassessed": [
+      {
+        "extension": ".json",
+        "files": 1,
+        "lines": 7
+      },
+      {
+        "extension": ".md",
+        "files": 1,
+        "lines": 31
+      },
+      {
+        "extension": ".mod",
+        "files": 1,
+        "lines": 3
+      },
+      {
+        "extension": ".toml",
+        "files": 1,
+        "lines": 5
+      }
+    ]
   },
   "projects": [
     {
@@ -236,6 +305,27 @@
       "raw": []
     },
     {
+      "tool": "govulncheck",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "repo-config",
+      "version": null,
+      "pinned": "v1.7.0",
+      "detection": {
+        "reason": "dependency",
+        "configFiles": [],
+        "ownedVia": "services/go-api/go.mod",
+        "installed": false,
+        "version": null
+      },
+      "state": "not-available",
+      "reason": "Go toolchain absent — Go advisories graded conservatively (reachability unknown)",
+      "raw": []
+    },
+    {
       "tool": "opengrep",
       "category": "security",
       "scope": "common",
@@ -383,9 +473,7 @@
       "detection": null,
       "state": "ok",
       "reason": null,
-      "raw": [
-        "raw/services/api/vulture.txt"
-      ]
+      "raw": []
     },
     {
       "tool": "complexipy",
@@ -544,9 +632,7 @@
       "detection": null,
       "state": "ok",
       "reason": null,
-      "raw": [
-        "raw/services/web/prettier.txt"
-      ]
+      "raw": []
     },
     {
       "tool": "ruff-format",
@@ -581,7 +667,10 @@
         "endCol": 35
       },
       "message": "Name `missing_name` used when not defined",
-      "provenance": "default-config"
+      "provenance": "default-config",
+      "related": [
+        "07af5e4f619dc8dd"
+      ]
     },
     {
       "id": "07af5e4f619dc8dd",
@@ -599,6 +688,9 @@
       },
       "message": "Undefined name `missing_name`",
       "provenance": "default-config",
+      "related": [
+        "583a56acd40665f9"
+      ],
       "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
     },
     {

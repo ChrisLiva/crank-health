@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `3048f450a6c1c828d5fd777d2b188c80877db803` · crank-health 0.8.0 · quick profile
+`<repo>` @ `63a85c9608c26de869f36a70eee7d0f8ca7d78b7` · crank-health 0.9.0 · quick profile
 
 Grades: security A · types F · dead code A · complexity A · duplication A · lint F · format A · test quality not assessed
 
@@ -14,31 +14,20 @@ Grades: security A · types F · dead code A · complexity A · duplication A ·
 
 ## Tasks
 
-### T1 — Fix 1 `unresolved-reference` type error
+### T1 — Fix 1 `unresolved-reference` type error, and 1 finding in lint at the same place
 
 Project: services/api
 
 Grade impact: types · F → A
 
 - `services/api/greet.py:2` `unresolved-reference` — Name `missing_name` used when not defined
+- `services/api/greet.py:2` `F821` — Undefined name `missing_name`
 
-Evidence: [raw/services/api/ty.gitlab.json](raw/services/api/ty.gitlab.json)
+Evidence: [raw/services/api/ruff-lint.json](raw/services/api/ruff-lint.json) · [raw/services/api/ty.gitlab.json](raw/services/api/ty.gitlab.json)
 
 Verify: `npx crank-health --only types --project services/api --fail-under A`
 
-### T2 — Fix 1 `F821` finding
-
-Project: services/api
-
-Grade impact: lint · F → A
-
-- `services/api/greet.py:2` `F821` — Undefined name `missing_name`
-
-Evidence: [raw/services/api/ruff-lint.json](raw/services/api/ruff-lint.json)
-
-Verify: `npx crank-health --only lint --project services/api --fail-under A`
-
-### T3 — Fix 1 `eslint(no-dupe-keys)` finding
+### T2 — Fix 1 `eslint(no-dupe-keys)` finding
 
 Project: services/web
 

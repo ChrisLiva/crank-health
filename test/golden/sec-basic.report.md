@@ -1,18 +1,18 @@
 # Codebase health
 
-`<repo>` @ `1cb090abdb6af232c7f51dac1b38b5ec22c2e25f` · crank-health 0.8.0 · quick profile
+`<repo>` @ `1cb090abdb6af232c7f51dac1b38b5ec22c2e25f` · crank-health 0.9.0 · quick profile
 
 ## Grades
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | D | 5 graded findings (2 error, 3 warning). 1 advisory finding did not count toward the grade. |
-| types | A | Nothing counted toward the grade. |
-| dead code | A | Nothing counted toward the grade. |
-| complexity | A | 0 of 5 functions over cognitive complexity 15 (0.0%). 2 advisory findings did not count toward the grade. |
-| duplication | F | 47.0% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
-| lint | F | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
-| format | A | 0 of 5 checked files fail the formatter (0.0%). |
+| security | D — 5 graded findings | 5 graded findings (2 error, 3 warning). 1 advisory finding did not count toward the grade. |
+| types | A — 0 weighted findings per 0.057 KLOC | Nothing counted toward the grade. |
+| dead code | A — 0 weighted findings per 0.057 KLOC | Nothing counted toward the grade. |
+| complexity | A — 0 of 5 functions over cognitive complexity 15 | 0 of 5 functions over cognitive complexity 15 (0.0%). 2 advisory findings did not count toward the grade. |
+| duplication | F — 47.0% of tokens duplicated | 47.0% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
+| lint | F — 5 weighted findings per 0.057 KLOC | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
+| format | A — 0 of 5 files failing the formatter | 0 of 5 checked files fail the formatter (0.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 ### Findings by language
@@ -39,6 +39,7 @@
 | --- | --- | --- | --- | --- |
 | bandit | ok | [default-config] | 1.9.4 | — |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
+| govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | ok | [default-config] | 1.29.0 | — |
@@ -85,7 +86,7 @@ Nothing counted toward the grade.
 | knip | ok | [default-config] | 6.31.0 | — |
 | vulture | ok | [default-config] | 2.16 | — |
 
-Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json) · [raw/root/vulture.txt](raw/root/vulture.txt)
+Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json)
 
 ## complexity — A
 
@@ -144,7 +145,7 @@ Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json) · [raw/root/
 | prettier | ok | [default-config] | 3.9.6 | — |
 | ruff-format | ok | [default-config] | 0.16.1 | — |
 
-Evidence: [raw/root/prettier.txt](raw/root/prettier.txt) · [raw/root/ruff-format.json](raw/root/ruff-format.json)
+Evidence: [raw/root/ruff-format.json](raw/root/ruff-format.json)
 
 ## test quality — not assessed
 

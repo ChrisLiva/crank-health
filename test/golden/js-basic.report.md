@@ -1,18 +1,18 @@
 # Codebase health
 
-`<repo>` @ `1ef990be72b477df6dfdf1ea506c796cdcea30ca` · crank-health 0.8.0 · quick profile
+`<repo>` @ `1ef990be72b477df6dfdf1ea506c796cdcea30ca` · crank-health 0.9.0 · quick profile
 
 ## Grades
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected; no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
-| dead code | F | 2 graded findings (2 warning), weighted total 2 (error ×5, warning ×1, info ×0.2). |
-| complexity | D | 1 of 9 functions over cognitive complexity 15 (11.1%). |
-| duplication | A | 0.0% of tokens duplicated. |
-| lint | F | 3 graded findings (3 error), weighted total 15 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade. |
-| format | C | 1 of 9 checked files fail the formatter (11.1%). |
+| dead code | F — 2 weighted findings per 0.1 KLOC | 2 graded findings (2 warning), weighted total 2 (error ×5, warning ×1, info ×0.2). |
+| complexity | D — 1 of 9 functions over cognitive complexity 15 | 1 of 9 functions over cognitive complexity 15 (11.1%). |
+| duplication | A — 0.0% of tokens duplicated | 0.0% of tokens duplicated. |
+| lint | F — 15 weighted findings per 0.1 KLOC | 3 graded findings (3 error), weighted total 15 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade. |
+| format | C — 1 of 9 files failing the formatter | 1 of 9 checked files fail the formatter (11.1%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 ### Measurements
@@ -23,12 +23,13 @@
 
 ## security — not assessed
 
-Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected
+Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected; no go.mod in this repo, so govulncheck assessed no Go dependencies
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
+| govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |

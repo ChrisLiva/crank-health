@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.8.0",
+  "crankHealth": "0.9.0",
   "repo": {
     "path": "<repo>",
     "commit": "b56bfa4385957a69ba6c188096dd29abd4eecf1b"
@@ -51,6 +51,43 @@
       "reason": "not assessed — run `--deep`"
     }
   },
+  "gradeBasis": {
+    "security": {
+      "value": 0,
+      "denominator": null,
+      "unit": "graded findings"
+    },
+    "types": {
+      "value": 5,
+      "denominator": 0.062,
+      "unit": "weighted findings per KLOC"
+    },
+    "dead-code": {
+      "value": 1,
+      "denominator": 0.062,
+      "unit": "weighted findings per KLOC"
+    },
+    "complexity": {
+      "value": 1,
+      "denominator": 7,
+      "unit": "functions over cognitive complexity 15"
+    },
+    "duplication": {
+      "value": 0,
+      "denominator": null,
+      "unit": "% of tokens duplicated"
+    },
+    "lint": {
+      "value": 6,
+      "denominator": 0.062,
+      "unit": "weighted findings per KLOC"
+    },
+    "format": {
+      "value": 1,
+      "denominator": 6,
+      "unit": "files failing the formatter"
+    }
+  },
   "metrics": {
     "complexity": {
       "functionsTotal": 7,
@@ -71,6 +108,28 @@
       "lint": 2,
       "format": 1
     }
+  },
+  "coverage": {
+    "files": {
+      "total": 8,
+      "assessed": 6
+    },
+    "lines": {
+      "total": 91,
+      "assessed": 62
+    },
+    "unassessed": [
+      {
+        "extension": ".md",
+        "files": 1,
+        "lines": 24
+      },
+      {
+        "extension": ".toml",
+        "files": 1,
+        "lines": 5
+      }
+    ]
   },
   "projects": [
     {
@@ -160,6 +219,21 @@
       "detection": null,
       "state": "not-available",
       "reason": "gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected",
+      "raw": []
+    },
+    {
+      "tool": "govulncheck",
+      "category": "security",
+      "scope": "common",
+      "project": "repo",
+      "repoWide": true,
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "v1.7.0",
+      "detection": null,
+      "state": "not-available",
+      "reason": "no go.mod in this repo, so govulncheck assessed no Go dependencies",
       "raw": []
     },
     {
@@ -334,7 +408,10 @@
         "endCol": 35
       },
       "message": "Name `missing_name` used when not defined",
-      "provenance": "default-config"
+      "provenance": "default-config",
+      "related": [
+        "ed2b10e9d447ad4e"
+      ]
     },
     {
       "id": "7e7d79fc1bfb7e4d",
@@ -351,7 +428,10 @@
         "endCol": 1
       },
       "message": "Unused import `os` (90% confidence)",
-      "provenance": "default-config"
+      "provenance": "default-config",
+      "related": [
+        "02f45494e8b91de1"
+      ]
     },
     {
       "id": "9270563a9545a99b",
@@ -386,6 +466,9 @@
       },
       "message": "`os` imported but unused",
       "provenance": "default-config",
+      "related": [
+        "7e7d79fc1bfb7e4d"
+      ],
       "fixHint": "see https://docs.astral.sh/ruff/rules/unused-import"
     },
     {
@@ -404,6 +487,9 @@
       },
       "message": "Undefined name `missing_name`",
       "provenance": "default-config",
+      "related": [
+        "748144d089911a47"
+      ],
       "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
     },
     {

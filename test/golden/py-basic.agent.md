@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `b56bfa4385957a69ba6c188096dd29abd4eecf1b` · crank-health 0.8.0 · quick profile
+`<repo>` @ `b56bfa4385957a69ba6c188096dd29abd4eecf1b` · crank-health 0.9.0 · quick profile
 
 Grades: security A · types F · dead code F · complexity D · duplication A · lint F · format C · test quality not assessed
 
@@ -14,23 +14,25 @@ Grades: security A · types F · dead code F · complexity D · duplication A ·
 
 ## Tasks
 
-### T1 — Fix 1 `unresolved-reference` type error
+### T1 — Fix 1 `unresolved-reference` type error, and 1 finding in lint at the same place
 
 Grade impact: types · F → A
 
 - `undefined_name.py:2` `unresolved-reference` — Name `missing_name` used when not defined
+- `undefined_name.py:2` `F821` — Undefined name `missing_name`
 
-Evidence: [raw/root/ty.gitlab.json](raw/root/ty.gitlab.json)
+Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json) · [raw/root/ty.gitlab.json](raw/root/ty.gitlab.json)
 
 Verify: `npx crank-health --only types --fail-under A`
 
-### T2 — Remove 1 unused import
+### T2 — Remove 1 unused import, and 1 finding in lint at the same place
 
 Grade impact: dead code · F → A
 
 - `dead.py` `vulture/unused-import` — Unused import `os` (90% confidence)
+- `dead.py:1` `F401` — `os` imported but unused
 
-Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
+Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json) · [raw/root/vulture.txt](raw/root/vulture.txt)
 
 Verify: `npx crank-health --only dead-code --fail-under A`
 
@@ -44,27 +46,7 @@ Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/comp
 
 Verify: `npx crank-health --only complexity --fail-under A`
 
-### T4 — Fix 1 `F821` finding
-
-Grade impact: lint · F → A
-
-- `undefined_name.py:2` `F821` — Undefined name `missing_name`
-
-Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
-
-Verify: `npx crank-health --only lint --fail-under A`
-
-### T5 — Fix 1 `F401` finding
-
-Grade impact: lint · F → A
-
-- `dead.py:1` `F401` — `os` imported but unused
-
-Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
-
-Verify: `npx crank-health --only lint --fail-under A`
-
-### T6 — Format 1 file
+### T4 — Format 1 file
 
 Grade impact: format · C → A
 

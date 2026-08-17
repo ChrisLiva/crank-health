@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `<sha>` · crank-health 0.8.0 · quick profile · PR vs `main` (merge-base `<short>`)
+`<repo>` @ `<sha>` · crank-health 0.9.0 · quick profile · PR vs `main` (merge-base `<short>`)
 
 ## Grades
 

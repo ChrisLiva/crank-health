@@ -1,18 +1,18 @@
 # Codebase health
 
-`<repo>` @ `1624281eaabc18eb08af09502955981d65aa1ca4` · crank-health 0.8.0 · quick profile
+`<repo>` @ `1624281eaabc18eb08af09502955981d65aa1ca4` · crank-health 0.9.0 · quick profile
 
 ## Grades
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; no JavaScript, TypeScript or Python files, so opengrep assessed nothing; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; no JavaScript, TypeScript or Python files, so opengrep assessed nothing; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected; no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | types | not assessed | not assessed — run `--deep` |
 | dead code | not assessed | not assessed — run `--deep` |
 | complexity | not assessed | not assessed — run `--deep` |
-| duplication | D | 18.4% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
+| duplication | D — 18.4% of tokens duplicated | 18.4% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | not assessed | not assessed — run `--deep` |
-| format | C | 1 of 8 checked files fail the formatter (12.5%). |
+| format | C — 1 of 8 files failing the formatter | 1 of 8 checked files fail the formatter (12.5%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
 ### Measurements
@@ -22,12 +22,13 @@
 
 ## security — not assessed
 
-Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; no JavaScript, TypeScript or Python files, so opengrep assessed nothing; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected
+Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; no JavaScript, TypeScript or Python files, so opengrep assessed nothing; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected; no go.mod in this repo, so govulncheck assessed no Go dependencies
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
+| govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | no JavaScript, TypeScript or Python files, so opengrep assessed nothing |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
