@@ -87,18 +87,18 @@ does: that category was answered for the repo, and the repo's answer is gated in
 
 ## Categories and tools
 
-Eight categories. 25 analyzers run in the quick profile, 6 more in `--deep`.
+Eight categories. 26 analyzers run in the quick profile, 6 more in `--deep`.
 
-| Category                | JS/TS                                            | Python                                                    | C#                                       | Both                                       |
-| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------ |
-| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) |                                            |
-| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     | `dotnet format whitespace`               |                                            |
-| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) | `dotnet build` (CS diagnostics)          |                                            |
-| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            | `roslynator find-symbol --unused`        |                                            |
-| Complexity              | fallow health · fta                              | complexipy                                                | `dotnet build` + NetAnalyzers (CA1502)   |                                            |
-| Duplication             |                                                  |                                                           |                                          | jscpd                                      |
-| Security                |                                                  | bandit · ruff `S` rules                                   |                                          | gitleaks · opengrep · zizmor · osv-scanner |
-| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   | Stryker.NET (repo-owned)                 |                                            |
+| Category                | JS/TS                                            | Python                                                    | C#                                       | Both                                                          |
+| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) |                                                               |
+| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     | `dotnet format whitespace`               |                                                               |
+| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) | `dotnet build` (CS diagnostics)          |                                                               |
+| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            | `roslynator find-symbol --unused`        |                                                               |
+| Complexity              | fallow health · fta                              | complexipy                                                | `dotnet build` + NetAnalyzers (CA1502)   |                                                               |
+| Duplication             |                                                  |                                                           |                                          | jscpd                                                         |
+| Security                |                                                  | bandit · ruff `S` rules                                   |                                          | gitleaks · opengrep · zizmor · osv-scanner · govulncheck (Go) |
+| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   | Stryker.NET (repo-owned)                 |                                                               |
 
 The build-backed C# categories — lint, types, complexity, dead code — need MSBuild, which executes a
 project's own build logic, so they run only under `--deep`; the quick profile grades C# format and
@@ -267,6 +267,19 @@ affected ranges; a package **no** published version fixes is not work anyone can
 down — that tier reads every finding, graded or not). Identity is `package@version`, so a CVE
 published against a pin nobody touched is not a new finding on the next PR scan.
 
+**Go advisories say whether the code can reach them.** Where the repo has a `go.mod` and `go` is on
+`PATH`, crank-health runs the pinned `golang.org/x/vuln/cmd/govulncheck` in each module and records
+its verdict on every advisory it recognizes, as `packageAdvisories[].reachability`:
+`symbol-reachable` (govulncheck traced a call to the vulnerable symbol), `imported-no-call` (the
+package is imported, the symbol never called), or `not-imported`. The join to osv-scanner's rows is
+by alias intersection — govulncheck files `GO-2026-4945` where osv-scanner files
+`GHSA-78h2-9frx-2jm8` — and an advisory only govulncheck knows is appended to the same package row.
+Only `symbol-reachable` and _no verdict at all_ count toward the security grade: a package whose
+every advisory is unreachable moves to `advisories[]` with the verdict in its message, and a machine
+without `go` gives no verdicts, so every Go advisory grades exactly as it would have. The verdicts
+are recorded verbatim; govulncheck over-claims when a database record carries no symbol information,
+and second-guessing it locally would replace a checkable answer with an unfalsifiable one.
+
 **`related[]` says when two categories are talking about one place.** A finding whose file and line
 range overlap another finding's, in a _different_ category — the function over the complexity ceiling
 that also fails the type checker — carries that finding's id, and it carries yours. Sorted, absent
@@ -336,6 +349,10 @@ brew install gitleaks       # secret scanning
 brew install opengrep       # SAST
 brew install osv-scanner    # dependency vulnerabilities
 ```
+
+The Go toolchain is the same kind of prerequisite: govulncheck is pinned and fetched by `go run`
+itself, so a machine with no `go` reports `Go toolchain absent — Go advisories graded conservatively
+(reachability unknown)` and every Go advisory keeps counting toward the grade.
 
 An owner crank-health declines to impose is the other way a tool goes missing. ESLint and Biome are
 never imposed on a repo that did not choose them, and an owner declared without an install may never
