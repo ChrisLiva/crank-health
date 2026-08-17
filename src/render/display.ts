@@ -194,12 +194,18 @@ export function stateLabel(state: CategoryState): string {
  * vulnerability scanner — report the range 1:1:1:1. Printing `package-lock.json:1`
  * would invent a location the reader then goes and looks at.
  */
-export function location(finding: Finding): string {
+export function location(finding: Located): string {
   return isFileLevel(finding) ? finding.file : `${finding.file}:${finding.range.startLine}`
 }
 
+/**
+ * What {@link location} needs of a finding — the serialized row shape as much as
+ * the core's, so `report.json`'s rows can be rendered without being rebuilt.
+ */
+export type Located = Pick<Finding, 'file' | 'range'>
+
 /** True when the range carries no real position; see {@link location}. */
-export function isFileLevel(finding: Finding): boolean {
+export function isFileLevel(finding: Located): boolean {
   const { startLine, startCol, endLine, endCol } = finding.range
   return startLine === 1 && startCol === 1 && endLine === 1 && endCol === 1
 }

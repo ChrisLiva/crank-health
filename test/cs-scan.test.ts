@@ -13,6 +13,7 @@ import { createFixtureRepo } from './support/fixture.ts'
 import { pathFarm } from './support/path-farm.ts'
 import { expectGolden, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * The C# adapter end to end, on the machine's own .NET SDK: every planted
@@ -88,7 +89,7 @@ describe('quick scan of the cs-basic fixture', () => {
     unformattedBefore = await readFile(join(fixture.root, 'unformatted.cs'), 'utf8')
     scan = await runHealthScan({ path: fixture.root, out: outside })
     json = scan.json
-    findings = scan.report.findings
+    findings = reportFindings(scan.report)
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -109,7 +110,7 @@ describe('quick scan of the cs-basic fixture', () => {
 
   it('reports one C#-language project, and scopes every C# tool record to it', () => {
     const report = parse(json)
-    expect(report.schemaVersion).toBe(1)
+    expect(report.schemaVersion).toBe(2)
     expect(report.projects).toHaveLength(1)
     expect(report.projects[0]?.path).toBe('.')
     expect(report.projects[0]?.languages).toEqual(['csharp'])
@@ -244,7 +245,7 @@ describe('quick scan of the cs-basic fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root, out: outsideAgain })
       expect(normalizeReport(second.json)).toBe(normalizeReport(json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
         findings.map((finding) => finding.id),
       )
     },
@@ -447,9 +448,9 @@ describe('quick scan of the mixed-cs fixture', () => {
   })
 
   it('finds every planted finding, and nothing else', () => {
-    expect(scan.report.findings.filter(fromAlwaysAvailableTool).map(shapeWithProject)).toEqual(
-      MIXED_CS_PLANTED.map((planted) => ({ ...planted })),
-    )
+    expect(
+      reportFindings(scan.report).filter(fromAlwaysAvailableTool).map(shapeWithProject),
+    ).toEqual(MIXED_CS_PLANTED.map((planted) => ({ ...planted })))
   })
 
   /**
@@ -523,8 +524,8 @@ describe('quick scan of the mixed-cs fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
-        scan.report.findings.map((finding) => finding.id),
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
+        reportFindings(scan.report).map((finding) => finding.id),
       )
     },
     SCAN_TIMEOUT_MS,

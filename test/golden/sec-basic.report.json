@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -466,7 +466,6 @@
       },
       "message": "Use of fundamentally insecure workflow trigger — pull_request_target is almost always used insecurely (high severity, medium confidence)",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.zizmor.sh/audits/#dangerous-triggers"
     },
     {
@@ -485,7 +484,6 @@
       },
       "message": "Overly broad permissions — default permissions used due to no permissions: block (medium severity, medium confidence)",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.zizmor.sh/audits/#excessive-permissions"
     },
     {
@@ -504,7 +502,6 @@
       },
       "message": "Credential persistence through GitHub Actions artifacts — does not set persist-credentials: false (medium severity, low confidence)",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.zizmor.sh/audits/#artipacked"
     },
     {
@@ -523,27 +520,7 @@
       },
       "message": "Unpinned action reference — action is not pinned to a hash (required by blanket policy) (high severity, high confidence)",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.zizmor.sh/audits/#unpinned-uses"
-    },
-    {
-      "id": "13559debab826f4d",
-      "category": "security",
-      "tool": "bandit",
-      "rule": "B404",
-      "severity": "info",
-      "file": "src/config.py",
-      "project": ".",
-      "range": {
-        "startLine": 3,
-        "startCol": 1,
-        "endLine": 3,
-        "endCol": 18
-      },
-      "message": "Consider possible security implications associated with the subprocess module. (low severity, high confidence)",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "see https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess"
     },
     {
       "id": "2dda43453c99d548",
@@ -561,8 +538,44 @@
       },
       "message": "subprocess call with shell=True identified, security issue. (high severity, high confidence)",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://bandit.readthedocs.io/en/1.9.4/plugins/b602_subprocess_popen_with_shell_equals_true.html"
+    },
+    {
+      "id": "d75f17f00a64cade",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "eslint(no-eval)",
+      "severity": "error",
+      "file": "src/handler.js",
+      "project": ".",
+      "range": {
+        "startLine": 2,
+        "startCol": 10,
+        "endLine": 2,
+        "endCol": 14
+      },
+      "message": "eval can be harmful.",
+      "provenance": "default-config"
+    }
+  ],
+  "advisories": [
+    {
+      "id": "13559debab826f4d",
+      "category": "security",
+      "tool": "bandit",
+      "rule": "B404",
+      "severity": "info",
+      "file": "src/config.py",
+      "project": ".",
+      "range": {
+        "startLine": 3,
+        "startCol": 1,
+        "endLine": 3,
+        "endCol": 18
+      },
+      "message": "Consider possible security implications associated with the subprocess module. (low severity, high confidence)",
+      "provenance": "default-config",
+      "fixHint": "see https://bandit.readthedocs.io/en/1.9.4/blacklists/blacklist_imports.html#b404-import-subprocess"
     },
     {
       "id": "63fe04c8cfe6dfd3",
@@ -579,8 +592,7 @@
         "endCol": 7
       },
       "message": "Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
+      "provenance": "default-config"
     },
     {
       "id": "1a049eddda02e343",
@@ -597,8 +609,7 @@
         "endCol": 7
       },
       "message": "Function `summarize` has cognitive complexity 5 (cyclomatic 5); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
+      "provenance": "default-config"
     },
     {
       "id": "f648d0bedc2bbfc0",
@@ -616,26 +627,7 @@
       },
       "message": "11 lines (111 tokens) duplicated from src/report.js:1-11",
       "provenance": "default-config",
-      "gradeScope": false,
       "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
-      "id": "d75f17f00a64cade",
-      "category": "lint",
-      "tool": "oxlint",
-      "rule": "eslint(no-eval)",
-      "severity": "error",
-      "file": "src/handler.js",
-      "project": ".",
-      "range": {
-        "startLine": 2,
-        "startCol": 10,
-        "endLine": 2,
-        "endCol": 14
-      },
-      "message": "eval can be harmful.",
-      "provenance": "default-config",
-      "gradeScope": true
     }
   ],
   "warnings": []

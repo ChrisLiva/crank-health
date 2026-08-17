@@ -13,6 +13,7 @@ import type { HistoryRepo } from './support/history.ts'
 import { createHistoryRepo } from './support/history.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * The four spec-level executable promises, on the fixtures that exercise the
@@ -119,7 +120,7 @@ describe('quick scan of the js-basic fixture', () => {
     outside = await mkdtemp(join(tmpdir(), 'crank-out-'))
     scan = await runHealthScan({ path: fixture.root })
     json = scan.json
-    findings = scan.report.findings
+    findings = reportFindings(scan.report)
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -284,7 +285,7 @@ describe('quick scan of the js-basic fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
         findings.map((finding) => finding.id),
       )
     },
@@ -354,7 +355,7 @@ describe('quick scan of the js-library fixture', () => {
   beforeAll(async () => {
     fixture = await createFixtureRepo('js-library')
     scan = await runHealthScan({ path: fixture.root })
-    findings = scan.report.findings
+    findings = reportFindings(scan.report)
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -421,7 +422,7 @@ describe('quick scan of the js-library fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
         findings.map((finding) => finding.id),
       )
     },
@@ -471,7 +472,7 @@ describe('quick scan of the js-legacy-eslint fixture', () => {
   it('grades lint from the promoted standby’s findings', () => {
     expect(scan.report.categories.lint).toEqual({ status: 'graded', grade: 'F' })
     expect(
-      scan.report.findings
+      reportFindings(scan.report)
         .filter((finding) => finding.category === 'lint')
         .map((finding) => [finding.tool, finding.rule, finding.severity, finding.gradeScope]),
     ).toEqual([['oxlint', 'eslint(no-const-assign)', 'error', true]])
@@ -488,8 +489,8 @@ describe('quick scan of the js-legacy-eslint fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
-        scan.report.findings.map((finding) => finding.id),
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
+        reportFindings(scan.report).map((finding) => finding.id),
       )
     },
     SCAN_TIMEOUT_MS,
@@ -510,7 +511,7 @@ describe('quick scan of the ts-owned fixture', () => {
   })
 
   it('finds every planted finding, and nothing else', () => {
-    expect(result.report.findings.map(shape)).toEqual([
+    expect(reportFindings(result.report).map(shape)).toEqual([
       {
         category: 'types',
         tool: 'tsc',
@@ -658,7 +659,7 @@ describe('quick scan of a repo that owns two linters and a formatter', () => {
 
   /** Spec §1: "run all, merge findings … grade on the union". */
   it('merges both linters’ findings, each tagged with the tool that made it', () => {
-    const lint = result.report.findings.filter((finding) => finding.category === 'lint')
+    const lint = reportFindings(result.report).filter((finding) => finding.category === 'lint')
     expect(lint.map((finding) => [finding.tool, finding.rule, finding.file])).toEqual([
       ['eslint', 'eqeqeq', 'src/both.js'],
       ['biome-lint', 'lint/suspicious/noDoubleEquals', 'src/both.js'],
@@ -706,9 +707,9 @@ describe('quick scan of a repo that owns two linters and a formatter', () => {
   })
 
   it('grades format from Biome’s verdict alone', () => {
-    expect(result.report.findings.filter((finding) => finding.category === 'format')).toMatchObject(
-      [{ tool: 'biome-format', rule: 'biome/format', file: 'src/unformatted.js' }],
-    )
+    expect(
+      reportFindings(result.report).filter((finding) => finding.category === 'format'),
+    ).toMatchObject([{ tool: 'biome-format', rule: 'biome/format', file: 'src/unformatted.js' }])
     expect(result.report.metrics.format).toEqual({ formattableFiles: 4 })
     expect(result.report.categories.format).toEqual({ status: 'graded', grade: 'C' })
   })
@@ -787,7 +788,7 @@ describe('quick scan of a repo that owns oxlint but has not installed it', () =>
         // Their config turns correctness off and one style rule on; a repo is
         // graded on the standard it chose for itself, style rules included.
         expect(
-          result.report.findings.map((finding) => ({
+          reportFindings(result.report).map((finding) => ({
             rule: finding.rule,
             severity: finding.severity,
             provenance: finding.provenance,
@@ -907,7 +908,7 @@ async function repoWithBrokenOxlint(sabotage: string): Promise<FixtureRepo> {
 
 /** The one formatting finding a scan produced. */
 function pick(result: HealthScanResult): Finding | undefined {
-  return result.report.findings.find((finding) => finding.rule === 'prettier/format')
+  return reportFindings(result.report).find((finding) => finding.rule === 'prettier/format')
 }
 
 /**

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -650,133 +650,6 @@
   ],
   "findings": [
     {
-      "id": "fb627f16d3512edd",
-      "category": "complexity",
-      "tool": "fta",
-      "rule": "fta/file-score",
-      "severity": "info",
-      "file": "packages/web/src/tokens.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 1,
-        "startCol": 1,
-        "endLine": 1,
-        "endCol": 1
-      },
-      "message": "File has an FTA maintainability score of 63.2 (needs improvement), across 165 lines",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "3bbc6140dd315485",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "error",
-      "file": "packages/web/src/tokens.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 10,
-        "startCol": 7,
-        "endLine": 10,
-        "endCol": 7
-      },
-      "message": "Function `kindOf` has cognitive complexity 1 (cyclomatic 37); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "f6f0b7f4eb4b580d",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "error",
-      "file": "packages/web/src/tokens.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 58,
-        "startCol": 7,
-        "endLine": 58,
-        "endCol": 7
-      },
-      "message": "Function `tierOf` has cognitive complexity 1 (cyclomatic 35); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "227d08edaaffc85f",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "error",
-      "file": "packages/web/src/tokens.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 104,
-        "startCol": 7,
-        "endLine": 104,
-        "endCol": 7
-      },
-      "message": "Function `mapsFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "8081fac3ace57212",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "error",
-      "file": "packages/web/src/tokens.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 135,
-        "startCol": 7,
-        "endLine": 135,
-        "endCol": 7
-      },
-      "message": "Function `loaderFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "75e8ed2d0b08b070",
-      "category": "complexity",
-      "tool": "fallow-health",
-      "rule": "fallow/complexity",
-      "severity": "error",
-      "file": "packages/web/src/tokens.js",
-      "project": "packages/web",
-      "range": {
-        "startLine": 171,
-        "startCol": 7,
-        "endLine": 171,
-        "endCol": 7
-      },
-      "message": "Function `isPlannable` has cognitive complexity 5 (cyclomatic 12); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": false
-    },
-    {
-      "id": "d48862f2c5567099",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "packages/api/src/shared.js",
-      "project": "packages/api",
-      "range": {
-        "startLine": 1,
-        "startCol": 1,
-        "endLine": 11,
-        "endCol": 1
-      },
-      "message": "11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
       "id": "48f54624182f5988",
       "category": "lint",
       "tool": "oxlint",
@@ -791,8 +664,7 @@
         "endCol": 14
       },
       "message": "Unexpected re-assignment of `const` variable limit.",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "a79f08a03a6a226f",
@@ -809,8 +681,7 @@
         "endCol": 15
       },
       "message": "'unused' is assigned a value but never used.",
-      "provenance": "repo-config",
-      "gradeScope": true
+      "provenance": "repo-config"
     },
     {
       "id": "3cc8658704f67b30",
@@ -828,8 +699,129 @@
       },
       "message": "File does not match the repo’s prettier configuration",
       "provenance": "repo-config",
-      "gradeScope": true,
       "fixHint": "npx prettier --write <file>"
+    }
+  ],
+  "advisories": [
+    {
+      "id": "fb627f16d3512edd",
+      "category": "complexity",
+      "tool": "fta",
+      "rule": "fta/file-score",
+      "severity": "info",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File has an FTA maintainability score of 63.2 (needs improvement), across 165 lines",
+      "provenance": "default-config"
+    },
+    {
+      "id": "3bbc6140dd315485",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 10,
+        "startCol": 7,
+        "endLine": 10,
+        "endCol": 7
+      },
+      "message": "Function `kindOf` has cognitive complexity 1 (cyclomatic 37); the ceiling is 15",
+      "provenance": "default-config"
+    },
+    {
+      "id": "f6f0b7f4eb4b580d",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 58,
+        "startCol": 7,
+        "endLine": 58,
+        "endCol": 7
+      },
+      "message": "Function `tierOf` has cognitive complexity 1 (cyclomatic 35); the ceiling is 15",
+      "provenance": "default-config"
+    },
+    {
+      "id": "227d08edaaffc85f",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 104,
+        "startCol": 7,
+        "endLine": 104,
+        "endCol": 7
+      },
+      "message": "Function `mapsFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15",
+      "provenance": "default-config"
+    },
+    {
+      "id": "8081fac3ace57212",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 135,
+        "startCol": 7,
+        "endLine": 135,
+        "endCol": 7
+      },
+      "message": "Function `loaderFor` has cognitive complexity 1 (cyclomatic 21); the ceiling is 15",
+      "provenance": "default-config"
+    },
+    {
+      "id": "75e8ed2d0b08b070",
+      "category": "complexity",
+      "tool": "fallow-health",
+      "rule": "fallow/complexity",
+      "severity": "error",
+      "file": "packages/web/src/tokens.js",
+      "project": "packages/web",
+      "range": {
+        "startLine": 171,
+        "startCol": 7,
+        "endLine": 171,
+        "endCol": 7
+      },
+      "message": "Function `isPlannable` has cognitive complexity 5 (cyclomatic 12); the ceiling is 15",
+      "provenance": "default-config"
+    },
+    {
+      "id": "d48862f2c5567099",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "packages/api/src/shared.js",
+      "project": "packages/api",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 11,
+        "endCol": 1
+      },
+      "message": "11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11",
+      "provenance": "default-config",
+      "fixHint": "Extract the duplicated block into a shared function or module"
     }
   ],
   "warnings": [

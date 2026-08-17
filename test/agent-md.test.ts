@@ -7,6 +7,7 @@ import type { RunRecord } from '../src/core/orchestrator.ts'
 import type { AgentTask } from '../src/render/agent-md.ts'
 import { MAX_TASKS, buildAgentTasks, renderAgentMarkdown } from '../src/render/agent-md.ts'
 import type { Report, ReportInput, ResolvedRun } from '../src/render/json.ts'
+import { reportFindings } from '../src/render/json.ts'
 import {
   allGraded,
   makeFinding,
@@ -926,7 +927,7 @@ function skewedGrades(): Report {
       lint: { status: 'graded', grade: 'C' },
     },
     findings: [
-      ...manyLintRules(25).findings,
+      ...reportFindings(manyLintRules(25)),
       ...Array.from({ length: 3 }, (_, index) =>
         makeFinding({ id: `t${index}`, category: 'types', tool: 'tsc', rule: `TS100${index}` }),
       ),

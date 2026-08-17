@@ -11,6 +11,7 @@ import type { FixtureRepo } from './support/fixture.ts'
 import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS, installedSystemTools } from './support/system-tools.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * The common adapter, end to end on `test/fixtures/sec-basic`.
@@ -118,7 +119,7 @@ describe('quick scan of the sec-basic fixture', () => {
     outside = await mkdtemp(join(tmpdir(), 'crank-sec-out-'))
     scan = await runHealthScan({ path: fixture.root })
     json = scan.json
-    findings = scan.report.findings
+    findings = reportFindings(scan.report)
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -302,7 +303,7 @@ describe('quick scan of the sec-basic fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
         findings.map((finding) => finding.id),
       )
     },
@@ -502,7 +503,7 @@ describe('security findings from a tool in another category', () => {
       reason: 'no tool available for this category',
     })
     // Still reported — a finding nobody grades is not a finding nobody sees.
-    expect(result.report.findings.map((finding) => finding.rule)).toEqual(['S602'])
+    expect(reportFindings(result.report).map((finding) => finding.rule)).toEqual(['S602'])
   })
 })
 
@@ -599,7 +600,7 @@ describe('a leaked credential, with gitleaks stubbed onto PATH', () => {
   })
 
   it('reports the leak as a critical, graded finding', () => {
-    const secrets = scan.report.findings.filter((finding) => finding.tool === 'gitleaks')
+    const secrets = reportFindings(scan.report).filter((finding) => finding.tool === 'gitleaks')
     expect(secrets.map(shape)).toEqual([
       {
         category: 'security',
@@ -626,7 +627,7 @@ describe('a leaked credential, with gitleaks stubbed onto PATH', () => {
   })
 
   it('tells the reader to rotate the credential rather than quoting it', () => {
-    const secret = scan.report.findings.find((finding) => finding.tool === 'gitleaks')
+    const secret = reportFindings(scan.report).find((finding) => finding.tool === 'gitleaks')
     expect(secret?.message).toContain('aws access token')
     expect(secret?.fixHint).toContain('Rotate the credential')
   })
@@ -690,7 +691,7 @@ describe('a secret in a gitignored file, with gitleaks stubbed onto PATH', () =>
   })
 
   it('reports the tracked leak and none from the gitignored file', () => {
-    const secrets = scan.report.findings.filter((finding) => finding.tool === 'gitleaks')
+    const secrets = reportFindings(scan.report).filter((finding) => finding.tool === 'gitleaks')
     expect(secrets.map((finding) => finding.file)).toEqual(['src/config.js'])
   })
 

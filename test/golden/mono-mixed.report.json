@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -581,8 +581,7 @@
         "endCol": 35
       },
       "message": "Name `missing_name` used when not defined",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "07af5e4f619dc8dd",
@@ -600,7 +599,6 @@
       },
       "message": "Undefined name `missing_name`",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
     },
     {
@@ -618,9 +616,9 @@
         "endCol": 7
       },
       "message": "Duplicate key 'home'",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     }
   ],
+  "advisories": [],
   "warnings": []
 }

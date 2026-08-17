@@ -11,6 +11,7 @@ import { runHealthScan } from '../src/run.ts'
 import { makeProject } from './factories.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * End to end through the real seam on `js-react`: an untooled React app whose
@@ -98,7 +99,7 @@ describe('quick scan of the js-react fixture', () => {
     listingBefore = (await readdir(fixture.root)).toSorted()
     outside = await mkdtemp(join(tmpdir(), 'crank-react-out-'))
     scan = await runHealthScan({ path: fixture.root, out: outside })
-    findings = scan.report.findings
+    findings = reportFindings(scan.report)
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -161,7 +162,7 @@ describe('quick scan of the js-react fixture', () => {
    * this runner never reports.
    */
   it('moves no grade in any category', () => {
-    const all = scan.report.findings
+    const all = reportFindings(scan.report)
     const without = all.filter((finding) => finding.tool !== 'react-doctor')
     expect(without).toHaveLength(all.length - 3)
     for (const finding of all) {

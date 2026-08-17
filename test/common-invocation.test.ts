@@ -43,6 +43,7 @@ import type { RunContext } from '../src/core/types.ts'
 import { categoryRank } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 import type { Report, ReportTool } from '../src/render/json.ts'
+import { reportFindings } from '../src/render/json.ts'
 import { runHealthScan } from '../src/run.ts'
 
 /**
@@ -606,7 +607,7 @@ describe('whose config decided a duplication grade', () => {
       expect(runs.some((run) => run.detection !== null)).toBe(true)
       expect(runs.map((run) => run.provenance)).toEqual(runs.map(() => 'default-config'))
 
-      const clones = scanned.findings.filter((finding) => finding.tool === JSCPD_TOOL)
+      const clones = reportFindings(scanned).filter((finding) => finding.tool === JSCPD_TOOL)
       // Without this the clause below is vacuously true of an empty list.
       expect(clones.length).toBeGreaterThan(0)
       expect(clones.map((clone) => clone.provenance)).toEqual(clones.map(() => 'default-config'))

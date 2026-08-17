@@ -12,6 +12,7 @@ import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan, scanTree } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * `--deep` against the real StrykerJS, on the `js-weak-tests` fixture: a
@@ -54,7 +55,9 @@ describe.runIf(ENABLED)('--deep on a repo with a weak test suite', () => {
       only: ['test-quality'],
       deep: true,
     })
-    survived = deep.report.findings.filter((finding) => finding.rule === 'stryker/survived-mutant')
+    survived = reportFindings(deep.report).filter(
+      (finding) => finding.rule === 'stryker/survived-mutant',
+    )
   }, DEEP_TIMEOUT_MS)
 
   afterAll(async () => {

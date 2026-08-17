@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -177,8 +177,7 @@
         "endCol": 11
       },
       "message": "Unreachable code.",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "a2e971da664230ce",
@@ -195,10 +194,10 @@
         "endCol": 13
       },
       "message": "Duplicate key 'x'",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     }
   ],
+  "advisories": [],
   "warnings": [],
   "delta": {
     "baseRef": "main",
@@ -446,7 +445,6 @@
         },
         "message": "Unreachable code.",
         "provenance": "default-config",
-        "gradeScope": true,
         "touchedLine": true
       }
     ],
@@ -466,8 +464,7 @@
           "endCol": 14
         },
         "message": "Unexpected re-assignment of `const` variable limit.",
-        "provenance": "default-config",
-        "gradeScope": true
+        "provenance": "default-config"
       }
     ]
   }

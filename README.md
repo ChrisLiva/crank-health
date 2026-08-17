@@ -222,10 +222,38 @@ other; `.codebase-health/` carries a `.gitignore` (`*`) that hides every run fro
 
 | File          | For                                                                                                                                                                                                                                                                                                                                                                |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `report.json` | The contract. Every finding, category state, metric, resolved tool version — as the rollup at the top level, and again per project under `projects[]` (path, manifests, languages, all eight states, metrics, and the toolchain each one owns). `scopedTo` records a `--project` selection the rollup was computed over.                                           |
+| `report.json` | The contract. Every finding, category state, metric and resolved tool version — see the schema below.                                                                                                                                                                                                                                                              |
 | `report.md`   | The human report: grades, provenance tags, remediation.                                                                                                                                                                                                                                                                                                            |
 | `agent.md`    | The coding-agent brief: ≤ 20 themed tasks in a deterministic priority order (security → types → dead code → complexity → duplication → lint → format, worst grade first), each with a stable ID, a grade impact, an evidence link and a verify command.                                                                                                            |
 | `raw/`        | Each tool's own output, as evidence — source excerpts excepted, see below. Nested by what the run was about: `raw/<project-path>/`, `raw/root/` for the root project, `raw/repo/` for a repo-spanning run, and `raw/base/…` for a `--pr` base scan. A package whose own directory is called `root/` or `repo/` gets a trailing `_`, so nothing shares a directory. |
+
+### The `report.json` schema
+
+`schemaVersion` is **2**. The top level is the **rollup** — the whole repo, or, under `--project`,
+the selection `scopedTo` names — and `projects[]` answers the same questions per package.
+
+| Key                                                  | What it holds                                                                                             |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`                                      | `2`. Bumped whenever this shape changes incompatibly.                                                     |
+| `crankHealth`, `repo`, `profile`, `mode`, `selected` | Which crank-health ran, against which commit, in which profile, and which categories were asked for.      |
+| `scopedTo`                                           | The `--project` selection the rollup was computed over. Absent when every discovered project was scanned. |
+| `categories`                                         | All eight states, always: `graded`, `not-assessed(reason)` or `error(reason)`.                            |
+| `metrics`                                            | The tool-reported numbers behind the ratio grades — function counts, duplicated-token %, mutation score.  |
+| `languages`                                          | Findings per language per category.                                                                       |
+| `projects[]`                                         | Per project: path, manifests, languages, all eight states, metrics, and the toolchain that project owns.  |
+| `rootShell`                                          | Present when the repo root holds no source of its own — a workspace shell has nothing to grade.           |
+| `tools[]`                                            | One record per (tool × project) run: state, provenance, the version that ran, detection, raw evidence.    |
+| `findings[]`                                         | The findings that counted toward a grade, in report order.                                                |
+| `advisories[]`                                       | The findings that did not — same row shape, different list.                                               |
+| `warnings[]`                                         | What the scan left out, in the run's own words.                                                           |
+| `delta`                                              | `--pr` only: base and head states, the counts, and the new and resolved findings.                         |
+| `timings`                                            | Everything a clock produced, quarantined so the rest is byte-identical between two runs.                  |
+
+**Graded and advisory are two lists, not a flag.** Schema 1 put every finding in `findings[]` with a
+`gradeScope` boolean, so a reader had to filter before they could read. Schema 2 puts the graded rows
+in `findings[]`, the rest in `advisories[]`, and drops the boolean: the array a row is in is the
+answer. The delta is the one list that cannot be partitioned — "what did this change add" is one
+question about both kinds — so its rows carry `advisory: true` instead.
 
 ### Secrets stay in your repo
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -230,25 +230,6 @@
   ],
   "findings": [
     {
-      "id": "217060462ce7d7ac",
-      "category": "duplication",
-      "tool": "jscpd",
-      "rule": "jscpd/duplicate-block",
-      "severity": "warning",
-      "file": "dupe-a.cs",
-      "project": ".",
-      "range": {
-        "startLine": 4,
-        "startCol": 1,
-        "endLine": 33,
-        "endCol": 1
-      },
-      "message": "30 lines (100 tokens) duplicated from dupe-b.cs:4-33",
-      "provenance": "default-config",
-      "gradeScope": false,
-      "fixHint": "Extract the duplicated block into a shared function or module"
-    },
-    {
       "id": "c29dc3476b5d7d99",
       "category": "format",
       "tool": "dotnet-format",
@@ -264,8 +245,27 @@
       },
       "message": "File does not match the repo’s .editorconfig whitespace conventions",
       "provenance": "repo-config",
-      "gradeScope": true,
       "fixHint": "dotnet format whitespace . --folder --include <file>"
+    }
+  ],
+  "advisories": [
+    {
+      "id": "217060462ce7d7ac",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "dupe-a.cs",
+      "project": ".",
+      "range": {
+        "startLine": 4,
+        "startCol": 1,
+        "endLine": 33,
+        "endCol": 1
+      },
+      "message": "30 lines (100 tokens) duplicated from dupe-b.cs:4-33",
+      "provenance": "default-config",
+      "fixHint": "Extract the duplicated block into a shared function or module"
     }
   ],
   "warnings": []

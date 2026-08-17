@@ -31,14 +31,8 @@ import {
   unselectedCategories,
 } from './display.ts'
 import type { CollapsedTool } from './display.ts'
-import type {
-  Report,
-  ReportDelta,
-  ReportNewFinding,
-  ReportProject,
-  ReportProjectTool,
-  ReportTool,
-} from './json.ts'
+import type { Report, ReportDelta, ReportProject, ReportProjectTool, ReportTool } from './json.ts'
+import { reportFindings, withGradeScope } from './json.ts'
 
 /**
  * `report.md` — the full human report (spec §9): every category's grade, what
@@ -81,19 +75,23 @@ export function renderReportMarkdown(report: Report, options: ReportMarkdownOpti
   // Computed once and threaded down: the rollup's table, every project's table
   // and the category sections have to leave out the same categories.
   const omit = unselectedCategories(report)
+  // The schema's two arrays, back as the one list every section reads. Which of
+  // them a row came from is `gradeScope` on it again, so nothing below this line
+  // has to know the top level was split.
+  const all = reportFindings(report)
   const blocks: string[] = [
     '# Codebase health',
     subtitle(report, delta),
     '## Grades',
-    gradesTable(report.categories, rollupScope(report), delta, omit),
+    gradesTable(report.categories, rollupScope(all, report), delta, omit),
     ...(omit.length === 0 ? [] : [notSelectedNote(omit)]),
     ...scanNotes(report),
-    ...languageBreakdown(report),
+    ...languageBreakdown(report, all),
     ...measurements(report),
     ...deltaSection(delta, options.maxDeltaFindings ?? DEFAULT_MAX_FINDINGS),
-    ...projectsSection(report, omit),
+    ...projectsSection(report, all, omit),
     ...CATEGORIES.filter((category) => !omit.includes(category)).flatMap((category) =>
-      categorySection(report, category, limit, delta),
+      categorySection(report, all, category, limit, delta),
     ),
     trailer(report),
   ]
@@ -111,13 +109,13 @@ interface GradeScope {
   readonly metrics: Readonly<Partial<Record<Category, ToolMetrics>>>
 }
 
-function rollupScope(report: Report): GradeScope {
-  return { findings: report.findings, metrics: report.metrics }
+function rollupScope(findings: readonly Finding[], report: Report): GradeScope {
+  return { findings, metrics: report.metrics }
 }
 
-function projectScope(report: Report, project: ReportProject): GradeScope {
+function projectScope(findings: readonly Finding[], project: ReportProject): GradeScope {
   return {
-    findings: report.findings.filter((finding) => finding.project === project.path),
+    findings: findings.filter((finding) => finding.project === project.path),
     metrics: project.metrics,
   }
 }
@@ -181,8 +179,22 @@ function deltaSection(delta: ReportDelta | undefined, limit: number): string[] {
   }
 
   blocks.push(...projectMovementBlock(delta))
-  blocks.push(...findingList('New findings', delta.newFindings, limit))
-  blocks.push(...findingList('Resolved findings', delta.resolvedFindings, limit))
+  // The delta's lists are not partitioned the way the top level is, so each row
+  // carries its own scope flag; see `ReportFinding.advisory`.
+  blocks.push(
+    ...findingList(
+      'New findings',
+      delta.newFindings.map((entry) => withGradeScope(entry)),
+      limit,
+    ),
+  )
+  blocks.push(
+    ...findingList(
+      'Resolved findings',
+      delta.resolvedFindings.map((entry) => withGradeScope(entry)),
+      limit,
+    ),
+  )
   return blocks
 }
 
@@ -282,9 +294,9 @@ function scanNotes(report: Report): string[] {
  * because a table whose rows do not add up to the findings above it is worse
  * than no table.
  */
-function languageBreakdown(report: Report): string[] {
+function languageBreakdown(report: Report, findings: readonly Finding[]): string[] {
   const languages = Object.keys(report.languages) as Language[]
-  const other = otherCounts(report)
+  const other = otherCounts(report, findings)
   const hasOther = sum(other) > 0
   const rows = [
     ...languages.map((language) => countRow(language, report.languages[language] ?? {})),
@@ -311,10 +323,13 @@ function countRow(label: string, counts: Partial<Record<Category, number>>): str
 }
 
 /** Findings in files no language owns: the total, minus what the languages claim. */
-function otherCounts(report: Report): Partial<Record<Category, number>> {
+function otherCounts(
+  report: Report,
+  findings: readonly Finding[],
+): Partial<Record<Category, number>> {
   const counts: Partial<Record<Category, number>> = {}
   for (const category of CATEGORIES) {
-    const total = report.findings.filter((finding) => finding.category === category).length
+    const total = findings.filter((finding) => finding.category === category).length
     const claimed = Object.values(report.languages).reduce(
       (running, byCategory) => running + (byCategory[category] ?? 0),
       0,
@@ -368,7 +383,11 @@ function measurements(report: Report): string[] {
  * project, or where the root turned out to be a workspace shell: a one-package
  * workspace has a fact about its root that belongs nowhere else.
  */
-function projectsSection(report: Report, omit: readonly Category[]): string[] {
+function projectsSection(
+  report: Report,
+  findings: readonly Finding[],
+  omit: readonly Category[],
+): string[] {
   if (report.projects.length < 2 && report.rootShell === undefined) return []
   const count = report.projects.length
   const blocks = [
@@ -379,7 +398,7 @@ function projectsSection(report: Report, omit: readonly Category[]): string[] {
       'audits, workflow checks — so it is graded once, above, and not per project.',
   ]
   if (report.rootShell !== undefined) blocks.push(rootShellNote(report.rootShell))
-  return [...blocks, ...report.projects.flatMap((project) => projectBlock(report, project, omit))]
+  return [...blocks, ...report.projects.flatMap((project) => projectBlock(findings, project, omit))]
 }
 
 /**
@@ -397,13 +416,17 @@ function rollupCoverage(report: Report): string {
     .join(', ')})`
 }
 
-function projectBlock(report: Report, project: ReportProject, omit: readonly Category[]): string[] {
+function projectBlock(
+  findings: readonly Finding[],
+  project: ReportProject,
+  omit: readonly Category[],
+): string[] {
   const manifests = project.manifests.map((manifest) => `\`${manifest}\``)
   const languages = project.languages.length === 0 ? [] : [project.languages.join(', ')]
   return [
     `### ${projectLabel(project.path)}`,
     [...manifests, ...languages].join(' · '),
-    gradesTable(project.categories, projectScope(report, project), undefined, omit),
+    gradesTable(project.categories, projectScope(findings, project), undefined, omit),
     ...(project.toolchain.length === 0
       ? ['This project declares no tool of its own: it was analyzed on crank-health’s defaults.']
       : [projectToolTable(project.toolchain)]),
@@ -432,12 +455,13 @@ function projectToolTable(toolchain: readonly ReportProjectTool[]): string {
 
 function categorySection(
   report: Report,
+  findings: readonly Finding[],
   category: Category,
   limit: number,
   delta: ReportDelta | undefined,
 ): string[] {
   const state = report.categories[category]
-  const mine = report.findings.filter((finding) => finding.category === category)
+  const mine = findings.filter((finding) => finding.category === category)
   const tools = report.tools.filter((tool) => tool.category === category)
   const graded = mine.filter((finding) => finding.gradeScope)
   const advisory = mine.filter((finding) => !finding.gradeScope)
@@ -445,7 +469,7 @@ function categorySection(
   const blocks: string[] = [
     `## ${CATEGORY_LABELS[category]} — ${stateLabel(state)}`,
     state.status === 'graded'
-      ? `${gradeBasis(rollupScope(report), category, delta)}\n\nGraded on ${bandText(category)}`
+      ? `${gradeBasis(rollupScope(findings, report), category, delta)}\n\nGraded on ${bandText(category)}`
       : `Not graded: ${state.reason}`,
   ]
 
@@ -509,7 +533,7 @@ function versionCell(tool: ReportTool): string {
 
 function findingList(
   title: string,
-  findings: readonly (Finding | ReportNewFinding)[],
+  findings: readonly (Finding & { readonly touchedLine?: boolean })[],
   limit: number,
 ): string[] {
   if (findings.length === 0) return []
@@ -521,8 +545,8 @@ function findingList(
   return [`**${title}** (${findings.length})`, lines.join('\n')]
 }
 
-function findingLine(finding: Finding | ReportNewFinding): string {
-  const touched = 'touchedLine' in finding && finding.touchedLine ? ` ${TOUCHED_TAG}` : ''
+function findingLine(finding: Finding & { readonly touchedLine?: boolean }): string {
+  const touched = finding.touchedLine === true ? ` ${TOUCHED_TAG}` : ''
   const tags = `(${finding.tool}) [${finding.provenance}]${finding.gradeScope ? '' : ` ${ADVISORY_TAG}`}${touched}`
   const fix = finding.fixHint === undefined ? '' : `\n  - fix: ${finding.fixHint}`
   return `- ${finding.severity} \`${location(finding)}\` \`${finding.rule}\` — ${finding.message} ${tags}${fix}`

@@ -22,6 +22,7 @@ import type { FixtureRepo } from './support/fixture.ts'
 import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * The four spec-level executable promises again, on the fixtures that exercise
@@ -119,7 +120,7 @@ describe('quick scan of the py-basic fixture', () => {
     outside = await mkdtemp(join(tmpdir(), 'crank-py-out-'))
     const result = await runHealthScan({ path: fixture.root })
     json = result.json
-    findings = result.report.findings
+    findings = reportFindings(result.report)
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
@@ -223,7 +224,7 @@ describe('quick scan of the py-basic fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
         findings.map((finding) => finding.id),
       )
     },
@@ -299,7 +300,7 @@ describe('quick scan of a Python repo with a virtualenv', () => {
   })
 
   it('finds the planted type error, and nothing else', () => {
-    expect(result.report.findings.map(shape)).toEqual([
+    expect(reportFindings(result.report).map(shape)).toEqual([
       {
         category: 'types',
         tool: 'pyright',
@@ -315,7 +316,9 @@ describe('quick scan of a Python repo with a virtualenv', () => {
 
   /** The virtualenv is a dependency directory: never scanned (spec §7). */
   it('never scans the virtualenv it type-checks against', () => {
-    expect(result.report.findings.every((finding) => !finding.file.includes('.venv'))).toBe(true)
+    expect(reportFindings(result.report).every((finding) => !finding.file.includes('.venv'))).toBe(
+      true,
+    )
     expect(result.report.metrics.complexity).toEqual({
       functionsTotal: 3,
       functionsOverCeiling: 0,
@@ -392,7 +395,7 @@ describe('quick scan of the py-mypy fixture (no virtualenv)', () => {
     expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
     // Loose on the rule: which name ty gives the planted return-type error is
     // ty's contract, not this fixture's.
-    expect(result.report.findings).toContainEqual(
+    expect(reportFindings(result.report)).toContainEqual(
       expect.objectContaining({ tool: 'ty', category: 'types', file: 'app.py' }),
     )
   })
@@ -469,7 +472,7 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
    * standby and saw the same line, and standing it down cleared its findings.
    */
   it('reports the planted type error once, from the repo’s own tool', () => {
-    expect(scan1.report.findings.map(shape)).toEqual([
+    expect(reportFindings(scan1.report).map(shape)).toEqual([
       {
         category: 'types',
         tool: 'mypy',
@@ -481,9 +484,9 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
       },
     ])
     // `shape()` carries no provenance, so it is asserted separately.
-    expect(scan1.report.findings.every((finding) => finding.provenance === 'repo-config')).toBe(
-      true,
-    )
+    expect(
+      reportFindings(scan1.report).every((finding) => finding.provenance === 'repo-config'),
+    ).toBe(true)
     expect(scan1.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
   })
 
@@ -507,7 +510,7 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
 
   it('keeps neither standby’s findings nor its metrics', () => {
     expect(scan1.report.metrics.types).toBeUndefined()
-    expect(scan1.report.findings.some((finding) => finding.tool === 'pyright')).toBe(false)
+    expect(reportFindings(scan1.report).some((finding) => finding.tool === 'pyright')).toBe(false)
   })
 
   it('keeps mypy’s raw output next to the report', async () => {
@@ -542,7 +545,7 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
   })
 
   it('reports the same single finding in either execution mode', () => {
-    expect(scan2.report.findings.map(shape)).toEqual([
+    expect(reportFindings(scan2.report).map(shape)).toEqual([
       {
         category: 'types',
         tool: 'mypy',
@@ -553,9 +556,9 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
         gradeScope: true,
       },
     ])
-    expect(scan2.report.findings.every((finding) => finding.provenance === 'repo-config')).toBe(
-      true,
-    )
+    expect(
+      reportFindings(scan2.report).every((finding) => finding.provenance === 'repo-config'),
+    ).toBe(true)
   })
 
   it('leaves the target repo clean, mypy’s cache included', async () => {
@@ -565,8 +568,8 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
 
   it('produces byte-identical output when run twice on the same commit', () => {
     expect(normalizeReport(scan3.json)).toBe(normalizeReport(scan2.json))
-    expect(scan3.report.findings.map((finding) => finding.id)).toEqual(
-      scan2.report.findings.map((finding) => finding.id),
+    expect(reportFindings(scan3.report).map((finding) => finding.id)).toEqual(
+      reportFindings(scan2.report).map((finding) => finding.id),
     )
   })
 })
@@ -800,7 +803,7 @@ describe('quick scan of a repo that owns both mypy and pyright', () => {
    */
   it('reports the one type error once per owner, under one graded category', () => {
     expect(
-      result.report.findings
+      reportFindings(result.report)
         .filter((finding) => finding.category === 'types')
         .map((finding) => ({
           tool: finding.tool,
@@ -894,9 +897,9 @@ describe('quick scan of a repo whose imports only resolve inside its virtualenv'
 
   it('resolves the project’s dependencies through its virtualenv', () => {
     expect(mypyFindings(result)).toEqual([{ rule: 'return-value', file: 'app.py', startLine: 5 }])
-    expect(result.report.findings.some((finding) => finding.rule === 'import-not-found')).toBe(
-      false,
-    )
+    expect(
+      reportFindings(result.report).some((finding) => finding.rule === 'import-not-found'),
+    ).toBe(false)
   })
 })
 
@@ -914,7 +917,7 @@ describe('quick scan of a mixed JS + Python repo', () => {
   })
 
   it('runs both adapters and finds every planted finding, in either language', () => {
-    expect(result.report.findings.map(shape)).toEqual([
+    expect(reportFindings(result.report).map(shape)).toEqual([
       {
         category: 'types',
         tool: 'ty',
@@ -1054,15 +1057,15 @@ describe('quick scan of the py-basic fixture reached through a symlink', () => {
   })
 
   it('finds every planted finding through the symlink', () => {
-    expect(symlinkScan.report.findings.map(shape)).toEqual(
+    expect(reportFindings(symlinkScan.report).map(shape)).toEqual(
       PLANTED.map((planted) => ({ ...planted })),
     )
   })
 
   it('produces the same report whether reached through the symlink or the real root', () => {
     expect(normalizeReport(symlinkScan.json)).toBe(normalizeReport(rootScan.json))
-    expect(symlinkScan.report.findings.map((f) => f.id)).toEqual(
-      rootScan.report.findings.map((f) => f.id),
+    expect(reportFindings(symlinkScan.report).map((f) => f.id)).toEqual(
+      reportFindings(rootScan.report).map((f) => f.id),
     )
   })
 
@@ -1123,7 +1126,7 @@ async function pyTempRepo(files: Readonly<Record<string, string>>): Promise<Fixt
 
 /** The parts of mypy's own findings the config-resolution oracles are about. */
 function mypyFindings(result: HealthScanResult) {
-  return result.report.findings
+  return reportFindings(result.report)
     .filter((finding) => finding.tool === 'mypy')
     .map((finding) => ({
       rule: finding.rule,

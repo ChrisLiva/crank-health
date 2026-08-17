@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -363,8 +363,7 @@
         "endCol": 16
       },
       "message": "Export `subtract` is never used",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "0c1770f8cbed82ac",
@@ -381,8 +380,7 @@
         "endCol": 17
       },
       "message": "Export `subtract` is never used",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "8a45552307efdbf0",
@@ -399,26 +397,7 @@
         "endCol": 7
       },
       "message": "Function `classify` has cognitive complexity 29 (cyclomatic 18); the ceiling is 15",
-      "provenance": "default-config",
-      "gradeScope": true
-    },
-    {
-      "id": "a16f4b14a6ed9d38",
-      "category": "lint",
-      "tool": "oxlint",
-      "rule": "oxc(no-accumulating-spread)",
-      "severity": "warning",
-      "file": "src/accumulate.js",
-      "project": ".",
-      "range": {
-        "startLine": 2,
-        "startCol": 7,
-        "endLine": 2,
-        "endCol": 10
-      },
-      "message": "Do not spread accumulators in loops",
-      "provenance": "default-config",
-      "gradeScope": false
+      "provenance": "default-config"
     },
     {
       "id": "682215770e9d14f9",
@@ -435,8 +414,7 @@
         "endCol": 14
       },
       "message": "Unexpected re-assignment of `const` variable limit.",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "f3e335d0ec6e9f07",
@@ -453,8 +431,7 @@
         "endCol": 7
       },
       "message": "Duplicate key 'home'",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "20bf70285fec5ba4",
@@ -471,8 +448,7 @@
         "endCol": 24
       },
       "message": "Unreachable code.",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "7c92932224a5ec62",
@@ -490,8 +466,26 @@
       },
       "message": "File does not match prettier’s default formatting",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "npx prettier --write <file>"
+    }
+  ],
+  "advisories": [
+    {
+      "id": "a16f4b14a6ed9d38",
+      "category": "lint",
+      "tool": "oxlint",
+      "rule": "oxc(no-accumulating-spread)",
+      "severity": "warning",
+      "file": "src/accumulate.js",
+      "project": ".",
+      "range": {
+        "startLine": 2,
+        "startCol": 7,
+        "endLine": 2,
+        "endCol": 10
+      },
+      "message": "Do not spread accumulators in loops",
+      "provenance": "default-config"
     }
   ],
   "warnings": []

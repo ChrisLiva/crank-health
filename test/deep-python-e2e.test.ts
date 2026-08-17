@@ -8,6 +8,7 @@ import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * `--deep` against the real cosmic-ray and coverage.py, on the
@@ -73,7 +74,7 @@ describe.runIf(ENABLED)('--deep on a Python repo with a weak test suite', () => 
   })
 
   it('reports the surviving mutants, in the mutated module', () => {
-    const survived = deep.report.findings.filter(
+    const survived = reportFindings(deep.report).filter(
       (finding) => finding.rule === 'cosmic-ray/survived-mutant',
     )
     expect(survived.length).toBeGreaterThan(0)
@@ -91,7 +92,7 @@ describe.runIf(ENABLED)('--deep on a Python repo with a weak test suite', () => 
     // Coverage never moves the grade: the grade is the mutation score alone.
     expect(deep.markdown).toContain('the grade is the mutation score')
     // Whole-repo runs report no per-line findings; only a PR does.
-    expect(deep.report.findings.filter((finding) => finding.tool === 'coverage')).toEqual([])
+    expect(reportFindings(deep.report).filter((finding) => finding.tool === 'coverage')).toEqual([])
   })
 
   it('leaves the target untouched, mutated files restored and no caches written', async () => {

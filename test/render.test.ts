@@ -5,7 +5,7 @@ import type { CategoryState, Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import { collapseToolRows, notSelectedNote, unselectedCategories } from '../src/render/display.ts'
 import type { ReportTool } from '../src/render/json.ts'
-import { buildReport, serializeReport } from '../src/render/json.ts'
+import { buildReport, reportFindings, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
 import { REPO_SCOPED_REASON } from '../src/run.ts'
 import {
@@ -35,6 +35,7 @@ describe('buildReport', () => {
       'projects',
       'tools',
       'findings',
+      'advisories',
       'warnings',
       'timings',
     ])
@@ -84,7 +85,6 @@ describe('buildReport', () => {
       'range',
       'message',
       'provenance',
-      'gradeScope',
     ])
     expect(Object.keys(finding?.range ?? {})).toEqual([
       'startLine',
@@ -92,6 +92,64 @@ describe('buildReport', () => {
       'endLine',
       'endCol',
     ])
+  })
+
+  /**
+   * Schema 2's split. A `gradeScope` boolean on every row made a reader filter
+   * before they could read: the graded rows are the report, and the advisory
+   * ones are the second list under it.
+   */
+  it('splits graded findings from advisory ones, and drops the flag they repeated', () => {
+    const graded = makeFinding({ id: 'aaaaaaaaaaaaaaaa', rule: 'no-debugger' })
+    const advisory = makeFinding({ id: 'bbbbbbbbbbbbbbbb', rule: 'sort-keys', gradeScope: false })
+
+    const report = buildReport(input({ findings: [graded, advisory] }))
+    expect(report.findings.map((finding) => finding.rule)).toEqual(['no-debugger'])
+    expect(report.advisories.map((finding) => finding.rule)).toEqual(['sort-keys'])
+    expect(serializeReport(report)).not.toContain('gradeScope')
+  })
+
+  /**
+   * The delta's lists are the one place membership cannot carry the flag: "what
+   * this change added" is one question about both kinds of row.
+   */
+  it('flags advisory rows in the delta, which is not partitioned', () => {
+    const graded = makeFinding({ id: 'aaaaaaaaaaaaaaaa', rule: 'no-debugger' })
+    const advisory = makeFinding({ id: 'bbbbbbbbbbbbbbbb', rule: 'sort-keys', gradeScope: false })
+
+    const report = buildReport(
+      input({
+        findings: [graded, advisory],
+        delta: {
+          baseRef: 'main',
+          mergeBase: 'abc',
+          newFindings: [
+            { finding: graded, touchedLine: true },
+            { finding: advisory, touchedLine: false },
+          ],
+          resolvedFindings: [],
+          unchangedCount: 0,
+          categories: [],
+          projects: [],
+        },
+      }),
+    )
+    expect(report.delta?.newFindings.map((row) => row.advisory)).toEqual([undefined, true])
+  })
+
+  /** What the renderers read: the split undone, in the order it was cut from. */
+  it('puts the two lists back together in report order, with the scope restored', () => {
+    const findings = sortFindings([
+      makeFinding({ id: 'aaaaaaaaaaaaaaaa', category: 'types', file: 'src/a.ts' }),
+      makeFinding({ id: 'bbbbbbbbbbbbbbbb', file: 'src/a.ts', gradeScope: false }),
+      makeFinding({ id: 'cccccccccccccccc', file: 'src/b.ts' }),
+    ])
+    const report = buildReport(input({ findings }))
+
+    expect(reportFindings(report).map((finding) => finding.id)).toEqual(
+      findings.map((finding) => finding.id),
+    )
+    expect(reportFindings(report).map((finding) => finding.gradeScope)).toEqual([true, false, true])
   })
 
   it('sorts warnings so two runs cannot disagree on their order', () => {
@@ -421,7 +479,7 @@ describe('serializeReport', () => {
   it('writes indented JSON with a trailing newline', () => {
     const json = serializeReport(buildReport(input()))
     expect(json.endsWith('}\n')).toBe(true)
-    expect(json).toContain('\n  "schemaVersion": 1,')
+    expect(json).toContain('\n  "schemaVersion": 2,')
   })
 })
 

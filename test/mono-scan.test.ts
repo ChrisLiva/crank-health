@@ -11,6 +11,7 @@ import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN } from './support/system-tools.ts'
+import { reportFindings } from '../src/render/json.ts'
 
 /**
  * The spec-level promises on a monorepo, on the two layouts a repo can have:
@@ -154,7 +155,7 @@ describe('quick scan of the mono-js fixture', () => {
   })
 
   it('finds every planted finding, and nothing else', () => {
-    expect(scan.report.findings.map(shape)).toEqual(
+    expect(reportFindings(scan.report).map(shape)).toEqual(
       MONO_JS_PLANTED.map((planted) => ({
         ...planted,
       })),
@@ -226,7 +227,9 @@ describe('quick scan of the mono-js fixture', () => {
   it('keeps the file-level complexity findings out of the grade', () => {
     expect(categories('packages/web')?.complexity).toEqual({ status: 'graded', grade: 'A' })
     expect(
-      scan.report.findings.filter((finding) => finding.category === 'complexity').map(shape),
+      reportFindings(scan.report)
+        .filter((finding) => finding.category === 'complexity')
+        .map(shape),
     ).toEqual(MONO_JS_TOKENS_ADVISORY.map((planted) => ({ ...planted })))
   })
 
@@ -237,7 +240,7 @@ describe('quick scan of the mono-js fixture', () => {
    * finding would silently disappear rather than come back wrong.
    */
   it('brings fta’s paths back to the repo’s terms', () => {
-    const fta = scan.report.findings.filter((finding) => finding.tool === 'fta')
+    const fta = reportFindings(scan.report).filter((finding) => finding.tool === 'fta')
     expect(fta.map((finding) => [finding.file, finding.project])).toEqual([
       ['packages/web/src/tokens.js', 'packages/web'],
     ])
@@ -251,7 +254,9 @@ describe('quick scan of the mono-js fixture', () => {
    * this is the assertion that keeps it that way.
    */
   it('does not call a file dead because only the other package imports it', () => {
-    expect(scan.report.findings.filter((finding) => finding.category === 'dead-code')).toEqual([])
+    expect(
+      reportFindings(scan.report).filter((finding) => finding.category === 'dead-code'),
+    ).toEqual([])
     expect(categories('packages/api')?.['dead-code']).toEqual({ status: 'graded', grade: 'A' })
   })
 
@@ -334,7 +339,7 @@ describe('quick scan of the mono-js fixture', () => {
     )
     for (const report of reports) expect(report).not.toContain(MONO_JS_HIDDEN_FILE)
     expect(
-      scan.report.findings
+      reportFindings(scan.report)
         .filter((finding) => finding.tool === 'jscpd')
         .map((finding) => finding.file),
     ).not.toContain(MONO_JS_HIDDEN_FILE)
@@ -383,8 +388,8 @@ describe('quick scan of the mono-js fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
-        scan.report.findings.map((finding) => finding.id),
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
+        reportFindings(scan.report).map((finding) => finding.id),
       )
     },
     SCAN_TIMEOUT_MS,
@@ -556,7 +561,7 @@ describe('quick scan of the mono-mixed fixture', () => {
   })
 
   it('finds every planted finding, and nothing else', () => {
-    expect(scan.report.findings.map(shape)).toEqual(
+    expect(reportFindings(scan.report).map(shape)).toEqual(
       MONO_MIXED_PLANTED.map((planted) => ({
         ...planted,
       })),
@@ -658,8 +663,8 @@ describe('quick scan of the mono-mixed fixture', () => {
     async () => {
       const second = await runHealthScan({ path: fixture.root })
       expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(second.report.findings.map((finding) => finding.id)).toEqual(
-        scan.report.findings.map((finding) => finding.id),
+      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
+        reportFindings(scan.report).map((finding) => finding.id),
       )
     },
     SCAN_TIMEOUT_MS,

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "crankHealth": "0.8.0",
   "repo": {
     "path": "<repo>",
@@ -334,8 +334,7 @@
         "endCol": 35
       },
       "message": "Name `missing_name` used when not defined",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "7e7d79fc1bfb7e4d",
@@ -352,26 +351,7 @@
         "endCol": 1
       },
       "message": "Unused import `os` (90% confidence)",
-      "provenance": "default-config",
-      "gradeScope": true
-    },
-    {
-      "id": "93b7836b489e9f98",
-      "category": "dead-code",
-      "tool": "vulture",
-      "rule": "vulture/unused-function",
-      "severity": "info",
-      "file": "dead.py",
-      "project": ".",
-      "range": {
-        "startLine": 8,
-        "startCol": 1,
-        "endLine": 8,
-        "endCol": 1
-      },
-      "message": "Unused function `never_called` (60% confidence)",
-      "provenance": "default-config",
-      "gradeScope": false
+      "provenance": "default-config"
     },
     {
       "id": "9270563a9545a99b",
@@ -388,8 +368,7 @@
         "endCol": 1
       },
       "message": "Function 'classify' has a cognitive complexity of 38, which exceeds the maximum allowed complexity of 15.",
-      "provenance": "default-config",
-      "gradeScope": true
+      "provenance": "default-config"
     },
     {
       "id": "02f45494e8b91de1",
@@ -407,7 +386,6 @@
       },
       "message": "`os` imported but unused",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.astral.sh/ruff/rules/unused-import"
     },
     {
@@ -426,7 +404,6 @@
       },
       "message": "Undefined name `missing_name`",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
     },
     {
@@ -445,8 +422,26 @@
       },
       "message": "File does not match ruff’s default formatting",
       "provenance": "default-config",
-      "gradeScope": true,
       "fixHint": "uvx ruff format <file>"
+    }
+  ],
+  "advisories": [
+    {
+      "id": "93b7836b489e9f98",
+      "category": "dead-code",
+      "tool": "vulture",
+      "rule": "vulture/unused-function",
+      "severity": "info",
+      "file": "dead.py",
+      "project": ".",
+      "range": {
+        "startLine": 8,
+        "startCol": 1,
+        "endLine": 8,
+        "endCol": 1
+      },
+      "message": "Unused function `never_called` (60% confidence)",
+      "provenance": "default-config"
     }
   ],
   "warnings": []

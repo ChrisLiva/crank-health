@@ -16,6 +16,7 @@ import {
   unselectedCategories,
 } from './display.ts'
 import type { Report, ReportDelta, ReportProject, ReportProjectMovement } from './json.ts'
+import { reportFindings, withGradeScope } from './json.ts'
 
 /**
  * The terminal summary (spec §9): every category's grade, then the findings
@@ -55,13 +56,16 @@ export function renderTerminal(
   const color = pc.createColors(options.color ?? pc.isColorSupported)
   const limit = options.maxFindings ?? DEFAULT_MAX_FINDINGS
   const lines: string[] = ['', header(report, color), '']
+  // Graded and advisory rows are two arrays in the schema and one glance here;
+  // the split is what `report.json` is for.
+  const all = reportFindings(report)
 
   // The categories `--only` left out are one line under the ones it kept, not a
   // line each: rows saying "nobody asked" are what a `--only` run came here to
   // skip past (spec §9).
   const omit = unselectedCategories(report)
   for (const category of CATEGORIES) {
-    if (!omit.includes(category)) lines.push(categoryLine(report, category, color))
+    if (!omit.includes(category)) lines.push(categoryLine(report, all, category, color))
   }
   if (omit.length > 0) lines.push(color.dim(`  ${notSelectedNote(omit)}`))
 
@@ -73,7 +77,7 @@ export function renderTerminal(
   // In PR mode the findings worth a glance are the ones this change introduced;
   // the pre-existing ones are in report.md, and listing them here would bury
   // the regression under a wall of things the author did not do.
-  const source = report.delta?.newFindings ?? report.findings
+  const source = report.delta?.newFindings.map((entry) => withGradeScope(entry)) ?? all
   const shown = source.slice(0, limit)
   if (shown.length > 0) {
     lines.push('', color.bold(report.delta === undefined ? 'Top findings' : 'Top new findings'))
@@ -227,7 +231,12 @@ function header(report: Report, color: Colors): string {
   return `${color.bold('crank-health')} ${report.crankHealth} · ${report.repo.path} @ ${commit} · ${report.profile}`
 }
 
-function categoryLine(report: Report, category: Category, color: Colors): string {
+function categoryLine(
+  report: Report,
+  findings: readonly Finding[],
+  category: Category,
+  color: Colors,
+): string {
   const state = report.categories[category]
   const label = CATEGORY_LABELS[category].padEnd(13)
 
@@ -238,17 +247,17 @@ function categoryLine(report: Report, category: Category, color: Colors): string
     return `  ${color.dim(label)} ${tint(status.padEnd(13))} ${color.dim(state.reason)}`
   }
   const grade = gradeColor(state.grade, color)(state.grade.padEnd(13))
-  return `  ${label} ${grade} ${color.dim(measure(report, category))}`
+  return `  ${label} ${grade} ${color.dim(measure(report, findings, category))}`
 }
 
 /** What the grade was computed from, in the fewest words that are still true. */
-function measure(report: Report, category: Category): string {
+function measure(report: Report, findings: readonly Finding[], category: Category): string {
   // Test quality is the one grade whose basis is not a count of findings: the
   // findings are the surviving mutants, the grade is the score (spec §3).
   const score = category === 'test-quality' ? report.metrics[category]?.mutationScore : undefined
   if (score !== undefined) return `mutation score ${percent(score)}`
 
-  const mine = report.findings.filter((finding) => finding.category === category)
+  const mine = findings.filter((finding) => finding.category === category)
   const graded = mine.filter((finding) => finding.gradeScope).length
   const advisory = mine.length - graded
   if (mine.length === 0) return 'no findings'

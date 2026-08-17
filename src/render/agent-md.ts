@@ -11,6 +11,7 @@ import {
   stateLabel,
 } from './display.ts'
 import type { Report, ReportDelta, ReportProject } from './json.ts'
+import { reportFindings, withGradeScope } from './json.ts'
 
 /**
  * `agent.md` — the task list a coding agent works from (spec §10).
@@ -159,7 +160,13 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
 export function buildAgentTasks(report: Report, delta?: ReportDelta | undefined): AgentTask[] {
   const source = delta ?? report.delta
   const evidenceOf = rawEvidence(report)
-  const findings: readonly Finding[] = source === undefined ? report.findings : source.newFindings
+  // The schema's graded/advisory split is a reading order, not a work order: a
+  // task is built from everything the scan found, and each row keeps its own
+  // scope so the advisory ones still read as advisory.
+  const findings: readonly Finding[] =
+    source === undefined
+      ? reportFindings(report)
+      : source.newFindings.map((entry) => withGradeScope(entry))
   const touched = new Set(
     source === undefined
       ? []
@@ -710,7 +717,8 @@ function findingBlock(findings: readonly Finding[]): string[] {
 function footer(report: Report, total: number, shown: number): string {
   const omitted =
     total > shown ? `${total - shown} more tasks were cut to keep this list actionable. ` : ''
-  return `---\n\n${omitted}Full findings (${report.findings.length}) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).`
+  const found = report.findings.length + report.advisories.length
+  return `---\n\n${omitted}Full findings (${found}) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).`
 }
 
 /* ------------------------------------------------------------- primitives */

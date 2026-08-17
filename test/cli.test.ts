@@ -97,7 +97,7 @@ describe(
       const result = await runCli(['--json', '--out', out, fixture.root])
       expect(result.exitCode).toBe(0)
       const report = JSON.parse(result.stdout) as { findings: unknown[]; schemaVersion: number }
-      expect(report.schemaVersion).toBe(1)
+      expect(report.schemaVersion).toBe(2)
       expect(report.findings).toHaveLength(8)
     })
 

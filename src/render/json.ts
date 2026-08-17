@@ -2,6 +2,7 @@ import type { CategoryMovement, DeltaResult, ProjectChurn } from '../core/delta.
 import type { RootShell } from '../core/discover.ts'
 import { languageOf } from '../core/discover.ts'
 import type { RunRecord } from '../core/orchestrator.ts'
+import { sortFindings } from '../core/orchestrator.ts'
 import type {
   Category,
   CategoryState,
@@ -29,7 +30,30 @@ import { VERSION } from '../version.ts'
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
+
+/**
+ * One finding as `report.json` carries it.
+ *
+ * Two fields of the core's {@link Finding} are deliberately not on the wire:
+ * `identity` is the internal material the fingerprint was hashed from, and
+ * `gradeScope` is what the top-level split now says — a row in
+ * {@link Report.findings} counted toward its grade and a row in
+ * {@link Report.advisories} did not, so a boolean repeating that would be a
+ * second place for the same fact to be wrong.
+ *
+ * The delta's lists are the exception: they are not partitioned — "what this
+ * change added" is one question about both kinds — so their rows carry
+ * {@link ReportFinding.advisory} to say which they are.
+ */
+export type ReportFinding = Omit<Finding, 'gradeScope' | 'identity'> & {
+  /**
+   * Present and `true` only where membership cannot carry the flag: the delta's
+   * `newFindings` and `resolvedFindings`. Never emitted at the top level, where
+   * the array a row is in already says it.
+   */
+  readonly advisory?: true
+}
 
 export interface Report {
   readonly schemaVersion: number
@@ -82,7 +106,22 @@ export interface Report {
    */
   readonly rootShell?: ReportRootShell
   readonly tools: readonly ReportTool[]
-  readonly findings: readonly Finding[]
+  /**
+   * The findings that counted toward a grade, in report order.
+   *
+   * Schema 2 split this list in two. A report where four fifths of the rows are
+   * a default config's opinions buries the fifth that moved a letter, and every
+   * consumer had to know to filter on `gradeScope` to find it — so the graded
+   * ones are here and the rest are in {@link advisories}.
+   */
+  readonly findings: readonly ReportFinding[]
+  /**
+   * The findings that were reported but did not count toward any grade, in
+   * report order: a default config's style opinions, a low-confidence tier, a
+   * vulnerable dependency with no fixed version to upgrade to. Same shape as
+   * {@link findings} — the only difference is which array they are in.
+   */
+  readonly advisories: readonly ReportFinding[]
   readonly warnings: readonly string[]
   /** Present exactly when `mode` is `pr`. Deterministic — not a timing. */
   readonly delta?: ReportDelta
@@ -118,7 +157,7 @@ export interface ReportDelta {
   /** Findings present at head and not at the merge-base. */
   readonly newFindings: readonly ReportNewFinding[]
   /** Findings present at the merge-base and gone at head, at their head paths. */
-  readonly resolvedFindings: readonly Finding[]
+  readonly resolvedFindings: readonly ReportFinding[]
 }
 
 export interface ReportDeltaCounts {
@@ -152,7 +191,7 @@ export interface ReportProjectMovement {
 }
 
 /** A finding in {@link ReportDelta.newFindings}: the schema plus the flag. */
-export type ReportNewFinding = Finding & { readonly touchedLine: boolean }
+export type ReportNewFinding = ReportFinding & { readonly touchedLine: boolean }
 
 export interface ReportRepo {
   readonly path: string
@@ -343,7 +382,14 @@ export function buildReport(input: ReportInput): Report {
       ? {}
       : { rootShell: { declaredBy: input.rootShell.declaredBy.toSorted(compare) } }),
     tools: runs.map((run) => toReportTool(run)),
-    findings: input.findings.map((finding) => orderedFinding(finding)),
+    // One pass each over an already-sorted list, so the two arrays are the
+    // report's own order with the other kind of row taken out.
+    findings: input.findings
+      .filter((finding) => finding.gradeScope)
+      .map((finding) => orderedFinding(finding)),
+    advisories: input.findings
+      .filter((finding) => !finding.gradeScope)
+      .map((finding) => orderedFinding(finding)),
     warnings: input.warnings.toSorted(compare),
     ...(input.delta === undefined ? {} : { delta: orderedDelta(input.delta) }),
     timings: {
@@ -357,6 +403,41 @@ export function buildReport(input: ReportInput): Report {
 /** The bytes written to `report.json` and printed by `--json`. */
 export function serializeReport(report: Report): string {
   return `${JSON.stringify(report, null, 2)}\n`
+}
+
+/**
+ * Every finding the report carries — graded and advisory alike — as the core
+ * knows one, in report order.
+ *
+ * The renderers ask "what did this scan find", which the schema-2 split
+ * deliberately does not answer in a single array. Re-sorting the concatenation
+ * with the pipeline's own {@link sortFindings} reproduces the order the two
+ * arrays were cut out of, so a renderer sees exactly the list it always did, and
+ * `gradeScope` comes back from which array each row was in.
+ */
+export function reportFindings(report: Report): Finding[] {
+  return sortFindings([
+    ...report.findings.map((row) => scoped(row, true)),
+    ...report.advisories.map((row) => scoped(row, false)),
+  ])
+}
+
+/**
+ * One row of an unpartitioned list — the delta's — back in the core's shape,
+ * reading its scope off {@link ReportFinding.advisory}. Extra fields (the
+ * delta's `touchedLine`) survive.
+ */
+export function withGradeScope<T extends ReportFinding>(
+  row: T,
+): T & { readonly gradeScope: boolean } {
+  return scoped(row, row.advisory !== true)
+}
+
+function scoped<T extends ReportFinding>(
+  row: T,
+  gradeScope: boolean,
+): T & { readonly gradeScope: boolean } {
+  return { ...row, gradeScope }
 }
 
 /**
@@ -464,10 +545,21 @@ function orderedDelta(delta: PrDelta): ReportDelta {
       categories: project.categories.map((movement) => orderedMovement(movement)),
     })),
     newFindings: delta.newFindings.map((entry) => ({
-      ...orderedFinding(entry.finding),
+      ...orderedDeltaFinding(entry.finding),
       touchedLine: entry.touchedLine,
     })),
-    resolvedFindings: delta.resolvedFindings.map((finding) => orderedFinding(finding)),
+    resolvedFindings: delta.resolvedFindings.map((finding) => orderedDeltaFinding(finding)),
+  }
+}
+
+/**
+ * A delta row: the schema's key order, plus the scope flag the top level says
+ * by partitioning. See {@link ReportFinding.advisory}.
+ */
+function orderedDeltaFinding(finding: Finding): ReportFinding {
+  return {
+    ...orderedFinding(finding),
+    ...(finding.gradeScope ? {} : { advisory: true as const }),
   }
 }
 
@@ -551,7 +643,7 @@ function orderedState(state: CategoryState): CategoryState {
     : { status: state.status, reason: state.reason }
 }
 
-function orderedFinding(finding: Finding): Finding {
+function orderedFinding(finding: Finding): ReportFinding {
   return {
     id: finding.id,
     category: finding.category,
@@ -570,7 +662,6 @@ function orderedFinding(finding: Finding): Finding {
     },
     message: finding.message,
     provenance: finding.provenance,
-    gradeScope: finding.gradeScope,
     ...(finding.fixHint === undefined ? {} : { fixHint: finding.fixHint }),
   }
 }
