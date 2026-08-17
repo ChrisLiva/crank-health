@@ -997,14 +997,14 @@ describe('each task', () => {
 })
 
 /**
- * `Grade impact:` and `Verify:` say the same two things for every task in one
- * category of one project — six copies of them is five copies of noise between
- * the agent and the work. They are stated once per run of consecutive tasks
- * that agree on all three of category, grade impact and verify command, and
- * consecutive only, so a run can never reorder what the budget emitted.
+ * `Grade impact:` and `Verify:` are what a task is checked against, so every
+ * task carries both. They used to be stated once per run of consecutive tasks
+ * that agreed on them — three fewer lines, at the cost of a heading an agent can
+ * act on without scrolling for the command that proves it done. A task that has
+ * to be read together with the one above it is not a task.
  */
-describe('boilerplate per run of identical tasks', () => {
-  it('states the grade impact under the first task and the verify after the last', () => {
+describe('the two lines on every task', () => {
+  it('states the grade impact and the verify command under each task', () => {
     const markdown = renderAgentMarkdown(manyLintRules(3))
     expect(headings(markdown)).toHaveLength(3)
     expect(tasksSection(markdown)).toBe(
@@ -1015,17 +1015,37 @@ describe('boilerplate per run of identical tasks', () => {
         '',
         '- `src/a.ts:1` `rule-00` — unused variable',
         '',
+        'Verify: `npx crank-health --only lint --fail-under A`',
+        '',
         '### T2 — Fix 1 `rule-01` finding',
+        '',
+        'Grade impact: lint · F → A',
         '',
         '- `src/a.ts:1` `rule-01` — unused variable',
         '',
+        'Verify: `npx crank-health --only lint --fail-under A`',
+        '',
         '### T3 — Fix 1 `rule-02` finding',
+        '',
+        'Grade impact: lint · F → A',
         '',
         '- `src/a.ts:1` `rule-02` — unused variable',
         '',
         'Verify: `npx crank-health --only lint --fail-under A`',
       ].join('\n'),
     )
+  })
+
+  /** Every task in a golden carries the pair — the plan's own check. */
+  it('states both under every task of every golden', async () => {
+    for (const name of FIXTURES) {
+      // eslint-disable-next-line no-await-in-loop
+      const markdown = renderAgentMarkdown(await readGoldenReport(name))
+      const count = headings(markdown).length
+      expect(count).toBeGreaterThan(0)
+      expect(boilerplate(markdown, 'Grade impact:')).toHaveLength(count)
+      expect(boilerplate(markdown, 'Verify:')).toHaveLength(count)
+    }
   })
 
   /** The brief's monorepo shape: neither line survives being shared. */
@@ -1046,7 +1066,7 @@ describe('boilerplate per run of identical tasks', () => {
    * Each field of the run key on its own. The verify command differs while the
    * grade impact reads the same in both packages: one field, and the run breaks.
    */
-  it('breaks a run on the verify command alone', () => {
+  it('states two identical grade impacts where two packages hold the same grade', () => {
     const markdown = renderAgentMarkdown(twoLintPackages('F', 'F'))
     expect(boilerplate(markdown, 'Grade impact:')).toEqual([
       'Grade impact: lint · F → A',
@@ -1062,7 +1082,7 @@ describe('boilerplate per run of identical tasks', () => {
    * The mirror image: a repo-spanning scanner's check cannot be scoped, so both
    * packages carry the identical Verify line and only the grades differ.
    */
-  it('breaks a run on the grade impact alone', () => {
+  it('states two identical verify commands where neither check can be scoped', () => {
     const markdown = renderAgentMarkdown(twoSecurityPackages())
     expect(boilerplate(markdown, 'Grade impact:')).toEqual([
       'Grade impact: security · F → A',
@@ -1074,12 +1094,8 @@ describe('boilerplate per run of identical tasks', () => {
     ])
   })
 
-  /**
-   * The third field is redundant by construction — a category names itself in
-   * both of the other two — so two categories can only ever differ in all
-   * three, and neither line is shared across the boundary.
-   */
-  it('breaks a run on the category', () => {
+  /** Two categories differ in both lines, and each task says its own. */
+  it('states each category’s own pair', () => {
     const report = makeReport({
       categories: {
         ...allGraded(),
@@ -1109,8 +1125,8 @@ describe('boilerplate per run of identical tasks', () => {
     ])
   })
 
-  /** A run of one is the shape every single-task report has always rendered. */
-  it('renders a run of one exactly as a lone task', () => {
+  /** The shape every single-task report has always rendered, unchanged. */
+  it('renders a lone task as it always did', () => {
     const report = makeReport({
       categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
       findings: [makeFinding({ id: 'a' })],

@@ -151,7 +151,7 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
     '## Tasks',
     ...(tasks.length === 0
       ? [delta === undefined ? NOTHING_TO_DO : NOTHING_NEW]
-      : runsOf(tasks).map((run) => renderRun(run, report.projects.length > 1))),
+      : tasks.map((task) => renderTask(task, report.projects.length > 1))),
     ...resolvedSection(delta),
     footer(report, all.length, tasks.length),
   ]
@@ -887,59 +887,23 @@ const NOTHING_TO_DO =
 const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
 
 /**
- * Consecutive tasks that would state the same `Grade impact:` and the same
- * `Verify:` line, grouped so those two lines are stated once (spec §10).
+ * One task, whole: its heading, the grade its category would reach, the work,
+ * and the command that says whether the work is done.
  *
- * Six lint tasks in one package repeat both sentences six times, and an agent
- * reading the same command under every heading reads it as decoration rather
- * than as the check it has to run. Both lines are project-dependent, so the key
- * is the pair itself — a category alone would share a command two packages
- * cannot both pass — and the run is over **consecutive** tasks only, so the
- * grouping can never reorder what {@link budgetTasks} emitted.
+ * Both of those lines used to be stated once per run of consecutive tasks that
+ * agreed on them — six lint tasks under one `Verify:` — which saved lines by
+ * making a task unreadable on its own. An agent that starts at T4 has to scroll
+ * up past three headings to find out what would check it, and a task whose
+ * check lives under a different heading is one an agent quietly skips.
+ * Repetition is the cheaper failure.
  */
-function runsOf(tasks: readonly AgentTask[]): AgentTask[][] {
-  const runs: AgentTask[][] = []
-  let previous: string | undefined
-  for (const task of tasks) {
-    const key = runKey(task)
-    const current = runs.at(-1)
-    if (current === undefined || key !== previous) runs.push([task])
-    else current.push(task)
-    previous = key
-  }
-  return runs
-}
-
-/** What two tasks have to agree on to say the boilerplate once between them. */
-function runKey(task: AgentTask): string {
-  return JSON.stringify([task.category, task.gradeImpact, task.verify])
-}
-
-/**
- * One run: the first task's grade impact under its heading, then every task's
- * own heading and body, then the one Verify line the whole run is checked with.
- *
- * The tasks are joined with the same separator {@link renderAgentMarkdown} puts
- * between blocks, so a run of one is byte-identical to a task rendered alone.
- */
-function renderRun(tasks: readonly AgentTask[], named: boolean): string {
-  const [first, ...rest] = tasks
-  if (first === undefined) return ''
-  return [
-    [
-      ...taskHeading(first, named),
-      `Grade impact: ${first.gradeImpact}`,
-      '',
-      ...taskBody(first),
-    ].join('\n'),
-    ...rest.map((task) => renderTask(task, named)),
-    `Verify: \`npx crank-health ${first.verify.join(' ')}\``,
-  ].join('\n\n')
-}
-
-/** One task, with the boilerplate its run states on its behalf left out. */
 function renderTask(task: AgentTask, named: boolean): string {
-  return [...taskHeading(task, named), ...taskBody(task)].join('\n')
+  return [
+    [...taskHeading(task, named), `Grade impact: ${task.gradeImpact}`, '', ...taskBody(task)].join(
+      '\n',
+    ),
+    `Verify: \`npx crank-health ${task.verify.join(' ')}\``,
+  ].join('\n\n')
 }
 
 /**

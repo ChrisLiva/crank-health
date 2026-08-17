@@ -52,7 +52,11 @@ Grade impact: lint · F → A
 
 Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
+Verify: `npx crank-health --only lint --fail-under A`
+
 ### T5 — Fix 1 `F401` finding
+
+Grade impact: lint · F → A
 
 - `dead.py:1` `F401` — `os` imported but unused
 

@@ -43,13 +43,21 @@ Grade impact: lint · F → A
 
 Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
+Verify: `npx crank-health --only lint --fail-under A`
+
 ### T4 — Fix 1 `eslint(no-dupe-keys)` finding
+
+Grade impact: lint · F → A
 
 - `src/dupe-keys.js:2` `eslint(no-dupe-keys)` — Duplicate key 'home'
 
 Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
+Verify: `npx crank-health --only lint --fail-under A`
+
 ### T5 — Fix 1 `eslint(no-unreachable)` finding
+
+Grade impact: lint · F → A
 
 - `src/unreachable.js:6` `eslint(no-unreachable)` — Unreachable code.
 
