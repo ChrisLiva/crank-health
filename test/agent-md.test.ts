@@ -328,6 +328,23 @@ describe('what counts as a task', () => {
     expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['lint'])
   })
 
+  /**
+   * Two advisory findings at one place answer only for each other, and neither
+   * is a graded finding somebody has to open the file for — so the cross-link
+   * carries nothing and the pair stays out. This is the shape sec-basic has: a
+   * clone and a complexity finding on the same function, both advisory, linked
+   * to each other by `related` and to nothing that counted toward a grade.
+   */
+  it('leaves two advisory findings that answer only for each other out of the list', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      findings: [clone('src/a.ts'), advisoryComplexity('src/a.ts')],
+    })
+    // The links exist; what they link to is the point.
+    expect(report.advisories.map((row) => row.related)).toEqual([['cx'], ['dup-src/a.ts']])
+    expect(buildAgentTasks(report)).toEqual([])
+  })
+
   it('leaves a theme whose only eligible finding is in generated code out', () => {
     for (const file of ['gen/api.ts', 'src/gen/api.ts', 'src/api.gen.ts']) {
       expect(buildAgentTasks(lintIn(file))).toEqual([])
@@ -447,6 +464,18 @@ function clone(file: string): Finding {
     category: 'duplication',
     tool: 'jscpd',
     rule: 'jscpd/duplicate-block',
+    gradeScope: false,
+    file,
+  })
+}
+
+/** One advisory complexity finding, in the file the test is about. */
+function advisoryComplexity(file: string): Finding {
+  return makeFinding({
+    id: 'cx',
+    category: 'complexity',
+    tool: 'fallow-health',
+    rule: 'fallow/complexity',
     gradeScope: false,
     file,
   })

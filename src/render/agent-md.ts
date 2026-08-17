@@ -203,6 +203,14 @@ export function buildAgentTasks(
   )
   const written = handWritten(reportFindings(report), excludes ?? [])
   const movementOf = gradeMovement(report)
+  // Report-wide, not delta-wide: `related` ids are the report's own identities,
+  // and in PR mode the graded finding an advisory row answers for may be one
+  // this change did not add.
+  const graded = new Set(
+    reportFindings(report)
+      .filter((finding) => finding.gradeScope)
+      .map((finding) => finding.id),
+  )
 
   const themes = mergeDuplicates(
     CATEGORIES.flatMap((category) =>
@@ -210,7 +218,7 @@ export function buildAgentTasks(
         category,
         findings.filter((finding) => finding.category === category),
       ),
-    ).filter((theme) => isWork(theme, written)),
+    ).filter((theme) => isWork(theme, written, graded)),
     new Map(findings.map((finding, index) => [finding.id, index])),
   )
 
@@ -319,14 +327,21 @@ function gradeWithout(
  * Whether a finding can mint a task of its own.
  *
  * Graded ones can: they are what a letter is made of. An advisory one can only
- * when `related` links it to a finding in another category at the same place —
- * somebody has to open that file for the graded finding anyway, and the
- * advisory row is then part of the same sitting. An advisory row standing alone
- * is a default config's opinion nobody asked for, and a list of those is what
- * makes an agent stop reading the list.
+ * when `related` links it to a **graded** finding in another category at the
+ * same place — somebody has to open that file for the graded finding anyway,
+ * and the advisory row is then part of the same sitting. An advisory row
+ * standing alone is a default config's opinion nobody asked for, and a list of
+ * those is what makes an agent stop reading the list.
+ *
+ * Which is why the link has to be resolved rather than counted. Two advisory
+ * findings at one place — a clone and a complexity ceiling on the same function
+ * — link to each other and to nothing anyone has to open that file for, so a
+ * non-empty `related` was never the question.
+ *
+ * @param graded ids of every finding in this report that counted toward a grade
  */
-function eligible(finding: Finding): boolean {
-  return finding.gradeScope || (finding.related?.length ?? 0) > 0
+function eligible(finding: Finding, graded: ReadonlySet<string>): boolean {
+  return finding.gradeScope || (finding.related ?? []).some((id) => graded.has(id))
 }
 
 /**
@@ -339,8 +354,12 @@ function eligible(finding: Finding): boolean {
  * version to upgrade to. "Upgrade lodash" with no fixed version is not a task;
  * it is a fact, and `report.json` already records it.
  */
-function isWork(theme: Theme, written: (finding: Finding) => boolean): boolean {
-  const rows = theme.findings.filter((finding) => eligible(finding))
+function isWork(
+  theme: Theme,
+  written: (finding: Finding) => boolean,
+  graded: ReadonlySet<string>,
+): boolean {
+  const rows = theme.findings.filter((finding) => eligible(finding, graded))
   if (rows.length === 0) return false
   if (rows.every((finding) => finding.package !== undefined)) return rows.some(hasFix)
   return rows.some((finding) => written(finding))
