@@ -385,12 +385,14 @@ const GITHUB_DIRECTORY = '.github'
 
 /**
  * True when a path sits under a hidden directory — tooling scope rather than
- * the repo's own source (spec §7). A root `.github` is the one exemption, so
- * workflows stay in scope; it exempts that segment alone, so `.github/.cache/x.js`
- * is hidden all the same, as is `packages/web/.github/workflows/x.yml` below the
- * root. Only directory segments count: a dot-*file* is the repo's own config
- * wherever it sits, so `.gitignore`, `src/.hidden-named-file.ts` and
- * `packages/web/.eslintrc.cjs` all stay.
+ * the repo's own source (spec §7). A `.github` is the one exemption, at any
+ * depth: a package's `packages/web/.github/workflows/x.yml` is a real workflow
+ * file whether or not GitHub runs it from there, and stays lintable through a
+ * repo split. The exemption is that segment's alone, so `.github/.cache/x.js`
+ * is hidden all the same, and a `.github` below some *other* hidden directory
+ * is still under that one. Only directory segments count: a dot-*file* is the
+ * repo's own config wherever it sits, so `.gitignore`,
+ * `src/.hidden-named-file.ts` and `packages/web/.eslintrc.cjs` all stay.
  */
 export function isHiddenScope(file: string): boolean {
   return hiddenScopeRoot(file) !== undefined
@@ -406,7 +408,7 @@ function hiddenScopeRoot(file: string): string | undefined {
   const segments = file.split('/')
   for (let index = 0; index < segments.length - 1; index++) {
     const segment = segments[index] ?? ''
-    if (segment.startsWith('.') && !(index === 0 && segment === GITHUB_DIRECTORY)) {
+    if (segment.startsWith('.') && segment !== GITHUB_DIRECTORY) {
       return `${segments.slice(0, index + 1).join('/')}/`
     }
   }

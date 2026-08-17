@@ -177,9 +177,10 @@ describe('discoverFiles and hidden directories', () => {
     await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
     await plant(repo, 'packages/web/.next/x.js', 'const n = 1\n')
     await plant(repo, '.github/.cache/x.js', 'const c = 1\n')
-    await plant(repo, 'packages/web/.github/workflows/x.yml', 'on: push\n')
+    await plant(repo, 'packages/web/.next/.github/workflows/x.yml', 'on: push\n')
     await plant(repo, '.hidden/.github/workflows/x.yml', 'on: push\n')
-    // The root `.github` exemption.
+    // The `.github` exemption, at the root and below it.
+    await plant(repo, 'packages/web/.github/workflows/x.yml', 'on: push\n')
     await plant(repo, '.github/workflows/ci.yml', 'on: push\n')
     await plant(repo, '.github/scripts/build.js', 'const b = 1\n')
     await plant(repo, 'src/app.js', 'const a = 1\n')
@@ -204,19 +205,21 @@ describe('discoverFiles and hidden directories', () => {
     expect(inventory.all).toContain('packages/web/.eslintrc.cjs')
   })
 
-  it('exempts the root .github only, and only that one segment', () => {
+  it('exempts .github at any depth, and only that one segment', () => {
     expect(inventory.all).toContain('.github/workflows/ci.yml')
     expect(inventory.all).toContain('.github/scripts/build.js')
+    expect(inventory.all).toContain('packages/web/.github/workflows/x.yml')
     expect(inventory.all).not.toContain('.github/.cache/x.js')
-    expect(inventory.all).not.toContain('packages/web/.github/workflows/x.yml')
+    expect(inventory.all).not.toContain('packages/web/.next/.github/workflows/x.yml')
   })
 
   /**
    * The workflow audit reads the inventory it is handed, so the only thing
    * discovery decides is whether a root workflow file is still in that list.
    */
-  it('leaves the root workflow files in the list a workflow audit filters', () => {
+  it('leaves every workflow file in the list a workflow audit filters', () => {
     expect(inventory.all).toContain('.github/workflows/ci.yml')
+    expect(inventory.all).toContain('packages/web/.github/workflows/x.yml')
     expect(inventory.all).not.toContain('.hidden/.github/workflows/x.yml')
   })
 })
@@ -832,10 +835,12 @@ describe('isHiddenScope', () => {
   it.each([
     '.crank/hooks/hook.ts',
     'packages/web/.next/x.js',
-    // The `.github` exemption is that one segment's alone.
+    // The `.github` exemption is that one segment's alone, at any depth.
     '.github/.cache/x.js',
-    // ... and only at the root.
-    'packages/web/.github/workflows/x.yml',
+    'packages/web/.github/.cache/x.js',
+    // A `.github` below some *other* hidden directory is under that one.
+    '.hidden/.github/workflows/x.yml',
+    'packages/web/.next/.github/workflows/x.yml',
     'a/.b/c/d.ts',
   ])('excludes %s', (file) => {
     expect(isHiddenScope(file)).toBe(true)
@@ -850,8 +855,13 @@ describe('isHiddenScope', () => {
     'packages/web/.eslintrc.cjs',
     '.github/workflows/ci.yml',
     '.github/scripts/build.js',
+    // A package's own `.github` is authored the same way the root's is.
+    'packages/web/.github/workflows/x.yml',
+    'packages/web/.github/scripts/build.js',
     'src/app.js',
+    // A path with no directory segment at all has no hidden one either.
     'README.md',
+    '',
   ])('keeps %s', (file) => {
     expect(isHiddenScope(file)).toBe(false)
   })
