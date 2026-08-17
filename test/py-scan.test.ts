@@ -143,6 +143,7 @@ describe('quick scan of the py-basic fixture', () => {
       // something to look at and the rest report that they have not.
       'bandit',
       'gitleaks',
+      'govulncheck',
       'opengrep',
       'osv-scanner',
       'zizmor',

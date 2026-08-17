@@ -145,6 +145,7 @@ describe('quick scan of the js-basic fixture', () => {
       // workflows most of it has nothing to look at, and says so.
       'bandit',
       'gitleaks',
+      'govulncheck',
       'opengrep',
       'osv-scanner',
       'zizmor',

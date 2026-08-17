@@ -261,11 +261,12 @@ describe('quick scan of the sec-basic fixture', () => {
     expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
   })
 
-  it('runs the common adapter’s six tools, all on default configs', () => {
+  it('runs the common adapter’s seven tools, all on default configs', () => {
     const common = parse(json).tools.filter((tool) => tool.scope === 'common')
     expect(common.map((tool) => tool.tool)).toEqual([
       'bandit',
       'gitleaks',
+      'govulncheck',
       'opengrep',
       'osv-scanner',
       'zizmor',

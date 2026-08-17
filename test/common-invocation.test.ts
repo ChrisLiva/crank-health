@@ -5,6 +5,7 @@ import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
 import { banditRunner } from '../src/adapters/common/bandit.ts'
 import { gitleaksRunner, invocationArgs as gitleaksArgs } from '../src/adapters/common/gitleaks.ts'
+import { govulncheckRunner } from '../src/adapters/common/govulncheck.ts'
 import {
   JSCPD_TOOL,
   ignoreGlobs as jscpdIgnore,
@@ -775,6 +776,7 @@ describe('the common adapter', () => {
     expect(security.map((runner) => runner.tool).toSorted()).toEqual([
       'bandit',
       'gitleaks',
+      'govulncheck',
       'opengrep',
       'osv-scanner',
       'zizmor',
@@ -795,9 +797,11 @@ describe('the common adapter', () => {
       zizmorRunner,
       banditRunner,
       osvScannerRunner,
+      govulncheckRunner,
       jscpdRunner,
     ]) {
-      expect(runner.pinnedVersion).toMatch(/^\d+\.\d+/)
+      // Go versions carry the `v`; every other ecosystem's does not.
+      expect(runner.pinnedVersion).toMatch(/^v?\d+\.\d+/)
     }
   })
 })
