@@ -17,6 +17,7 @@ import { CATEGORIES } from '../core/types.ts'
 import {
   ADVISORY_TAG,
   CATEGORY_LABELS,
+  basisAnnotation,
   TOUCHED_TAG,
   collapseToolRows,
   hasProjectMovement,
@@ -32,7 +33,14 @@ import {
   unselectedCategories,
 } from './display.ts'
 import type { CollapsedTool } from './display.ts'
-import type { Report, ReportDelta, ReportProject, ReportProjectTool, ReportTool } from './json.ts'
+import type {
+  Report,
+  ReportDelta,
+  ReportGradeBasis,
+  ReportProject,
+  ReportProjectTool,
+  ReportTool,
+} from './json.ts'
 import { reportFindings, withGradeScope } from './json.ts'
 
 /**
@@ -84,7 +92,7 @@ export function renderReportMarkdown(report: Report, options: ReportMarkdownOpti
     '# Codebase health',
     subtitle(report, delta),
     '## Grades',
-    gradesTable(report.categories, rollupScope(all, report), delta, omit),
+    gradesTable(report.categories, rollupScope(all, report), delta, omit, report.gradeBasis),
     ...(omit.length === 0 ? [] : [notSelectedNote(omit)]),
     ...scanNotes(report),
     ...languageBreakdown(report, all),
@@ -264,13 +272,29 @@ function gradesTable(
   scope: GradeScope,
   delta: ReportDelta | undefined,
   omit: readonly Category[],
+  arithmetic: Readonly<Partial<Record<Category, ReportGradeBasis>>>,
 ): string {
   const rows = CATEGORIES.filter((category) => !omit.includes(category)).map((category) => {
     const state = states[category]
     const basis = state.status === 'graded' ? gradeBasis(scope, category, delta) : state.reason
-    return row([CATEGORY_LABELS[category], stateLabel(state), basis])
+    return row([CATEGORY_LABELS[category], gradeCell(state, arithmetic[category]), basis])
   })
   return table(['Category', 'Grade', 'Basis'], rows)
+}
+
+/**
+ * `D — 56 weighted findings per 0.8 KLOC`: the letter, and the division it came
+ * out of, where the reader meets it.
+ *
+ * The arithmetic is only on the wire for the rollup — a project's denominators
+ * are its own KLOC and its own file counts, which `report.json` does not carry
+ * per project — so a project's table is letters, and its `Basis` column is
+ * where its numbers are.
+ */
+function gradeCell(state: CategoryState, basis: ReportGradeBasis | undefined): string {
+  const label = stateLabel(state)
+  if (state.status !== 'graded' || basis === undefined) return label
+  return `${label} — ${basisAnnotation(basis)}`
 }
 
 /**
@@ -434,7 +458,7 @@ function projectBlock(
   return [
     `### ${projectLabel(project.path)}`,
     [...manifests, ...languages].join(' · '),
-    gradesTable(project.categories, projectScope(findings, project), undefined, omit),
+    gradesTable(project.categories, projectScope(findings, project), undefined, omit, {}),
     ...(project.toolchain.length === 0
       ? ['This project declares no tool of its own: it was analyzed on crank-health’s defaults.']
       : projectToolBlock(project, root)),

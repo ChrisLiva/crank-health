@@ -1,7 +1,13 @@
 import { ROOT_PROJECT } from '../core/discover.ts'
 import type { Category, CategoryState, Finding, Language } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
-import type { Report, ReportProjectMovement, ReportRootShell, ReportTool } from './json.ts'
+import type {
+  Report,
+  ReportGradeBasis,
+  ReportProjectMovement,
+  ReportRootShell,
+  ReportTool,
+} from './json.ts'
 
 /**
  * The vocabulary every renderer shares: how a category, a grade state and a
@@ -179,6 +185,41 @@ export function rootShellNote(shell: ReportRootShell): string {
   const declared =
     shell.declaredBy.length === 0 ? '' : ` (declared by ${shell.declaredBy.join(', ')})`
   return `The repo root is a workspace shell${declared}: it holds no source of its own, so it is not graded as a project.`
+}
+
+/**
+ * The two numbers one grade divided, in the formula's own words — `56 weighted
+ * findings per 0.8 KLOC`, `1 of 12 files failing the formatter`, `3 graded
+ * findings`.
+ *
+ * A letter on its own is not checkable: `lint: D` is the same letter over forty
+ * warnings in a thousand lines and four hundred in ten thousand. Read straight
+ * off {@link ReportGradeBasis}, so a reader can redo the division and a new
+ * category needs no case here — the shape of the sentence follows the unit:
+ *
+ * - no denominator: the value is the whole measurement (`3 graded findings`);
+ * - a unit naming what it is *per*: the denominator goes where "per" points;
+ * - otherwise the denominator is the total the value is part of.
+ */
+export function basisAnnotation(basis: ReportGradeBasis): string {
+  const value = basis.unit.startsWith('%') ? percent(basis.value) : amount(basis.value)
+  const unit = basis.unit.startsWith('%') ? basis.unit.slice(1) : ` ${basis.unit}`
+  if (basis.denominator === null) return `${value}${unit}`
+
+  const [numerator, per] = basis.unit.split(' per ')
+  if (per !== undefined) return `${value} ${numerator} per ${amount(basis.denominator)} ${per}`
+  return `${value} of ${amount(basis.denominator)}${unit}`
+}
+
+/**
+ * One decimal place at most, and no trailing `.0` on a whole number — except
+ * below one, where a single decimal place rounds a real number to zero and a
+ * grade divided by nothing reads as arithmetic nobody did. A repo of twelve
+ * lines is `0.012` KLOC, not `0`.
+ */
+export function amount(value: number): string {
+  if (value === 0 || Math.abs(value) >= 1) return String(Math.round(value * 10) / 10)
+  return String(Number(value.toPrecision(2)))
 }
 
 /** A grade letter, or the degradation state, in the fewest words that are true. */

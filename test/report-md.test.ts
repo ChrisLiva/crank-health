@@ -289,6 +289,43 @@ describe('renderReportMarkdown', () => {
     )
   })
 
+  /**
+   * A letter on its own is not checkable: `lint: D` says nothing about whether
+   * the repo has forty warnings in a thousand lines or four hundred in ten
+   * thousand. The two numbers the formula divided go beside the letter.
+   */
+  it('annotates each grade with the numbers its formula divided', () => {
+    const markdown = renderReportMarkdown(
+      makeReport({
+        categories: {
+          ...allNotAssessed(),
+          security: { status: 'graded', grade: 'C' },
+          duplication: { status: 'graded', grade: 'A' },
+          lint: { status: 'graded', grade: 'D' },
+          format: { status: 'graded', grade: 'B' },
+        },
+        gradeBasis: {
+          security: { value: 3, denominator: null, unit: 'graded findings' },
+          duplication: { value: 4.72, denominator: null, unit: '% of tokens duplicated' },
+          lint: { value: 56, denominator: 0.784, unit: 'weighted findings per KLOC' },
+          format: { value: 1, denominator: 12, unit: 'files failing the formatter' },
+        },
+      }),
+    )
+
+    const grades = gradeRows(section(markdown, '## Grades')).map((line) => line.split(' | ')[1])
+    expect(grades).toEqual([
+      'C — 3 graded findings',
+      'not assessed',
+      'not assessed',
+      'not assessed',
+      'A — 4.7% of tokens duplicated',
+      'D — 56 weighted findings per 0.78 KLOC',
+      'B — 1 of 12 files failing the formatter',
+      'not assessed',
+    ])
+  })
+
   it('reports the measurement that drove each ratio grade', async () => {
     const markdown = await render('sec-basic')
     expect(markdown).toContain('47.0% of tokens duplicated')
@@ -835,7 +872,7 @@ describe('renderReportMarkdown under --only', () => {
 function gradeRows(block: string): string[] {
   const [, rest = ''] = block.split('| Category | Grade | Basis |\n')
   const [body = ''] = rest.split('\n\n')
-  return body.split('\n').filter((line) => !line.startsWith('| --- |'))
+  return body.split('\n').filter((line) => line !== '' && !line.startsWith('| --- |'))
 }
 
 /** Every `## <category> — <state>` heading, in the order the report prints them. */

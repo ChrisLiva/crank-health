@@ -6,7 +6,7 @@
 
 | Category | Grade | Basis |
 | --- | --- | --- |
-| lint | F | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). This change: 1 new, 1 resolved. |
+| lint | F — 10 weighted findings per 0.012 KLOC | 2 graded findings (2 error), weighted total 10 (error ×5, warning ×1, info ×0.2). This change: 1 new, 1 resolved. |
 
 Not assessed: not selected by `--only` — security, types, dead code, complexity, duplication, format, test quality
 
