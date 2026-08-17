@@ -581,7 +581,13 @@ export function goEnv(): Record<string, string> {
 async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
   const modules = goModules(ctx.files)
   if (modules.length === 0) {
-    return { state: 'not-available', findings: [], rawFiles: [], reason: NO_GO_MODULES_REASON }
+    return {
+      ...OUR_CONFIG,
+      state: 'not-available',
+      findings: [],
+      rawFiles: [],
+      reason: NO_GO_MODULES_REASON,
+    }
   }
 
   const rawFiles: string[] = []
@@ -618,20 +624,33 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
 
   const failure = wholesale(failures, modules.length)
   if (failure !== undefined) {
-    return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+    return { ...OUR_CONFIG, state: failure.state, findings: [], rawFiles, reason: failure.reason }
   }
   return {
+    ...OUR_CONFIG,
     state: 'ok',
     findings: await identify(ctx.repoRoot, pending.toSorted(byLocation)),
     // `go run <import-path>@<version>` is an exact spec with no resolution step
     // that could land elsewhere, so the pin is what ran (spec §6).
     toolVersion: pinnedGoVersion(GOVULNCHECK_PACKAGE),
     rawFiles,
-    // Our tool on our defaults, whatever `detect` found; see `detectGovulncheck`.
-    configOwned: false,
     ...(failures.length === 0 ? {} : { reason: reasonsOf(failures) }),
   }
 }
+
+/**
+ * What every result this runner returns says about whose configuration decided
+ * it: ours, on our defaults, whatever `detect` found — see
+ * {@link detectGovulncheck}.
+ *
+ * On **every** path, not just the one that reported findings. `report.json`
+ * reads a run's provenance off `configOwned` and falls back to the detection
+ * when the run gave no answer (`provenanceOf` in `render/json.ts`), so a run
+ * that stayed silent about it was filed as `repo-config` on the strength of the
+ * `go.mod` that made this runner apply — crediting a repo with a configuration
+ * it never wrote, on exactly the runs that produced nothing.
+ */
+const OUR_CONFIG = { configOwned: false } as const
 
 /**
  * `go`'s narration of the fetch it does on a cold module cache, which is not

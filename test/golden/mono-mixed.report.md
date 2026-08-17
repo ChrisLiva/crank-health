@@ -77,7 +77,7 @@ Nothing counted toward the grade.
 | bandit | ok | [default-config] | 1.9.4 | (services/api) |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing (services/web) |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
-| govulncheck | not available | [repo-config] | — (pinned v1.7.0) | Go toolchain absent — Go advisories graded conservatively (reachability unknown) |
+| govulncheck | not available | [default-config] | — (pinned v1.7.0) | Go toolchain absent — Go advisories graded conservatively (reachability unknown) |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (services/api, services/web) |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |

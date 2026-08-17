@@ -311,7 +311,7 @@
       "project": "repo",
       "repoWide": true,
       "execution": "ephemeral-pinned",
-      "provenance": "repo-config",
+      "provenance": "default-config",
       "version": null,
       "pinned": "v1.7.0",
       "detection": {

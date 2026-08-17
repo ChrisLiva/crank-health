@@ -584,6 +584,7 @@ describe('the govulncheck runner', () => {
     expect(result.state).toBe('not-available')
     expect(result.reason).toBe(NO_GO_MODULES_REASON)
     expect(result.findings).toEqual([])
+    expect(result.configOwned).toBe(false)
   })
 })
 
@@ -628,12 +629,22 @@ describe('the govulncheck runner against a farmed PATH', () => {
     }
   }
 
+  /**
+   * The `configOwned: false` matters as much as the reason. A `go.mod` is what
+   * decided this runner applies, not a claim that the repo configured a
+   * reachability analyzer — and `report.json` reads a run's provenance off
+   * `configOwned`, falling back to the detection when the run gave no answer.
+   * Without it a failed run's tool record reads `[repo-config]`, crediting the
+   * repo with a configuration it never wrote, on exactly the runs that produced
+   * nothing.
+   */
   it('degrades to not-available with the Go-toolchain reason when go is absent', async () => {
     const result = await runUnder(undefined, ['go.mod', 'main.go'])
 
     expect(result.state).toBe('not-available')
     expect(result.reason).toBe(GO_ABSENT_REASON)
     expect(result.findings).toEqual([])
+    expect(result.configOwned).toBe(false)
   })
 
   it('parses the stream a real run produces, and stages it as evidence', async () => {
@@ -678,6 +689,8 @@ describe('the govulncheck runner against a farmed PATH', () => {
     expect(result.findings).toEqual([])
     expect(result.reason).toContain('exit 1')
     expect(result.reason).toContain('go: updates to go.mod needed')
+    // Our tool on our defaults, whatever the run made of it.
+    expect(result.configOwned).toBe(false)
   })
 
   /** The failing run is the one whose evidence a reader most needs. */
