@@ -240,6 +240,7 @@ the selection `scopedTo` names — and `projects[]` answers the same questions p
 | `categories`                                         | All eight states, always: `graded`, `not-assessed(reason)` or `error(reason)`.                            |
 | `metrics`                                            | The tool-reported numbers behind the ratio grades — function counts, duplicated-token %, mutation score.  |
 | `languages`                                          | Findings per language per category.                                                                       |
+| `coverage`                                           | How much of the tree the grades are about — see below.                                                    |
 | `projects[]`                                         | Per project: path, manifests, languages, all eight states, metrics, and the toolchain that project owns.  |
 | `rootShell`                                          | Present when the repo root holds no source of its own — a workspace shell has nothing to grade.           |
 | `tools[]`                                            | One record per (tool × project) run: state, provenance, the version that ran, detection, raw evidence.    |
@@ -270,6 +271,14 @@ range overlap another finding's, in a _different_ category — the function over
 that also fails the type checker — carries that finding's id, and it carries yours. Sorted, absent
 when there is nothing to link, and never drawn within a category: two lint findings on one line are
 already in the same section of the report.
+
+**`coverage` is the denominator annotation.** Every density grade divides by the _assessed_ KLOC and
+every ratio grade by an assessed file or function count, so a repo can be graded A across the board
+while a third of it — workflow YAML, SQL, templates, shell — was never read by any tool. `coverage`
+says so in the report's own numbers: `files` and `lines` each as `{total, assessed}`, and
+`unassessed[]` breaking the remainder down by extension (`{extension, files, lines}`, ordered by
+extension; the empty string is files that have none). Lines are physical lines, counted the same way
+the KLOC denominator is.
 
 ### Secrets stay in your repo
 

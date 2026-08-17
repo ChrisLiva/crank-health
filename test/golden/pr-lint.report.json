@@ -50,6 +50,17 @@
       "lint": 2
     }
   },
+  "coverage": {
+    "files": {
+      "total": 3,
+      "assessed": 3
+    },
+    "lines": {
+      "total": 12,
+      "assessed": 12
+    },
+    "unassessed": []
+  },
   "projects": [
     {
       "path": ".",

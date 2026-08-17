@@ -8,7 +8,7 @@ import { QUICK_MODE_DEEP_REASON, sortFindings } from '../src/core/orchestrator.t
 import type { Category, CategoryOutcome, RepoContext, ToolMetrics } from '../src/core/types.ts'
 import { CATEGORIES, REPO_SCOPE } from '../src/core/types.ts'
 import type { ProjectScan } from '../src/render/json.ts'
-import { REPO_SCOPED_REASON, gradeProjects } from '../src/run.ts'
+import { REPO_SCOPED_REASON, gradeProjects, scanCoverage } from '../src/run.ts'
 import { makeFinding } from './factories.ts'
 
 /**
@@ -344,3 +344,32 @@ function record(
 function degraded(base: RunRecord, reason: string): RunRecord {
   return { ...base, result: { state: 'not-available', findings: [], rawFiles: [], reason } }
 }
+
+/**
+ * What a grade is silent about: the files no language adapter owns. A repo can
+ * be graded A across the board while a third of it — workflow YAML, SQL,
+ * templates, shell — was never looked at, and nothing in the report said so.
+ * `coverage` is the denominator annotation that makes a grade readable.
+ */
+describe('scanCoverage', () => {
+  const inventory = () => inventoryOf(Object.keys(TREE).toSorted())
+
+  it('counts the files and lines the languages claim, against the whole tree', async () => {
+    const coverage = await scanCoverage(repoRoot, inventory(), 2020)
+
+    expect(coverage.files).toEqual({ total: 5, assessed: 2 })
+    // The three unassessed files are one line each.
+    expect(coverage.lines).toEqual({ total: 2023, assessed: 2020 })
+  })
+
+  it('breaks the unmeasured remainder down by extension, in a fixed order', async () => {
+    const coverage = await scanCoverage(repoRoot, inventory(), 2020)
+
+    expect(coverage.unassessed).toEqual([
+      // `.env` has no extension by the rule `languageOf` classifies with.
+      { extension: '', files: 1, lines: 1 },
+      { extension: '.json', files: 1, lines: 1 },
+      { extension: '.toml', files: 1, lines: 1 },
+    ])
+  })
+})

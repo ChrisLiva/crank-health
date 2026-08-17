@@ -37,7 +37,7 @@ import type {
 } from './core/types.ts'
 import { CATEGORIES, LANGUAGES, toCategoryState } from './core/types.ts'
 import { renderAgentMarkdown } from './render/agent-md.ts'
-import type { ProjectScan, Report, ResolvedRun } from './render/json.ts'
+import type { ProjectScan, Report, ReportCoverage, ResolvedRun } from './render/json.ts'
 import { buildReport, serializeReport } from './render/json.ts'
 import { renderReportMarkdown } from './render/report-md.ts'
 
@@ -125,6 +125,7 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
         ...(options.projects === undefined ? {} : { scopedTo: options.projects }),
         categories: tree.categories,
         metrics: tree.scan.metrics,
+        coverage: tree.coverage,
         projects: tree.projects,
         ...(tree.rootShell === undefined ? {} : { rootShell: tree.rootShell }),
         runs: await adoptRawFiles(out, tree.scan),
@@ -153,6 +154,8 @@ export interface TreeScan {
   readonly warnings: readonly string[]
   /** The rollup's states: the whole tree, on the whole tree's denominators. */
   readonly categories: Record<Category, CategoryState>
+  /** How much of this tree the rollup's grades are about; see {@link scanCoverage}. */
+  readonly coverage: ReportCoverage
   readonly selected: readonly Category[]
   /**
    * The same, per project, ordered by path. Never empty, except on the side of
@@ -204,17 +207,80 @@ export async function scanTree(options: TreeScanOptions): Promise<TreeScan> {
   })
 
   const selected = options.only === undefined ? CATEGORIES : options.only
+  // The rollup's denominator: the whole tree, or — under `--project` — the
+  // selection. Coverage is read against the same set, so the two agree.
+  const graded = options.projects === undefined ? files : filesOf(scanned)
+  const rollup = await gradeAll(repo.repoRoot, rollupScope(scan, graded))
   return {
     scan,
     warnings: [...discovered.warnings, ...scan.warnings],
     selected,
-    categories: await gradeAll(
-      repo.repoRoot,
-      rollupScope(scan, options.projects === undefined ? files : filesOf(scanned)),
-    ),
+    categories: rollup.categories,
+    coverage: await scanCoverage(repo.repoRoot, graded, rollup.sourceLines),
     projects: await gradeProjects(repo, scan, selected),
     ...(discovery.rootShell === undefined ? {} : { rootShell: discovery.rootShell }),
   }
+}
+
+/**
+ * What the grades are silent about, in files and physical lines: the tree the
+ * scan saw, minus the part a language adapter claims.
+ *
+ * A repo can be graded A across the board while a third of it — workflow YAML,
+ * SQL, templates, shell — was never read by any tool, because the density
+ * denominators are the *assessed* KLOC and the file counts are assessed files.
+ * The remainder is broken down by extension so a reader can see what it is made
+ * of, rather than being handed one discouraging percentage.
+ *
+ * @param assessedLines the source lines {@link gradeAll} already counted for the
+ * KLOC denominator — the same read, not a second one. Only the remainder is read
+ * here, so the whole tree is read exactly once between the two.
+ */
+export async function scanCoverage(
+  repoRoot: string,
+  files: FileInventory,
+  assessedLines: number,
+): Promise<ReportCoverage> {
+  const assessed = new Set(LANGUAGES.flatMap((language) => files.byLanguage[language]))
+  const groups = new Map<string, string[]>()
+  for (const file of files.all) {
+    if (assessed.has(file)) continue
+    const extension = extensionOf(file)
+    const group = groups.get(extension)
+    if (group === undefined) groups.set(extension, [file])
+    else group.push(file)
+  }
+
+  const unassessed: { extension: string; files: number; lines: number }[] = []
+  for (const [extension, group] of [...groups].toSorted(([a], [b]) => compareFiles(a, b))) {
+    // Sequential: each call already pools its own reads, and the extensions of
+    // one repo are few.
+    // eslint-disable-next-line no-await-in-loop
+    const lines = await countPhysicalLines(repoRoot, group)
+    unassessed.push({ extension, files: group.length, lines })
+  }
+
+  const remainder = unassessed.reduce((total, entry) => total + entry.lines, 0)
+  return {
+    files: { total: files.all.length, assessed: assessed.size },
+    lines: { total: assessedLines + remainder, assessed: assessedLines },
+    unassessed,
+  }
+}
+
+/**
+ * The lowercased extension, dot included, or the empty string for a file that
+ * has none — `Makefile`, `.gitignore`, `LICENSE`.
+ *
+ * The rule is `languageOf`'s, deliberately: a dot must not be the first
+ * character of the name, or every dotfile would read as an extension of its own
+ * and the breakdown would disagree with the classification it is the complement
+ * of.
+ */
+function extensionOf(file: string): string {
+  const name = file.slice(file.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  return dot <= 0 ? '' : name.slice(dot).toLowerCase()
 }
 
 /**
@@ -462,7 +528,7 @@ export async function gradeProjects(
       // Sequential: each project's KLOC is its own read of its own files, and
       // the file reads inside are already pooled.
       // eslint-disable-next-line no-await-in-loop
-      categories: await gradeAll(repo.repoRoot, scope),
+      categories: (await gradeAll(repo.repoRoot, scope)).categories,
       metrics,
     })
   }
@@ -518,20 +584,29 @@ function gradedCategories(records: readonly RunRecord[]): Set<Category> {
  * Non-source files (manifests, docs) are in neither — grading lint noise
  * against a README's line count would be meaningless.
  */
-async function gradeAll(
-  repoRoot: string,
-  scope: GradedScope,
-): Promise<Record<Category, CategoryState>> {
+async function gradeAll(repoRoot: string, scope: GradedScope): Promise<GradedResult> {
   const sourceFiles = LANGUAGES.flatMap((language) => scope.files.byLanguage[language])
-  const kloc = (await countPhysicalLines(repoRoot, sourceFiles)) / 1000
+  const sourceLines = await countPhysicalLines(repoRoot, sourceFiles)
+  const kloc = sourceLines / 1000
 
-  const states = {} as Record<Category, CategoryState>
+  const categories = {} as Record<Category, CategoryState>
   for (const category of CATEGORIES) {
-    states[category] = toCategoryState(scope.categories[category], () =>
+    categories[category] = toCategoryState(scope.categories[category], () =>
       gradeOne(category, scope, kloc, sourceFiles.length),
     )
   }
-  return states
+  return { categories, sourceLines }
+}
+
+/**
+ * One scope's grades, and the line count they were divided by — kept rather than
+ * discarded, because it is also the assessed half of {@link scanCoverage} and
+ * re-counting it would read every source file in the repo a second time.
+ */
+interface GradedResult {
+  readonly categories: Record<Category, CategoryState>
+  /** Physical lines of the source files a language adapter claims. */
+  readonly sourceLines: number
 }
 
 /**

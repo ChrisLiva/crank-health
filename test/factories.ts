@@ -9,7 +9,7 @@ import type {
   ToolMetrics,
 } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
-import type { ProjectScan, Report, ReportInput } from '../src/render/json.ts'
+import type { ProjectScan, Report, ReportCoverage, ReportInput } from '../src/render/json.ts'
 import { buildReport } from '../src/render/json.ts'
 
 /**
@@ -90,6 +90,7 @@ export function makeReportInput(overrides: Partial<ReportInput> = {}): ReportInp
     selected: CATEGORIES,
     categories: allNotAssessed(),
     metrics: noMetrics(),
+    coverage: noCoverage(),
     projects: [makeProjectScan()],
     runs: [],
     findings: [],
@@ -119,6 +120,11 @@ export function allGraded(grade: Grade = 'A'): Record<Category, CategoryState> {
   const states = {} as Record<Category, CategoryState>
   for (const category of CATEGORIES) states[category] = { status: 'graded', grade }
   return states
+}
+
+/** An empty tree: nothing to assess, and nothing left unassessed either. */
+export function noCoverage(): ReportCoverage {
+  return { files: { total: 0, assessed: 0 }, lines: { total: 0, assessed: 0 }, unassessed: [] }
 }
 
 export function noMetrics(): Record<Category, ToolMetrics> {

@@ -32,6 +32,7 @@ describe('buildReport', () => {
       'categories',
       'metrics',
       'languages',
+      'coverage',
       'projects',
       'tools',
       'findings',
@@ -173,6 +174,30 @@ describe('buildReport', () => {
       findings.map((finding) => finding.id),
     )
     expect(reportFindings(report).map((finding) => finding.gradeScope)).toEqual([true, false, true])
+  })
+
+  /**
+   * The denominator annotation: grades divide by the *assessed* counts, so a
+   * report that never said how much of the tree that was could read as an A for
+   * a repo two thirds of which nothing looked at.
+   */
+  it('carries the coverage block in a fixed key order', () => {
+    const report = buildReport(
+      input({
+        coverage: {
+          lines: { assessed: 900, total: 1200 },
+          files: { assessed: 9, total: 12 },
+          unassessed: [{ lines: 300, files: 3, extension: '.yaml' }],
+        },
+      }),
+    )
+    expect(Object.keys(report.coverage)).toEqual(['files', 'lines', 'unassessed'])
+    expect(Object.keys(report.coverage.files)).toEqual(['total', 'assessed'])
+    expect(Object.keys(report.coverage.unassessed[0] ?? {})).toEqual([
+      'extension',
+      'files',
+      'lines',
+    ])
   })
 
   it('sorts warnings so two runs cannot disagree on their order', () => {

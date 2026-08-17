@@ -92,6 +92,11 @@ export interface Report {
    */
   readonly languages: Readonly<Partial<Record<Language, Partial<Record<Category, number>>>>>
   /**
+   * How much of the tree the grades above are actually about; see
+   * {@link ReportCoverage}.
+   */
+  readonly coverage: ReportCoverage
+  /**
    * The same questions answered per project, ordered by path and never empty.
    *
    * Everything above this key is the **rollup**: the whole repo, which is what
@@ -194,6 +199,42 @@ export interface ReportProjectMovement {
 
 /** A finding in {@link ReportDelta.newFindings}: the schema plus the flag. */
 export type ReportNewFinding = ReportFinding & { readonly touchedLine: boolean }
+
+/**
+ * What the grades are silent about: the part of the tree no language adapter
+ * owns.
+ *
+ * A repo can be graded A across the board while a third of it — workflow YAML,
+ * SQL, templates, shell — was never read by any of the tools, and nothing in the
+ * report said so. The denominators the grades divide by are the *assessed*
+ * counts, so this is what makes those numbers readable: how much of the tree
+ * they are a statement about, and what the remainder is made of.
+ *
+ * "Lines" are physical lines, counted the same way the KLOC denominator is.
+ */
+export interface ReportCoverage {
+  readonly files: ReportCoverageCounts
+  readonly lines: ReportCoverageCounts
+  /**
+   * The unassessed remainder by file extension, ordered by extension. The empty
+   * string is the files that have none — `Makefile`, `.gitignore`, `LICENSE`.
+   */
+  readonly unassessed: readonly ReportUnassessed[]
+}
+
+export interface ReportCoverageCounts {
+  /** Everything in the scan's inventory. */
+  readonly total: number
+  /** Of those, the ones a language adapter claims — what the tools could read. */
+  readonly assessed: number
+}
+
+export interface ReportUnassessed {
+  /** Lowercased, dot included (`.yaml`); empty for a file with no extension. */
+  readonly extension: string
+  readonly files: number
+  readonly lines: number
+}
 
 export interface ReportRepo {
   readonly path: string
@@ -335,6 +376,8 @@ export interface ReportInput {
   readonly scopedTo?: readonly string[]
   readonly categories: Readonly<Record<Category, CategoryState>>
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
+  /** What the scan could read of the tree; see {@link ReportCoverage}. */
+  readonly coverage: ReportCoverage
   /** Every discovered project, graded; never empty. See {@link Report.projects}. */
   readonly projects: readonly ProjectScan[]
   /** The root's workspace declarations, when the root is a shell rather than a project. */
@@ -378,6 +421,7 @@ export function buildReport(input: ReportInput): Report {
     categories: orderedCategories(input.categories),
     metrics: orderedMetrics(input.metrics),
     languages: countByLanguage(input.findings),
+    coverage: orderedCoverage(input.coverage),
     projects: input.projects
       .toSorted((a, b) => compare(a.project.path, b.project.path))
       .map((scan) => toReportProject(scan, runs)),
@@ -566,6 +610,19 @@ function orderedDeltaFinding(finding: Finding): ReportFinding {
   return {
     ...orderedFinding(finding),
     ...(finding.gradeScope ? {} : { advisory: true as const }),
+  }
+}
+
+/** The coverage block in the schema's key order; the runner already sorted it. */
+function orderedCoverage(coverage: ReportCoverage): ReportCoverage {
+  return {
+    files: { total: coverage.files.total, assessed: coverage.files.assessed },
+    lines: { total: coverage.lines.total, assessed: coverage.lines.assessed },
+    unassessed: coverage.unassessed.map((entry) => ({
+      extension: entry.extension,
+      files: entry.files,
+      lines: entry.lines,
+    })),
   }
 }
 

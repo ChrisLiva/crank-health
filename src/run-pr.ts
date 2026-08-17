@@ -146,6 +146,8 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
         ...(options.projects === undefined ? {} : { scopedTo: options.projects }),
         categories: headScan.categories,
         metrics: headScan.scan.metrics,
+        // Head's, like every other measurement in the report.
+        coverage: headScan.coverage,
         // Head's, like every other grade in the report: the delta says what moved.
         projects: headScan.projects,
         ...(headScan.rootShell === undefined ? {} : { rootShell: headScan.rootShell }),
