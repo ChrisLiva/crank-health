@@ -1,4 +1,12 @@
-import { SEVERITY_WEIGHTS, compareGrades } from '../core/grade.ts'
+import {
+  SEVERITY_WEIGHTS,
+  compareGrades,
+  failingFilePercent,
+  gradeAbsolute,
+  gradeDensity,
+  gradeRank,
+  gradeRatio,
+} from '../core/grade.ts'
 import type { Category, CategoryState, Finding, Grade } from '../core/types.ts'
 import { CATEGORIES, categoryRank } from '../core/types.ts'
 import {
@@ -11,7 +19,7 @@ import {
   projectLabel,
   stateLabel,
 } from './display.ts'
-import type { Report, ReportDelta, ReportProject } from './json.ts'
+import type { Report, ReportDelta, ReportGradeBasis, ReportProject } from './json.ts'
 import { reportFindings, withGradeScope } from './json.ts'
 
 /**
@@ -22,11 +30,12 @@ import { reportFindings, withGradeScope } from './json.ts'
  * - **Themed, not per-finding.** Fourteen unused exports are one task with a
  *   file list, because "remove this export" fourteen times is fourteen chances
  *   to stop after the first.
- * - **Deterministic priority.** Tasks come out in the fixed category order of
+ * - **Deterministic priority.** The work that would move a letter comes first,
+ *   most letters first ({@link gradeMovement}), and the fixed category order of
  *   spec §10 (security → types → dead code → complexity → duplication → lint →
- *   format), which is {@link CATEGORIES}. A category's grade cannot reorder that
- *   list — it is fixed by the spec — so "worst first" applies inside a category:
- *   the theme with the most severe findings, then the largest, comes first.
+ *   format, which is {@link CATEGORIES}) decides between themes that would move
+ *   the same number. Inside a category "worst first" still applies: the theme
+ *   with the most severe findings, then the largest, comes first.
  * - **Capped.** Twenty tasks, then a pointer to `report.json` for the rest. An
  *   agent that reads a hundred tasks does none of them. The twenty are spent
  *   worst-graded category first, a round at a time ({@link budgetTasks}), so a
@@ -164,10 +173,11 @@ export function renderAgentMarkdown(report: Report, options: AgentMarkdownOption
  * the same one — a regression in generated code is still not the author's to
  * hand-fix.
  *
- * **Order.** Spec §10's fixed category priority first. Within a category, PR
- * mode puts the themes that touch changed lines ahead of the non-local ones,
- * and then both fall back to the whole-repo rule: heaviest findings, then most
- * findings, then keys that make the order total.
+ * **Order.** Grade-movement potential first ({@link gradeMovement}): the themes
+ * that would move a letter, most letters first, then the A→A work behind them.
+ * Then PR mode's changed-line themes, then spec §10's fixed category priority,
+ * then the heaviest findings, the most findings, and keys that make the order
+ * total.
  *
  * @param excludes globs the repo's own configs exclude; see
  * {@link AgentMarkdownOptions.excludes}.
@@ -192,6 +202,7 @@ export function buildAgentTasks(
       : source.newFindings.filter((finding) => finding.touchedLine).map((finding) => finding.id),
   )
   const written = handWritten(reportFindings(report), excludes ?? [])
+  const movementOf = gradeMovement(report)
 
   const themes = mergeDuplicates(
     CATEGORIES.flatMap((category) =>
@@ -206,14 +217,100 @@ export function buildAgentTasks(
   return themes
     .toSorted(
       (a, b) =>
-        categoryRank(a.category) - categoryRank(b.category) ||
+        movementOf(b) - movementOf(a) ||
         Number(isDirect(b, touched)) - Number(isDirect(a, touched)) ||
+        categoryRank(a.category) - categoryRank(b.category) ||
         severityWeight(b.findings) - severityWeight(a.findings) ||
         b.findings.length - a.findings.length ||
         compare(a.key, b.key) ||
         compare(a.project ?? '', b.project ?? ''),
     )
     .map((theme, index) => toTask(theme, index + 1, report, evidenceOf, touched))
+}
+
+/* ------------------------------------------------------- grade movement */
+
+/**
+ * How many grade ranks a category would gain if one theme's findings were all
+ * resolved — the first question the ranking asks, so that the work that can
+ * move a letter comes before the work that cannot.
+ *
+ * **The formula is the grading table's own.** Take the category's findings, take
+ * the theme's out, and re-run the same function `core/grade.ts` graded it with,
+ * over the same numbers `report.gradeBasis` records it was divided by: the KLOC
+ * a density was per, the file count a share was of, the percentage a tool
+ * reported. The answer is `rank(today) - rank(then)`, in letters.
+ *
+ * Two of the shapes cannot be re-run from a finding list, because their
+ * numerator never was one — complexity counts functions and duplication is a
+ * percentage jscpd computed. There the numerator is scaled by the share of the
+ * category's findings the theme leaves behind, which is the only proportion the
+ * report carries; it is an estimate, and it is stated as one here rather than
+ * dressed up as arithmetic.
+ *
+ * **No recorded basis, no claim.** A category the report records no arithmetic
+ * for scores zero rather than a guessed denominator, so a report from before
+ * `gradeBasis` existed ranks by spec §10's fixed order exactly as it always did.
+ */
+function gradeMovement(report: Report): (theme: Theme) => number {
+  const all = reportFindings(report)
+  const cache = new Map<Theme, number>()
+  return (theme) => {
+    const seen = cache.get(theme)
+    if (seen !== undefined) return seen
+    const movement = ranksGained(report, theme, all)
+    cache.set(theme, movement)
+    return movement
+  }
+}
+
+/** Letters between the category's grade today and its grade with `theme` fixed. */
+function ranksGained(report: Report, theme: Theme, all: readonly Finding[]): number {
+  const state = report.categories[theme.category]
+  const basis = report.gradeBasis[theme.category]
+  if (state.status !== 'graded' || basis === undefined) return 0
+  const after = gradeWithout(theme, basis, all)
+  return after === undefined ? 0 : gradeRank(state.grade) - gradeRank(after)
+}
+
+/** The grade the theme's category would hold with the theme's findings gone. */
+function gradeWithout(
+  theme: Theme,
+  basis: ReportGradeBasis,
+  all: readonly Finding[],
+): Grade | undefined {
+  const category = theme.category
+  const mine = all.filter((finding) => finding.category === category)
+  const resolved = new Set(theme.findings.map((finding) => finding.id))
+  const left = mine.filter((finding) => !resolved.has(finding.id))
+  // What is left of the measurement, where the measurement is not a list of
+  // findings: the only proportion the report carries. `mine` is never empty —
+  // the theme's own findings are in it.
+  const remains = left.length / mine.length
+  switch (category) {
+    case 'security':
+      return gradeAbsolute(category, left)
+    case 'lint':
+    case 'types':
+    case 'dead-code':
+      return basis.denominator === null
+        ? undefined
+        : gradeDensity(category, left, basis.denominator)
+    case 'format':
+      return basis.denominator === null
+        ? undefined
+        : gradeRatio(category, failingFilePercent(left, category, basis.denominator))
+    case 'complexity':
+      return basis.denominator === null || basis.denominator <= 0
+        ? undefined
+        : gradeRatio(category, ((basis.value * remains) / basis.denominator) * 100)
+    case 'duplication':
+      return gradeRatio(category, basis.value * remains)
+    // Mutation score, where higher is better: every mutant this theme kills is
+    // one the score no longer misses.
+    case 'test-quality':
+      return gradeRatio(category, basis.value + (100 - basis.value) * (1 - remains))
+  }
 }
 
 /* --------------------------------------------------------- what is a task */

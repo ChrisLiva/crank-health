@@ -78,9 +78,9 @@ describe('how this run was graded', () => {
 
 describe('task priority', () => {
   /**
-   * Spec §10's order is fixed — security → types → dead code → complexity →
-   * duplication → lint → format — so a category's own grade cannot move it up
-   * the list. Inside a category, the heaviest findings come first.
+   * Spec §10's order decides between themes nothing else separates — a report
+   * that records no arithmetic behind its grades has no movement to rank by, so
+   * the fixed order is the whole answer there.
    */
   it('emits categories in the spec’s order whatever their grades are', () => {
     const tasks = buildAgentTasks(everyCategoryFailing())
@@ -151,6 +151,126 @@ describe('task priority', () => {
     ])
   })
 })
+
+/**
+ * Grade-movement potential: re-run the category's own formula over the findings
+ * it would be left with, and count the letters between that grade and today's.
+ * The numbers the formula divides come from `report.gradeBasis` — the KLOC, the
+ * file count, the percentage each grade was actually computed from — so this is
+ * the grading table's arithmetic and not a second opinion about it.
+ *
+ * The themes that can move a letter come first, most letters first; the ones
+ * that cannot — the A→A work — come behind them, in spec §10's order.
+ */
+describe('ranking by grade movement', () => {
+  it('ranks a theme that moves a letter above one that moves none', () => {
+    const report = makeReport({
+      categories: {
+        ...allGraded(),
+        security: { status: 'graded', grade: 'D' },
+        lint: { status: 'graded', grade: 'F' },
+      },
+      gradeBasis: {
+        security: { value: 2, denominator: null, unit: 'graded findings' },
+        lint: { value: 5, denominator: 0.1, unit: 'weighted findings per KLOC' },
+      },
+      findings: [
+        // Two high-severity security findings under two rules: fixing either
+        // theme leaves the other, and the category stays at D.
+        makeFinding({ id: 's1', ...bandit('B602'), file: 'src/one.py' }),
+        makeFinding({ id: 's2', ...bandit('B608'), file: 'src/two.py' }),
+        // The whole of lint, in one theme: fixing it takes F to A.
+        makeFinding({ id: 'l', severity: 'error', file: 'src/a.ts' }),
+      ],
+    })
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual([
+      'lint',
+      'security',
+      'security',
+    ])
+  })
+
+  it('ranks the work that cannot move a letter behind the work that can', () => {
+    const report = makeReport({
+      categories: {
+        ...allGraded(),
+        lint: { status: 'graded', grade: 'A' },
+        format: { status: 'graded', grade: 'C' },
+      },
+      gradeBasis: {
+        lint: { value: 0.2, denominator: 1, unit: 'weighted findings per KLOC' },
+        format: { value: 3, denominator: 12, unit: 'files failing the formatter' },
+      },
+      findings: [
+        makeFinding({ id: 'l', severity: 'info', file: 'src/a.ts' }),
+        ...['b', 'c', 'd'].map((name) =>
+          makeFinding({
+            id: `f-${name}`,
+            category: 'format',
+            tool: 'prettier',
+            rule: 'prettier/format',
+            file: `src/${name}.ts`,
+          }),
+        ),
+      ],
+    })
+    // format is last in spec §10's order and first here: it is the letter that
+    // can move. The A→A lint task is still in the list.
+    expect(buildAgentTasks(report).map((task) => [task.category, task.gradeImpact])).toEqual([
+      ['format', 'format · C → A'],
+      ['lint', 'lint · A → A'],
+    ])
+  })
+
+  /** A percentage the tool computed moves with the share of it a theme covers. */
+  it('reads a tool-computed percentage down by the share the theme resolves', () => {
+    const report = makeReport({
+      categories: {
+        ...allGraded(),
+        duplication: { status: 'graded', grade: 'F' },
+        types: { status: 'graded', grade: 'B' },
+      },
+      gradeBasis: {
+        duplication: { value: 25, denominator: null, unit: '% of tokens duplicated' },
+        types: { value: 1, denominator: 1, unit: 'weighted findings per KLOC' },
+      },
+      findings: [
+        clone('src/a.ts'),
+        makeFinding({ id: 'l', file: 'src/a.ts' }),
+        makeFinding({ id: 't', category: 'types', tool: 'tsc', rule: 'TS2322', file: 'src/z.ts' }),
+      ],
+    })
+    // Every clone resolved is 0% duplicated — F to A, five letters — against
+    // the one letter B → A the types theme is worth.
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['duplication', 'types'])
+  })
+
+  /**
+   * No recorded arithmetic, no claim about movement: a report from before
+   * `gradeBasis` existed ranks by spec §10's order exactly as it always did,
+   * rather than by a denominator this would have to invent.
+   */
+  it('claims no movement for a category whose arithmetic the report does not record', () => {
+    const report = makeReport({
+      categories: {
+        ...allGraded(),
+        security: { status: 'graded', grade: 'A' },
+        lint: { status: 'graded', grade: 'F' },
+      },
+      findings: [
+        makeFinding({ id: 's', ...bandit('B602'), file: 'src/one.py' }),
+        makeFinding({ id: 'l', severity: 'error', file: 'src/a.ts' }),
+      ],
+    })
+    expect(report.gradeBasis).toEqual({})
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['security', 'lint'])
+  })
+})
+
+/** One high-severity bandit finding's identity. */
+function bandit(rule: string): Partial<Finding> {
+  return { category: 'security', tool: 'bandit', rule, severity: 'error' }
+}
 
 /**
  * What earns a place in the list, now that a grade no longer decides it.
