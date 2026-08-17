@@ -60,9 +60,6 @@ export interface RepoExcludes {
   readonly unreadable: readonly string[]
 }
 
-/** A repo whose configs excluded nothing — the shape a consumer can default to. */
-export const NO_REPO_EXCLUDES: RepoExcludes = { patterns: [], sources: [], unreadable: [] }
-
 /**
  * The excludes that apply to one project.
  *
