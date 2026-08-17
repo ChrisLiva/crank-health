@@ -83,14 +83,25 @@ export function renderTerminal(
     }
   }
 
-  const degraded = collapseToolRows(report.tools.filter((tool) => tool.state !== 'ok'))
-  if (degraded.length > 0) {
-    lines.push('', color.bold('Tools that did not complete'))
-    for (const tool of degraded) {
+  // Every tool with something to say: the ones that did not complete, and the
+  // ones that did but qualified the answer — gitleaks suppressing hits outside
+  // the inventory, osv-scanner unable to read Central Package Management.
+  // `report.md` has always printed both; a note only that surface carries is a
+  // note most readers never see, and a partial scan then reads as a clean one.
+  // A tool with no reason is not news, so the block is never a roll call.
+  const notes = collapseToolRows(
+    report.tools.filter((tool) => tool.state !== 'ok' || tool.reason !== null),
+  )
+  if (notes.length > 0) {
+    lines.push('', color.bold('Tool notes'))
+    for (const tool of notes) {
       const side = tool.side === undefined ? '' : ` (${tool.side} scan)`
       const stands = standInNote(tool, report.projects.length)
+      // Red is for the runs that did not happen; a completed run's note is a
+      // footnote, and painting it like a failure would cry wolf.
+      const state = tool.state === 'ok' ? color.dim(tool.state) : color.red(tool.state)
       lines.push(
-        `  ${color.red(tool.state)} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}` +
+        `  ${state} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}` +
           `${stands === null ? '' : ` ${stands}`}`,
       )
     }

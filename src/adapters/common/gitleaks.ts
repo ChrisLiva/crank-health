@@ -135,20 +135,50 @@ async function runGitleaks(ctx: RunContext): Promise<ToolResult> {
   // leak, but it is not in the codebase crank-health is grading, and every
   // other runner draws the line in the same place (spec §7). Consistency here
   // is worth more than one extra finding — an inconsistent inventory would make
-  // the delta and the per-language breakdown disagree with themselves.
+  // the delta and the per-language breakdown disagree with themselves. What it
+  // is not worth is silence: see {@link suppressionReason}.
   const analyzed = new Set(ctx.files)
+  const hits = toPendingFindings(leaks, ctx.detection !== null)
+  const kept = hits.filter((finding) => analyzed.has(finding.file))
   const version = await systemToolVersion(GITLEAKS, ctx.scratch, ctx.timeoutMs)
+  // Only on the `ok` path: the other states carry the reason they degraded, and
+  // a receipt written over it would hide the real gap (the osv-scanner
+  // precedent).
+  const reason = suppressionReason(hits.length - kept.length, kept.length)
   return {
     state: 'ok',
-    findings: await identify(
-      ctx.repoRoot,
-      toPendingFindings(leaks, ctx.detection !== null).filter((finding) =>
-        analyzed.has(finding.file),
-      ),
-    ),
+    findings: await identify(ctx.repoRoot, kept),
     ...(version === undefined ? {} : { toolVersion: version }),
+    ...(reason === undefined ? {} : { reason }),
     rawFiles,
   }
+}
+
+/**
+ * The receipt for the hits the inventory filter above dropped (spec §8's
+ * honest-degradation shape): without it a scan that found three secrets in
+ * gitignored files renders identically to one that found none, and "security:
+ * A" would be the reader's takeaway.
+ *
+ * The wording names the class of path, not the paths: the inventory is one set
+ * built from `git ls-files --exclude-standard` minus hidden and dependency
+ * directories, and this filter cannot tell which of those rules dropped a given
+ * hit. Claiming "untracked" for a hit that was really under `.next/` would be a
+ * confident wrong answer. It reads as the other half of discovery's scan-scope
+ * warning, which says the repo-scoped scanners walk the full tree: they do, and
+ * this is what happens to what they find out there.
+ *
+ * Counts only — the value never entered this process (see the file comment),
+ * and a receipt is not the place to start.
+ *
+ * @returns the reason to attach, or `undefined` when nothing was dropped
+ */
+export function suppressionReason(dropped: number, kept: number): string | undefined {
+  if (dropped === 0) return undefined
+  return (
+    `${dropped} raw ${dropped === 1 ? 'hit' : 'hits'} in paths outside the analyzed inventory ` +
+    `(gitignored, hidden or dependency paths) — suppressed; ${kept} in analyzed files`
+  )
 }
 
 /**

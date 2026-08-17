@@ -527,12 +527,13 @@ describe('zero footprint', () => {
 })
 
 /**
- * A stub gitleaks: `version` answers, `dir` writes the canned report to
+ * A stub gitleaks: `version` answers, `dir` writes the canned leaks to
  * whatever `--report-path` names. The bytes are shaped exactly like a real
  * `--redact=100` report — `Secret` and `Match` already `REDACTED` — because
  * that is the only input this runner is ever given.
  */
-const STUB_GITLEAKS = `#!/bin/sh
+function stubGitleaks(leaks: readonly ReturnType<typeof stubLeak>[]): string {
+  return `#!/bin/sh
 if [ "$1" = "version" ]; then echo "8.30.1"; exit 0; fi
 report=""
 while [ $# -gt 0 ]; do
@@ -540,22 +541,29 @@ while [ $# -gt 0 ]; do
   shift
 done
 cat > "$report" <<'JSON'
-[
-  {
-    "RuleID": "aws-access-token",
-    "Description": "Identified a pattern that may indicate AWS credentials",
-    "File": "src/config.py",
-    "StartLine": 8,
-    "StartColumn": 21,
-    "EndLine": 8,
-    "EndColumn": 40,
-    "Secret": "REDACTED",
-    "Match": "REDACTED"
-  }
-]
+${JSON.stringify(leaks, null, 2)}
 JSON
 exit 0
 `
+}
+
+/** One canned leak, repo-relative, as gitleaks writes it under `--redact=100`. */
+function stubLeak(file: string, startLine: number) {
+  return {
+    RuleID: 'aws-access-token',
+    Description: 'Identified a pattern that may indicate AWS credentials',
+    File: file,
+    StartLine: startLine,
+    StartColumn: 21,
+    EndLine: startLine,
+    EndColumn: 40,
+    Secret: 'REDACTED',
+    Match: 'REDACTED',
+  }
+}
+
+/** The one leak `sec-basic` plants, in the tracked file that really holds it. */
+const STUB_GITLEAKS = stubGitleaks([stubLeak('src/config.py', 8)])
 
 /**
  * The chain spec §3 cares about most — planted secret → `critical` → security
@@ -621,6 +629,86 @@ describe('a leaked credential, with gitleaks stubbed onto PATH', () => {
     const secret = scan.report.findings.find((finding) => finding.tool === 'gitleaks')
     expect(secret?.message).toContain('aws access token')
     expect(secret?.fixHint).toContain('Rotate the credential')
+  })
+
+  /** Nothing dropped, nothing to explain: the receipt is not a permanent note. */
+  it('attaches no suppression receipt when every hit is in the inventory', () => {
+    const gitleaks = scan.report.tools.find((tool) => tool.tool === 'gitleaks')
+    expect(gitleaks).toMatchObject({ state: 'ok', reason: null })
+  })
+})
+
+/**
+ * gitleaks is pointed at the repo root and walks the whole working tree;
+ * discovery's inventory is `git ls-files --exclude-standard`-true and stops at
+ * hidden directories. A hit outside that inventory is therefore dropped — and a
+ * drop nobody is told about reads as "no secrets found", which is the one thing
+ * a secrets scan must never say by accident (spec §8). The receipt is the
+ * difference: both counts, no value.
+ *
+ * The stub stands in for gitleaks itself, as above: crank-health only ever
+ * reads the JSON report, so canned bytes are the same input. What is real here
+ * is the repo — `local.env` is genuinely gitignored, so discovery genuinely
+ * never sees it.
+ */
+describe('a secret in a gitignored file, with gitleaks stubbed onto PATH', () => {
+  let fixture: FixtureRepo
+  let binDirectory: string
+  let originalPath: string
+  let scan: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await tempRepo({
+      '.gitignore': 'local.env\n',
+      'package.json': '{\n  "name": "ignored-secret",\n  "version": "1.0.0"\n}\n',
+      'src/config.js': `export const region = 'us-east-1'\nexport const key = '${PLANTED_SECRET}'\n`,
+      'local.env': `AWS_ACCESS_KEY_ID=${PLANTED_SECRET}\n`,
+    })
+    binDirectory = await mkdtemp(join(tmpdir(), 'crank-stub-bin-'))
+    await writeFile(
+      join(binDirectory, 'gitleaks'),
+      stubGitleaks([stubLeak('local.env', 1), stubLeak('src/config.js', 2)]),
+      { mode: 0o755 },
+    )
+    originalPath = process.env['PATH'] ?? ''
+    process.env['PATH'] = `${binDirectory}${delimiter}${originalPath}`
+
+    scan = await runHealthScan({ path: fixture.root, only: ['security'] })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    process.env['PATH'] = originalPath
+    await fixture.remove()
+    await rm(binDirectory, { recursive: true, force: true })
+  })
+
+  /** The premise: the file is on disk, and git really does ignore it. */
+  it('scans a repo whose secret-bearing file is present but untracked', async () => {
+    expect((await stat(join(fixture.root, 'local.env'))).isFile()).toBe(true)
+    const { stdout } = await execa('git', ['ls-files'], { cwd: fixture.root })
+    expect(stdout.split('\n')).not.toContain('local.env')
+  })
+
+  it('reports the tracked leak and none from the gitignored file', () => {
+    const secrets = scan.report.findings.filter((finding) => finding.tool === 'gitleaks')
+    expect(secrets.map((finding) => finding.file)).toEqual(['src/config.js'])
+  })
+
+  it('says how many hits it suppressed and how many it kept', () => {
+    const gitleaks = scan.report.tools.find((tool) => tool.tool === 'gitleaks')
+    expect(gitleaks?.state).toBe('ok')
+    expect(gitleaks?.reason).toBe(
+      '1 raw hit in paths outside the analyzed inventory (gitignored, hidden or dependency ' +
+        'paths) — suppressed; 1 in analyzed files',
+    )
+  })
+
+  it('counts the suppressed hits without quoting one', async () => {
+    for (const artifact of [scan.json, scan.markdown, scan.agentMarkdown]) {
+      expect(artifact).not.toContain(PLANTED_SECRET)
+      expect(artifact).not.toContain('AKIA')
+    }
+    await expectNoSecretUnder(scan.outputDir)
   })
 })
 

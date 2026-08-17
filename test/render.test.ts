@@ -658,6 +658,53 @@ describe('renderTerminal', () => {
   })
 
   /**
+   * A tool that completed can still have something the reader has to know —
+   * gitleaks suppressing hits outside the inventory, osv-scanner unable to read
+   * Central Package Management. `report.md` has printed those notes all along;
+   * the terminal is the surface most runs are read through, and dropping them
+   * there is what makes a partial scan read as a clean one.
+   */
+  it('prints a tool that completed with something to say', () => {
+    const text = renderTerminal(
+      buildReport(
+        input({
+          runs: [
+            {
+              record: {
+                ...record(),
+                tool: 'gitleaks',
+                category: 'security',
+                scope: 'common',
+                result: {
+                  state: 'ok',
+                  findings: [],
+                  rawFiles: [],
+                  reason: '2 raw hits in paths outside the analyzed inventory — suppressed',
+                },
+              },
+              raw: [],
+            },
+          ],
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+
+    const [, notes = ''] = text.split('Tool notes')
+    expect(notes).toContain(
+      '  ok gitleaks: 2 raw hits in paths outside the analyzed inventory — suppressed\n',
+    )
+  })
+
+  /** A tool with nothing to say is not news, and the block is not a roll call. */
+  it('says nothing about a tool that completed with nothing to say', () => {
+    const text = renderTerminal(buildReport(input()), paths, { color: false })
+    expect(text).not.toContain('Tool notes')
+    expect(text).not.toContain('oxlint')
+  })
+
+  /**
    * The glance is a glance: one missing scanner is one line, however many
    * projects it was planned in.
    */
@@ -686,7 +733,7 @@ describe('renderTerminal', () => {
       { color: false },
     )
 
-    const [, degraded = ''] = text.split('Tools that did not complete')
+    const [, degraded = ''] = text.split('Tool notes')
     expect(degraded.split('\n').filter((line) => line.includes('opengrep'))).toEqual([
       '  not-available opengrep: opengrep is not on PATH',
     ])
@@ -729,7 +776,7 @@ describe('renderTerminal', () => {
       { color: false },
     )
 
-    const [, degraded = ''] = text.split('Tools that did not complete')
+    const [, degraded = ''] = text.split('Tool notes')
     expect(degraded.split('\n').filter((line) => line.includes('opengrep'))).toEqual([
       '  not-available opengrep: opengrep is not on PATH (packages/api, packages/web)',
     ])
