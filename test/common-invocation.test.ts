@@ -756,11 +756,6 @@ describe('the inputs zizmor audits', () => {
   ])('leaves %s alone', (file) => {
     expect(isAuditable(file)).toBe(false)
   })
-
-  /** Nothing auditable is the honest `not-available`, not an empty audit. */
-  it('finds nothing to audit in an empty inventory', () => {
-    expect([].filter(isAuditable)).toEqual([])
-  })
 })
 
 describe('the common adapter', () => {
