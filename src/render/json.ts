@@ -8,6 +8,7 @@ import type {
   CategoryState,
   Finding,
   Language,
+  PackageAdvisory,
   Project,
   RunnerScope,
   ToolMetrics,
@@ -661,8 +662,37 @@ function orderedFinding(finding: Finding): ReportFinding {
       endCol: finding.range.endCol,
     },
     message: finding.message,
+    // Dependency findings only: the one-line message above is the rollup, and
+    // these are the package it is about and the advisories it rolled up.
+    ...(finding.package === undefined
+      ? {}
+      : {
+          package: {
+            name: finding.package.name,
+            version: finding.package.version,
+            ecosystem: finding.package.ecosystem,
+          },
+        }),
+    ...(finding.packageAdvisories === undefined
+      ? {}
+      : {
+          packageAdvisories: finding.packageAdvisories.map((advisory) => orderedAdvisory(advisory)),
+        }),
     provenance: finding.provenance,
     ...(finding.fixHint === undefined ? {} : { fixHint: finding.fixHint }),
+  }
+}
+
+/** One nested advisory, in the schema's key order. Sorted by the runner. */
+function orderedAdvisory(advisory: PackageAdvisory): PackageAdvisory {
+  return {
+    id: advisory.id,
+    aliases: advisory.aliases,
+    severity: advisory.severity,
+    summary: advisory.summary,
+    ...(advisory.fixedIn === undefined ? {} : { fixedIn: advisory.fixedIn }),
+    ...(advisory.reachability === undefined ? {} : { reachability: advisory.reachability }),
+    ...(advisory.scope === undefined ? {} : { scope: advisory.scope }),
   }
 }
 

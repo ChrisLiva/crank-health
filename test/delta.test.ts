@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { JSCPD_RULE, JSCPD_TOOL } from '../src/adapters/common/jscpd.ts'
 import {
+  parseOsvReport,
+  toPendingFindings as toOsvFindings,
+} from '../src/adapters/common/osv-scanner.ts'
+import {
   PROJECT_ADDED_REASON,
   PROJECT_REMOVED_REASON,
   computeDelta,
@@ -458,6 +462,74 @@ describe('remapRenames', () => {
     )
 
     expect(remapped).not.toHaveProperty('project')
+  })
+})
+
+/** osv-scanner's envelope for one pinned package and its advisory groups. */
+const dependencyScan = (version: string, ids: readonly string[]): Finding[] =>
+  computeAnchors(
+    toOsvFindings(
+      parseOsvReport({
+        results: [
+          {
+            source: { path: 'package-lock.json' },
+            packages: [
+              {
+                package: { name: 'lodash', version, ecosystem: 'npm' },
+                groups: ids.map((id) => ({ ids: [id], aliases: [], max_severity: '7.4' })),
+                vulnerabilities: ids.map((id) => ({
+                  id,
+                  summary: `${id} in lodash`,
+                  affected: [
+                    {
+                      package: { name: 'lodash', ecosystem: 'npm' },
+                      ranges: [
+                        { type: 'SEMVER', events: [{ introduced: '0' }, { fixed: '4.18.0' }] },
+                      ],
+                    },
+                  ],
+                })),
+              },
+            ],
+          },
+        ],
+      }),
+      false,
+    ),
+    new Map(),
+  )
+
+/**
+ * A vulnerable dependency's identity is `package@version`, and that is the whole
+ * point of it: the advisory database publishes new CVEs against packages nobody
+ * touched, and the lockfile they sit in is regenerated wholesale.
+ *
+ * Keyed on the advisory id — as it was before the per-package rollup — a fifth
+ * CVE against the same pinned lodash read as a *new* finding this change
+ * introduced, on a branch that changed a comment. Keyed on the package, the
+ * whole delta is what the change did: nothing.
+ */
+describe('a dependency finding across two scans', () => {
+  it('survives a new advisory published against the same pin', () => {
+    const base = dependencyScan('4.17.15', ['GHSA-a', 'GHSA-b'])
+    const head = dependencyScan('4.17.15', ['GHSA-a', 'GHSA-b', 'GHSA-c'])
+
+    const delta = computeDelta(input({ baseFindings: base, headFindings: head }))
+    expect(delta.newFindings).toEqual([])
+    expect(delta.resolvedFindings).toEqual([])
+    expect(delta.unchangedCount).toBe(1)
+  })
+
+  /** The upgrade that fixes it is a different pin, so it really is resolved. */
+  it('does not survive the upgrade that fixes it', () => {
+    const delta = computeDelta(
+      input({
+        baseFindings: dependencyScan('4.17.15', ['GHSA-a']),
+        headFindings: dependencyScan('4.18.1', ['GHSA-a']),
+      }),
+    )
+    expect(delta.resolvedFindings).toHaveLength(1)
+    expect(delta.newFindings).toHaveLength(1)
   })
 })
 

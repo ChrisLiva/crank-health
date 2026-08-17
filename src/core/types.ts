@@ -75,8 +75,28 @@ export interface Finding {
    * their own standards); `default-config` = our bundled default flagged it.
    */
   readonly provenance: 'repo-config' | 'default-config'
-  /** Only `true` findings count toward the grade; the rest are advisory. */
+  /**
+   * Only `true` findings count toward the grade; the rest are advisory.
+   *
+   * Internal. `report.json` says the same thing by putting the row in
+   * `findings[]` or in `advisories[]` — see `render/json.ts`.
+   */
   readonly gradeScope: boolean
+  /**
+   * The dependency this finding is about, on the findings that are about a
+   * dependency rather than about a place in the source. Absent everywhere else.
+   */
+  readonly package?: FindingPackage
+  /**
+   * Every advisory against {@link package}, sorted by id — the detail behind a
+   * dependency finding's one-line message.
+   *
+   * One finding per vulnerable *package* and not per advisory, because one
+   * upgrade answers all of them: four rows saying "lodash@4.17.15 is affected
+   * by …" are one piece of work, and reading them as four problems is what
+   * makes a dependency audit unreadable.
+   */
+  readonly packageAdvisories?: readonly PackageAdvisory[]
   readonly fixHint?: string
   /**
    * Which project this finding is in — the nearest project up its path, stamped
@@ -98,6 +118,42 @@ export interface Finding {
    * findings a test constructed by hand.
    */
   readonly identity?: FindingIdentity
+}
+
+/** The pinned dependency a package-level finding is about. */
+export interface FindingPackage {
+  readonly name: string
+  readonly version: string
+  /** The advisory database's own ecosystem name: `npm`, `PyPI`, `NuGet`, … */
+  readonly ecosystem: string
+}
+
+/** One advisory against a {@link FindingPackage}. */
+export interface PackageAdvisory {
+  /** The advisory's canonical id, e.g. `GHSA-…`. */
+  readonly id: string
+  /** Every id and alias this advisory is published under, sorted. */
+  readonly aliases: readonly string[]
+  readonly severity: Severity
+  /** The advisory's own one-line summary; empty when it publishes none. */
+  readonly summary: string
+  /**
+   * The version that fixes it, walked out of the OSV record's affected ranges.
+   * Absent when the advisory closes no range — there is nothing to upgrade to,
+   * which is why such a finding is advisory rather than graded.
+   */
+  readonly fixedIn?: string
+  /**
+   * Whether the vulnerable code is reachable from this repo. Absent until a
+   * reachability analyzer has answered; it owns the vocabulary.
+   */
+  readonly reachability?: string
+  /**
+   * Which dependency scope pulls the package in — a runtime dependency and a
+   * build-only one are not the same exposure. Absent until scope resolution has
+   * answered; it owns the vocabulary.
+   */
+  readonly scope?: string
 }
 
 /** What identity is computed from, minus the fields already on the finding. */

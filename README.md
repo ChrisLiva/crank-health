@@ -255,6 +255,16 @@ in `findings[]`, the rest in `advisories[]`, and drops the boolean: the array a 
 answer. The delta is the one list that cannot be partitioned — "what did this change add" is one
 question about both kinds — so its rows carry `advisory: true` instead.
 
+**A vulnerable dependency is one finding, not one per CVE.** osv-scanner rows carry
+`rule: "osv/package"`, the `package` they are about (`{name, version, ecosystem}`), and every
+advisory against it under `packageAdvisories[]` (`{id, aliases, severity, summary, fixedIn?}`,
+sorted by id). The message is the rollup — `lodash@4.17.15 (npm): 4 advisories; fix: upgrade to
+≥4.18.0` — because one upgrade answers all four. `fixedIn` is walked out of the OSV record's
+affected ranges; a package **no** published version fixes is not work anyone can do, so it goes to
+`advisories[]` saying `no fixed version available` (its severity still holds the security grade
+down — that tier reads every finding, graded or not). Identity is `package@version`, so a CVE
+published against a pin nobody touched is not a new finding on the next PR scan.
+
 ### Secrets stay in your repo
 
 Nothing crank-health writes quotes a credential. gitleaks runs under `--redact=100`, so the value

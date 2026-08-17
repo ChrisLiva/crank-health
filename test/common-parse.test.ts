@@ -497,24 +497,107 @@ describe('parseOsvReport', () => {
     expect(severityOf(undefined)).toBe('info')
   })
 
+  /**
+   * The fix is in the OSV record, not in the group summary: each advisory's
+   * `affected[]` carries the ranges, and only the entries about *this* package
+   * count — a lodash advisory also lists lodash-es and lodash.trim.
+   */
+  it('walks the affected ranges for the version each advisory was fixed in', async () => {
+    const vulnerabilities = parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo')
+    expect(vulnerabilities.map((entry) => [entry.id, entry.fixedIn] as const)).toEqual([
+      // A group is fixed once every id in it is: GHSA-35jh is fixed in 4.17.21
+      // and its group-mate GHSA-r5fr not until 4.18.0.
+      ['GHSA-29mw-wpgm-hmr9', '4.17.21'],
+      ['GHSA-35jh-r3h4-6jhm', '4.18.0'],
+      ['GHSA-f23m-r3pf-42rh', '4.18.0'],
+      ['GHSA-p6mc-m468-83gw', '4.17.19'],
+    ])
+  })
+
+  /**
+   * One finding per vulnerable dependency, not per advisory. Four rows saying
+   * "lodash@4.17.15 is affected by …" are one upgrade, and reading them as four
+   * problems is what made a dependency audit unreadable.
+   */
+  it('reports one finding per package, with the advisories nested under it', async () => {
+    const findings = toOsvFindings(
+      parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo'),
+      false,
+    )
+    expect(findings).toHaveLength(1)
+    const [finding] = findings
+    expect(finding?.rule).toBe('osv/package')
+    expect(finding?.package).toEqual({ name: 'lodash', version: '4.17.15', ecosystem: 'npm' })
+    expect(finding?.packageAdvisories?.map((advisory) => advisory.id)).toEqual([
+      'GHSA-29mw-wpgm-hmr9',
+      'GHSA-35jh-r3h4-6jhm',
+      'GHSA-f23m-r3pf-42rh',
+      'GHSA-p6mc-m468-83gw',
+    ])
+    expect(finding?.packageAdvisories?.[0]).toEqual({
+      id: 'GHSA-29mw-wpgm-hmr9',
+      aliases: ['CVE-2020-28500', 'GHSA-29mw-wpgm-hmr9'],
+      severity: 'warning',
+      summary: 'Regular Expression Denial of Service (ReDoS) in lodash',
+      fixedIn: '4.17.21',
+    })
+    // The worst of the four (8.1 → error), and the highest fix among them.
+    expect(finding?.severity).toBe('error')
+    expect(finding?.message).toBe('lodash@4.17.15 (npm): 4 advisories; fix: upgrade to ≥4.18.0')
+  })
+
   /** The lockfile is the file; the pinned package is the anchor (spec §2). */
   it('anchors on the pinned package, not on a line in a generated lockfile', async () => {
     const findings = toOsvFindings(
       parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo'),
       false,
     )
-    expect(findings.every((finding) => finding.anchor === 'npm/lodash@4.17.15')).toBe(true)
+    expect(findings.every((finding) => finding.anchor === 'lodash@4.17.15')).toBe(true)
     expect(findings.every((finding) => finding.range.startLine === 1)).toBe(true)
     expect(findings.every((finding) => finding.gradeScope)).toBe(true)
-    // 8.1 → error, 6.9 and 5.3 → warning, 7.4 → error.
-    expect(findings.map((finding) => finding.severity).toSorted()).toEqual([
-      'error',
-      'error',
-      'warning',
-      'warning',
-    ])
+  })
+
+  /**
+   * Recommendation 9's structural half: a vulnerability with no published fix
+   * is not work anyone can do, so it is advisory — and the row says why, rather
+   * than leaving a reader to notice the missing `fixedIn`.
+   */
+  it('demotes a package with no fixed version to advisory, with the receipt', () => {
+    const [finding] = toOsvFindings(parseOsvReport(unfixable()), false)
+    expect(finding?.gradeScope).toBe(false)
+    expect(finding?.message).toBe('leftpad@1.0.0 (npm): 1 advisory; no fixed version available')
+    expect(finding?.packageAdvisories?.[0]?.fixedIn).toBeUndefined()
   })
 })
+
+/** An advisory whose `affected` range never closes: nothing to upgrade to. */
+function unfixable(): unknown {
+  return {
+    results: [
+      {
+        source: { path: 'package-lock.json' },
+        packages: [
+          {
+            package: { name: 'leftpad', version: '1.0.0', ecosystem: 'npm' },
+            groups: [{ ids: ['GHSA-dead-beef'], aliases: [], max_severity: '9.1' }],
+            vulnerabilities: [
+              {
+                id: 'GHSA-dead-beef',
+                summary: 'unfixed',
+                affected: [
+                  {
+                    package: { name: 'leftpad', ecosystem: 'npm' },
+                    ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+}
 
 /** One clone pair; override only what the assertion is about. */
 function jscpdClone(overrides: Partial<JscpdClone> = {}): JscpdClone {

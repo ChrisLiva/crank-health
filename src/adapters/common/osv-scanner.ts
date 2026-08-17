@@ -2,6 +2,7 @@ import { basename, join } from 'node:path'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
+  PackageAdvisory,
   PendingFinding,
   DetectContext,
   RunContext,
@@ -249,6 +250,12 @@ export interface OsvVulnerability {
   /** CVSS base score, or `undefined` when the advisory carries none. */
   readonly maxSeverity: number | undefined
   readonly summary: string
+  /**
+   * The version that fixes every advisory in the group, from the OSV records'
+   * `affected[].ranges[].events[].fixed`. `undefined` when any of them closes no
+   * range: the group is not fixed until the last of it is.
+   */
+  readonly fixedIn: string | undefined
 }
 
 /**
@@ -282,7 +289,10 @@ export function parseOsvReport(document: unknown, repoRoot = ''): OsvVulnerabili
       const packageName = asString(identity?.['name'])
       if (packageName === undefined) return []
 
-      const summaries = summariesById(asArray(entry?.['vulnerabilities']) ?? [])
+      const ecosystem = asString(identity?.['ecosystem']) ?? ''
+      const records = asArray(entry?.['vulnerabilities']) ?? []
+      const summaries = summariesById(records)
+      const fixes = fixesById(records, packageName, ecosystem)
       const groups = asArray(entry?.['groups']) ?? []
       return groups.flatMap((groupEntry) => {
         const group = asRecord(groupEntry)
@@ -303,16 +313,102 @@ export function parseOsvReport(document: unknown, repoRoot = ''): OsvVulnerabili
             file,
             packageName,
             packageVersion: asString(identity?.['version']) ?? '',
-            ecosystem: asString(identity?.['ecosystem']) ?? '',
+            ecosystem,
             id,
             aliases: aliases.toSorted(compare),
             maxSeverity: Number.isFinite(score) ? score : undefined,
             summary: summaries.get(id) ?? '',
+            fixedIn: groupFix(ids, fixes),
           } satisfies OsvVulnerability,
         ]
       })
     })
   })
+}
+
+/**
+ * The version that clears a whole group: the highest fix among its ids, or
+ * `undefined` as soon as one of them has none. osv-scanner clusters advisories
+ * that describe the same problem, and a "fix" that leaves one of them standing
+ * is not one.
+ */
+function groupFix(ids: readonly string[], fixes: ReadonlyMap<string, string>): string | undefined {
+  let highest: string | undefined
+  for (const id of ids) {
+    const fixed = fixes.get(id)
+    if (fixed === undefined) return undefined
+    if (highest === undefined || compareVersions(fixed, highest) > 0) highest = fixed
+  }
+  return highest
+}
+
+/**
+ * Advisory id → the version it was fixed in, walked out of the full OSV records.
+ *
+ * Only the `affected[]` entries about *this* package count: one lodash advisory
+ * also lists `lodash-es`, `lodash.trim` and a RubyGems port, and reading their
+ * ranges would report a fix that does not exist for the package in the lockfile.
+ * The highest `fixed` event across the package's own ranges is the answer — a
+ * version affected by two ranges is only clear of both above the later one.
+ */
+function fixesById(
+  vulnerabilities: readonly unknown[],
+  packageName: string,
+  ecosystem: string,
+): Map<string, string> {
+  const fixes = new Map<string, string>()
+  for (const entry of vulnerabilities) {
+    const record = asRecord(entry)
+    const id = asString(record?.['id'])
+    if (id === undefined) continue
+    for (const affectedEntry of asArray(record?.['affected']) ?? []) {
+      const affected = asRecord(affectedEntry)
+      const target = asRecord(affected?.['package'])
+      if (asString(target?.['name']) !== packageName) continue
+      if (asString(target?.['ecosystem']) !== ecosystem) continue
+      for (const rangeEntry of asArray(affected?.['ranges']) ?? []) {
+        for (const eventEntry of asArray(asRecord(rangeEntry)?.['events']) ?? []) {
+          const fixed = asString(asRecord(eventEntry)?.['fixed'])
+          const known = fixes.get(id)
+          if (fixed !== undefined && (known === undefined || compareVersions(fixed, known) > 0)) {
+            fixes.set(id, fixed)
+          }
+        }
+      }
+    }
+  }
+  return fixes
+}
+
+/**
+ * Orders two release versions without an ecosystem's own resolver: digit runs
+ * compare as numbers and everything else byte-wise, left to right, so `4.18.0`
+ * beats `4.9.0` and `4.17.21`.
+ *
+ * That is exactly right for the plain releases advisories name a fix in, across
+ * semver and PEP 440 alike. It gets pre-release ordering wrong — `1.2.3-rc`
+ * sorts above `1.2.3` — and the cost of that is picking the later of two fixed
+ * versions to recommend, which is a version the upgrade clears either way.
+ */
+export function compareVersions(a: string, b: string): number {
+  const left = versionParts(a)
+  const right = versionParts(b)
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const one = left[index]
+    const other = right[index]
+    if (one === undefined) return -1
+    if (other === undefined) return 1
+    if (typeof one === 'number' && typeof other === 'number') {
+      if (one !== other) return one - other
+    } else if (String(one) !== String(other)) {
+      return String(one) < String(other) ? -1 : 1
+    }
+  }
+  return 0
+}
+
+function versionParts(version: string): (number | string)[] {
+  return (version.match(/\d+|\D+/g) ?? []).map((part) => (/^\d+$/.test(part) ? Number(part) : part))
 }
 
 /** Advisory id → its one-line summary, from the full OSV records. */
@@ -327,39 +423,136 @@ function summariesById(vulnerabilities: readonly unknown[]): Map<string, string>
   return summaries
 }
 
+/** The one rule a dependency finding carries: the package, not the advisory. */
+export const OSV_PACKAGE_RULE = 'osv/package'
+
 /**
- * Vulnerable dependencies → the core's vocabulary, one finding per advisory
- * group, banded by CVSS score ({@link CVSS_BANDS}) and always graded: a known
- * vulnerability in a declared dependency is not a matter of configuration
- * taste, which is why provenance never changes `gradeScope` here.
+ * Vulnerable dependencies → the core's vocabulary, **one finding per vulnerable
+ * package**, with every advisory against it nested under
+ * {@link Finding.packageAdvisories}.
  *
- * The file is the lockfile, and the anchor is the pinned package — not a line
- * in it. Lockfiles are generated, their line numbers move whenever anything
- * else in the tree changes, and identity has to survive that (spec §2).
+ * One upgrade answers all of a package's advisories, so one row is the unit of
+ * work; four rows saying "lodash@4.17.15 is affected by …" were four readings
+ * of one problem. It also makes identity survive the advisory database: keyed on
+ * the advisory id, a CVE published against a pin nobody touched read as a new
+ * finding on the next PR scan. The rule is the same for every such finding and
+ * the anchor is `package@version`, so the identity is the dependency (spec §2)
+ * — and the file is the lockfile, never a line in it, because lockfiles are
+ * generated and their line numbers move for unrelated reasons.
+ *
+ * Scope is the one thing an advisory decides: a package no published version
+ * fixes is not work anyone can do, so it lands in `advisories[]` with the
+ * receipt in its message. That is a *grading* demotion only for the B/C split —
+ * `gradeAbsolute` reads every security finding's severity whatever its scope, so
+ * an unfixable high-severity vulnerability still holds the category at D.
+ * Provenance never changes scope here: a known vulnerability in a declared
+ * dependency is not a matter of configuration taste.
  */
 export function toPendingFindings(
   vulnerabilities: readonly OsvVulnerability[],
   repoConfig: boolean,
 ): PendingFinding[] {
-  return vulnerabilities
-    .map((vulnerability) => ({
-      category: 'security' as const,
-      tool: OSV_SCANNER_TOOL,
-      rule: vulnerability.id,
-      severity: severityOf(vulnerability.maxSeverity),
-      file: vulnerability.file,
-      range: { startLine: 1, startCol: 1, endLine: 1, endCol: 1 },
-      message:
-        `${vulnerability.packageName}@${vulnerability.packageVersion} ` +
-        `(${vulnerability.ecosystem}) is affected by ${vulnerability.id}` +
-        `${vulnerability.summary === '' ? '' : `: ${vulnerability.summary}`}` +
-        `${vulnerability.maxSeverity === undefined ? '' : ` [CVSS ${vulnerability.maxSeverity}]`}`,
-      provenance: repoConfig ? ('repo-config' as const) : ('default-config' as const),
-      gradeScope: true,
-      anchor: `${vulnerability.ecosystem}/${vulnerability.packageName}@${vulnerability.packageVersion}`,
-      fixHint: `Upgrade ${vulnerability.packageName} past the affected range — see https://osv.dev/vulnerability/${vulnerability.id}`,
-    }))
+  return [...groupByPackage(vulnerabilities).values()]
+    .map((group) => packageFinding(group, repoConfig))
     .toSorted(byLocation)
+}
+
+/** One vulnerable package's advisory groups, keyed so two packages never merge. */
+function groupByPackage(
+  vulnerabilities: readonly OsvVulnerability[],
+): Map<string, OsvVulnerability[]> {
+  const groups = new Map<string, OsvVulnerability[]>()
+  for (const vulnerability of vulnerabilities) {
+    const key = [
+      vulnerability.file,
+      vulnerability.ecosystem,
+      vulnerability.packageName,
+      vulnerability.packageVersion,
+    ].join(' ')
+    const group = groups.get(key)
+    if (group === undefined) groups.set(key, [vulnerability])
+    else group.push(vulnerability)
+  }
+  // Sorted by key, so the emission order cannot inherit osv-scanner's.
+  return new Map([...groups].toSorted(([a], [b]) => compare(a, b)))
+}
+
+function packageFinding(
+  group: readonly OsvVulnerability[],
+  repoConfig: boolean,
+): PendingFinding & { readonly anchor: string } {
+  const [first] = group
+  if (first === undefined) throw new Error('a package group cannot be empty')
+  const pinned = `${first.packageName}@${first.packageVersion}`
+  const advisories = group
+    .map((vulnerability) => advisoryOf(vulnerability))
+    .toSorted((a, b) => compare(a.id, b.id))
+  const fixedIn = highestFix(advisories)
+
+  return {
+    category: 'security',
+    tool: OSV_SCANNER_TOOL,
+    rule: OSV_PACKAGE_RULE,
+    severity: severityOf(highestScore(group)),
+    file: first.file,
+    range: { startLine: 1, startCol: 1, endLine: 1, endCol: 1 },
+    message:
+      `${pinned} (${first.ecosystem}): ` +
+      `${advisories.length} ${advisories.length === 1 ? 'advisory' : 'advisories'}; ` +
+      `${fixedIn === undefined ? 'no fixed version available' : `fix: upgrade to ≥${fixedIn}`}`,
+    provenance: repoConfig ? 'repo-config' : 'default-config',
+    gradeScope: fixedIn !== undefined,
+    package: {
+      name: first.packageName,
+      version: first.packageVersion,
+      ecosystem: first.ecosystem,
+    },
+    packageAdvisories: advisories,
+    anchor: pinned,
+    fixHint:
+      fixedIn === undefined
+        ? `No fixed version is published for ${first.packageName} — replace it, or vendor a patched fork; see ${advisoryUrl(advisories)}`
+        : `Upgrade ${first.packageName} to ≥${fixedIn}; see ${advisoryUrl(advisories)}`,
+  }
+}
+
+function advisoryOf(vulnerability: OsvVulnerability): PackageAdvisory {
+  return {
+    id: vulnerability.id,
+    aliases: vulnerability.aliases,
+    severity: severityOf(vulnerability.maxSeverity),
+    summary: vulnerability.summary,
+    ...(vulnerability.fixedIn === undefined ? {} : { fixedIn: vulnerability.fixedIn }),
+  }
+}
+
+/**
+ * The version that clears the whole package, or `undefined` when any one of its
+ * advisories has no fix: upgrading to the highest published fix still leaves the
+ * unfixable one, and a message promising otherwise would be wrong.
+ */
+function highestFix(advisories: readonly PackageAdvisory[]): string | undefined {
+  let highest: string | undefined
+  for (const advisory of advisories) {
+    if (advisory.fixedIn === undefined) return undefined
+    if (highest === undefined || compareVersions(advisory.fixedIn, highest) > 0) {
+      highest = advisory.fixedIn
+    }
+  }
+  return highest
+}
+
+/** The worst CVSS score among a package's advisories; `undefined` if none has one. */
+function highestScore(group: readonly OsvVulnerability[]): number | undefined {
+  const scores = group.flatMap((vulnerability) =>
+    vulnerability.maxSeverity === undefined ? [] : [vulnerability.maxSeverity],
+  )
+  return scores.length === 0 ? undefined : Math.max(...scores)
+}
+
+/** The first advisory's page — the entry point to the rest, which are listed. */
+function advisoryUrl(advisories: readonly PackageAdvisory[]): string {
+  return `https://osv.dev/vulnerability/${advisories[0]?.id ?? ''}`
 }
 
 /** CVSS base score → severity. An advisory with no score is `info`. */
