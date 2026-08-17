@@ -807,6 +807,50 @@ describe('renderTerminal', () => {
     expect(text).toContain('[advisory]')
   })
 
+  /**
+   * The order `report.json` carries is the contract; the order a reader reads
+   * is a rendering question. A graded finding in hand-written source is the one
+   * to look at first, and a vulnerable dependency's lockfile row is not source
+   * anyone wrote.
+   */
+  it('ranks graded before advisory, source before manifests, then severity', () => {
+    const findings = sortFindings([
+      makeFinding({ id: 'b', severity: 'warning', file: 'src/b.ts' }),
+      makeFinding({ id: 'c', severity: 'error', file: 'src/c.ts' }),
+      makeFinding({ id: 'l', severity: 'error', file: 'package-lock.json' }),
+      makeFinding({ id: 'a', severity: 'critical', file: 'src/a.ts', gradeScope: false }),
+      makeFinding({
+        id: 'o',
+        category: 'security',
+        tool: 'osv-scanner',
+        rule: 'osv/package',
+        severity: 'critical',
+        file: 'package-lock.json',
+        range: { startLine: 1, startCol: 1, endLine: 1, endCol: 1 },
+        package: { name: 'lodash', version: '4.17.15', ecosystem: 'npm' },
+      }),
+    ])
+    const text = renderTerminal(
+      buildReport(
+        input({
+          categories: { ...allNotAssessed(), lint: { status: 'graded', grade: 'F' } },
+          findings,
+        }),
+      ),
+      paths,
+      { color: false },
+    )
+
+    const [, top = ''] = text.split('Top findings\n')
+    expect(top.split('\n').slice(0, 5).map(ruleAndFile)).toEqual([
+      'no-unused-vars src/c.ts:1:1',
+      'no-unused-vars src/b.ts:1:1',
+      'osv/package package-lock.json:1:1',
+      'no-unused-vars package-lock.json:1:1',
+      'no-unused-vars src/a.ts:1:1',
+    ])
+  })
+
   it('caps the finding list and says how many are left', () => {
     const text = renderTerminal(report, paths, { color: false, maxFindings: 1 })
     expect(text).toContain('… 1 more in report.json')
@@ -1033,6 +1077,12 @@ describe('renderTerminal under --only', () => {
     expect(text).not.toContain('not selected by `--only`')
   })
 })
+
+/** `rule file:line:col` off one rendered finding line — what ranking is about. */
+function ruleAndFile(line: string): string {
+  const [, where = '', rule = ''] = line.trim().split(/\s+/)
+  return `${rule} ${where}`
+}
 
 /** The ANSI control sequence introducer, the mark of a coloured cell. */
 const CSI = `${String.fromCodePoint(27)}[`

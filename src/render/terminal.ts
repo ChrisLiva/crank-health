@@ -89,7 +89,10 @@ export function renderTerminal(
   // In PR mode the findings worth a glance are the ones this change introduced;
   // the pre-existing ones are in report.md, and listing them here would bury
   // the regression under a wall of things the author did not do.
-  const source = report.delta?.newFindings.map((entry) => withGradeScope(entry)) ?? all
+  const source = rankFindings(
+    report.delta?.newFindings.map((entry) => withGradeScope(entry)) ?? all,
+    manifestFiles(all),
+  )
   const shown = source.slice(0, limit)
   if (shown.length > 0) {
     lines.push('', color.bold(report.delta === undefined ? 'Top findings' : 'Top new findings'))
@@ -136,6 +139,66 @@ export function renderTerminal(
 }
 
 type Colors = ReturnType<typeof pc.createColors>
+
+/** Severity, most urgent first — the last question the ranking asks. */
+const SEVERITY_RANK: Readonly<Record<Severity, number>> = {
+  critical: 0,
+  error: 1,
+  warning: 2,
+  info: 3,
+}
+
+/**
+ * The findings in the order a reader should meet them, which is not the order
+ * `report.json` carries them in — that order is the contract, and it is sorted
+ * by location so a diff of two reports reads.
+ *
+ * Three questions, in this order: did it move a grade, is it in source somebody
+ * wrote, and how bad is it. A default config's opinion about a generated
+ * lockfile is the last thing a glance should lead with, however critical the
+ * advisory database calls it.
+ *
+ * `toSorted` is stable, so findings the three questions cannot separate keep
+ * the report's own order and two runs cannot disagree.
+ */
+function rankFindings<T extends Finding>(
+  findings: readonly T[],
+  manifests: ReadonlySet<string>,
+): T[] {
+  return findings.toSorted((a, b) => {
+    const left = rankOf(a, manifests)
+    const right = rankOf(b, manifests)
+    return left[0] - right[0] || left[1] - right[1] || left[2] - right[2]
+  })
+}
+
+/** One finding's place in {@link rankFindings}' three questions. */
+function rankOf(
+  finding: Finding,
+  manifests: ReadonlySet<string>,
+): readonly [number, number, number] {
+  return [
+    finding.gradeScope ? 0 : 1,
+    manifests.has(finding.file) ? 1 : 0,
+    SEVERITY_RANK[finding.severity],
+  ]
+}
+
+/**
+ * The files this scan's dependency findings are about — lockfiles and package
+ * manifests, whatever an ecosystem calls them.
+ *
+ * Read off the findings that carry the pinned {@link Finding.package} they are
+ * about, because those are the only rows that know: a scanner that reports a
+ * vulnerable dependency reports the manifest it is pinned in. Matching names or
+ * extensions instead would need a new entry per ecosystem and would still be
+ * guessing.
+ */
+function manifestFiles(findings: readonly Finding[]): ReadonlySet<string> {
+  return new Set(
+    findings.filter((finding) => finding.package !== undefined).map((finding) => finding.file),
+  )
+}
 
 /** How many extensions the unassessed remainder is named by before it is summed. */
 const MAX_UNASSESSED = 5
