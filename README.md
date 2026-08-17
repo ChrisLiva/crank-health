@@ -138,7 +138,8 @@ exist, so an unlisted or unbuilt package is still scanned. There is no mode flag
 behaves exactly as it always has, and more than one produces per-project output automatically.
 Hidden directories are not scanned — a repo's `.crank/`, `.next/` or agent scratch directory is
 tooling scope, not its source — with `.github/` the one exception, at any depth, so CI workflows
-stay in scope; each skipped scope is named in `warnings[]`.
+stay in scope; a `warnings[]` entry counts the files this keeps out of language-tool scope (the
+repo-scoped scanners — gitleaks, osv-scanner — still scan the full tree).
 
 Each project is detected, run and graded on its own terms — its own config, its own installed
 binaries, its own KLOC and file-count denominators — with ownership inheriting from ancestors, so a
