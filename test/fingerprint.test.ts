@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { computeAnchors, fingerprint, normalizeAnchor } from '../src/core/fingerprint.ts'
-import type { PendingFinding, Range } from '../src/core/types.ts'
+import {
+  computeAnchors,
+  fingerprint,
+  linkRelated,
+  normalizeAnchor,
+} from '../src/core/fingerprint.ts'
+import type { Finding, PendingFinding, Range } from '../src/core/types.ts'
 import { makeFinding } from './factories.ts'
 
 function at(startLine: number, extra: Partial<PendingFinding> = {}): PendingFinding {
@@ -144,5 +149,78 @@ describe('computeAnchors', () => {
   it('returns findings in input order', () => {
     const findings = computeAnchors([at(3), at(1), at(2)], source('one\ntwo\nthree\n'))
     expect(findings.map((finding) => finding.range.startLine)).toEqual([3, 1, 2])
+  })
+})
+
+/**
+ * The audit's crestArt case: one range in one file flagged by two categories at
+ * once — a complexity finding on a function that also fails a type check, say.
+ * Read one category at a time they are two problems; read together they are one
+ * place to go, and the link is what lets a reader see that without diffing line
+ * numbers by hand.
+ */
+/** A finding over a line range; the linking rule is about nothing else. */
+function spanning(
+  overrides: Partial<Finding> & { readonly startLine: number; readonly endLine: number },
+): Finding {
+  const { startLine, endLine, ...rest } = overrides
+  return makeFinding({ range: { startLine, startCol: 1, endLine, endCol: 1 }, ...rest })
+}
+
+describe('linkRelated', () => {
+  it('links findings of different categories over the same lines of one file', () => {
+    const lint = spanning({ id: 'aaaaaaaaaaaaaaaa', category: 'lint', startLine: 10, endLine: 30 })
+    const types = spanning({
+      id: 'bbbbbbbbbbbbbbbb',
+      category: 'types',
+      startLine: 25,
+      endLine: 25,
+    })
+
+    const [first, second] = linkRelated([lint, types])
+    expect(first?.related).toEqual(['bbbbbbbbbbbbbbbb'])
+    expect(second?.related).toEqual(['aaaaaaaaaaaaaaaa'])
+  })
+
+  it('leaves a finding nothing overlaps unlinked, rather than carrying an empty list', () => {
+    const lint = spanning({ id: 'aaaaaaaaaaaaaaaa', category: 'lint', startLine: 10, endLine: 12 })
+    const types = spanning({
+      id: 'bbbbbbbbbbbbbbbb',
+      category: 'types',
+      startLine: 40,
+      endLine: 40,
+    })
+
+    expect(linkRelated([lint, types]).every((entry) => entry.related === undefined)).toBe(true)
+  })
+
+  it('does not link two findings of the same category, or two files', () => {
+    const one = spanning({ id: 'aaaaaaaaaaaaaaaa', category: 'lint', startLine: 1, endLine: 5 })
+    const twin = spanning({ id: 'bbbbbbbbbbbbbbbb', category: 'lint', startLine: 2, endLine: 3 })
+    const elsewhere = spanning({
+      id: 'cccccccccccccccc',
+      category: 'types',
+      file: 'src/b.ts',
+      startLine: 1,
+      endLine: 5,
+    })
+
+    expect(linkRelated([one, twin, elsewhere]).every((entry) => entry.related === undefined)).toBe(
+      true,
+    )
+  })
+
+  it('sorts the links, so two runs cannot disagree on their order', () => {
+    const lint = spanning({ id: 'aaaaaaaaaaaaaaaa', category: 'lint', startLine: 1, endLine: 9 })
+    const types = spanning({ id: 'cccccccccccccccc', category: 'types', startLine: 1, endLine: 1 })
+    const dead = spanning({
+      id: 'bbbbbbbbbbbbbbbb',
+      category: 'dead-code',
+      startLine: 2,
+      endLine: 2,
+    })
+
+    const [first] = linkRelated([lint, types, dead])
+    expect(first?.related).toEqual(['bbbbbbbbbbbbbbbb', 'cccccccccccccccc'])
   })
 })

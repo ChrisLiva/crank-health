@@ -137,6 +137,29 @@ describe('buildReport', () => {
     expect(report.delta?.newFindings.map((row) => row.advisory)).toEqual([undefined, true])
   })
 
+  /**
+   * The audit's crestArt case: two categories flagging one range. The link is
+   * drawn over the whole set before the split, so a graded row and an advisory
+   * row on the same lines still find each other.
+   */
+  it('links findings across categories that answer for the same place', () => {
+    const lint = makeFinding({
+      id: 'aaaaaaaaaaaaaaaa',
+      category: 'lint',
+      range: { startLine: 10, startCol: 1, endLine: 30, endCol: 1 },
+    })
+    const complexity = makeFinding({
+      id: 'bbbbbbbbbbbbbbbb',
+      category: 'complexity',
+      gradeScope: false,
+      range: { startLine: 12, startCol: 1, endLine: 12, endCol: 1 },
+    })
+
+    const report = buildReport(input({ findings: [lint, complexity] }))
+    expect(report.findings[0]?.related).toEqual(['bbbbbbbbbbbbbbbb'])
+    expect(report.advisories[0]?.related).toEqual(['aaaaaaaaaaaaaaaa'])
+  })
+
   /** What the renderers read: the split undone, in the order it was cut from. */
   it('puts the two lists back together in report order, with the scope restored', () => {
     const findings = sortFindings([

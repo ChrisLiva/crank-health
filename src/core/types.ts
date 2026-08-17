@@ -97,6 +97,13 @@ export interface Finding {
    * makes a dependency audit unreadable.
    */
   readonly packageAdvisories?: readonly PackageAdvisory[]
+  /**
+   * Ids of findings in **other** categories that answer for the same place in
+   * this file — same path, overlapping line range — sorted, and absent when
+   * there are none. Assigned once the whole scan is in; see
+   * `core/fingerprint.ts`.
+   */
+  readonly related?: readonly string[]
   readonly fixHint?: string
   /**
    * Which project this finding is in — the nearest project up its path, stamped

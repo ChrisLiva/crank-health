@@ -125,3 +125,53 @@ function sourceLine(
   }
   return lines[line - 1] ?? ''
 }
+
+/**
+ * Links findings that answer for the same place in the same file from different
+ * categories: same path, overlapping line range, different category.
+ *
+ * The audit found one range flagged twice — a function over the complexity
+ * ceiling that a type checker also fails, a duplicated block that is also dead.
+ * Read one category at a time those are two problems in two sections of the
+ * report, and the reader has to notice the line numbers agree to see that they
+ * are one place to go. {@link Finding.related} is that noticing, done once.
+ *
+ * Same-category pairs are left alone: two lint findings on one line are the same
+ * section of the report already, and linking them would say nothing a reader
+ * could act on. Whole-file findings (the `1:1:1:1` range a formatter or a
+ * lockfile scanner reports) overlap line 1 like any other range — which is the
+ * honest answer, since that is the only position they claim.
+ *
+ * Pure and order-independent: the links are sorted by id, and grouping by file
+ * first keeps this linear in the findings of any one file rather than in the
+ * repo's.
+ *
+ * @returns the findings in input order, each carrying its links or none
+ */
+export function linkRelated(findings: readonly Finding[]): Finding[] {
+  const byFile = new Map<string, Finding[]>()
+  for (const finding of findings) {
+    const group = byFile.get(finding.file)
+    if (group === undefined) byFile.set(finding.file, [finding])
+    else group.push(finding)
+  }
+
+  return findings.map((finding) => {
+    const related = (byFile.get(finding.file) ?? [])
+      .filter((other) => other.id !== finding.id && other.category !== finding.category)
+      .filter((other) => overlaps(finding, other))
+      .map((other) => other.id)
+      .toSorted(compareIds)
+    return related.length === 0 ? finding : { ...finding, related: [...new Set(related)] }
+  })
+}
+
+/** Inclusive line-range overlap. Columns are display detail, never identity. */
+function overlaps(one: Finding, other: Finding): boolean {
+  return one.range.startLine <= other.range.endLine && other.range.startLine <= one.range.endLine
+}
+
+function compareIds(a: string, b: string): number {
+  if (a === b) return 0
+  return a < b ? -1 : 1
+}

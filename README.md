@@ -265,6 +265,12 @@ affected ranges; a package **no** published version fixes is not work anyone can
 down — that tier reads every finding, graded or not). Identity is `package@version`, so a CVE
 published against a pin nobody touched is not a new finding on the next PR scan.
 
+**`related[]` says when two categories are talking about one place.** A finding whose file and line
+range overlap another finding's, in a _different_ category — the function over the complexity ceiling
+that also fails the type checker — carries that finding's id, and it carries yours. Sorted, absent
+when there is nothing to link, and never drawn within a category: two lint findings on one line are
+already in the same section of the report.
+
 ### Secrets stay in your repo
 
 Nothing crank-health writes quotes a credential. gitleaks runs under `--redact=100`, so the value

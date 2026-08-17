@@ -1,6 +1,7 @@
 import type { CategoryMovement, DeltaResult, ProjectChurn } from '../core/delta.ts'
 import type { RootShell } from '../core/discover.ts'
 import { languageOf } from '../core/discover.ts'
+import { linkRelated } from '../core/fingerprint.ts'
 import type { RunRecord } from '../core/orchestrator.ts'
 import { sortFindings } from '../core/orchestrator.ts'
 import type {
@@ -364,6 +365,7 @@ export function buildReport(input: ReportInput): Report {
       compare(a.record.project, b.record.project) ||
       compare(a.side ?? '', b.side ?? ''),
   )
+  const linked = linkRelated(input.findings)
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -384,11 +386,14 @@ export function buildReport(input: ReportInput): Report {
       : { rootShell: { declaredBy: input.rootShell.declaredBy.toSorted(compare) } }),
     tools: runs.map((run) => toReportTool(run)),
     // One pass each over an already-sorted list, so the two arrays are the
-    // report's own order with the other kind of row taken out.
-    findings: input.findings
+    // report's own order with the other kind of row taken out. Cross-category
+    // links are drawn over the whole set first: a security row and a lint row
+    // on the same lines land in different arrays, and the link is still the
+    // point.
+    findings: linked
       .filter((finding) => finding.gradeScope)
       .map((finding) => orderedFinding(finding)),
-    advisories: input.findings
+    advisories: linked
       .filter((finding) => !finding.gradeScope)
       .map((finding) => orderedFinding(finding)),
     warnings: input.warnings.toSorted(compare),
@@ -679,6 +684,7 @@ function orderedFinding(finding: Finding): ReportFinding {
           packageAdvisories: finding.packageAdvisories.map((advisory) => orderedAdvisory(advisory)),
         }),
     provenance: finding.provenance,
+    ...(finding.related === undefined ? {} : { related: finding.related }),
     ...(finding.fixHint === undefined ? {} : { fixHint: finding.fixHint }),
   }
 }
