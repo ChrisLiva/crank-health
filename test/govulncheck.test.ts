@@ -473,6 +473,10 @@ describe('mergeReachability', () => {
  * is asserted where it lives: two stand-in runners in one adapter, the same Go
  * dependency reported by each, and one row in the graded result.
  */
+/** A fake `go` that writes these stderr lines, then behaves as told. */
+const goSaying = (stderr: readonly string[], body: string): string =>
+  ['#!/bin/sh', "cat >&2 <<'EOS'", ...stderr, 'EOS', body].join('\n')
+
 const emitting = (tool: string, findings: readonly Finding[]): ToolRunner => ({
   tool,
   category: 'security',
@@ -705,6 +709,83 @@ describe('the govulncheck runner against a farmed PATH', () => {
     expect(result.findings).toEqual([])
     // Not the missing-toolchain story: `go` was right there and ran.
     expect(result.reason).not.toBe(GO_ABSENT_REASON)
+  })
+
+  /**
+   * `go` is this runner's fetcher, and like `uvx` and `dnx` it narrates the
+   * install it does the first time and says nothing on every run afterwards.
+   * Measured on go 1.26.6 with a fresh `GOMODCACHE`, same command shape: the
+   * cold run's stderr carries five `go: downloading …` lines above the real
+   * error and the warm run's carries none — stdout byte-identical.
+   *
+   * These are the two halves of commit 7251444's contract, for the third
+   * fetcher: a cold machine must stage the same evidence as a warm one, and a
+   * module that genuinely failed must explain itself with its own error rather
+   * than with whatever `go` happened to be downloading at the time.
+   */
+  const NARRATION = [
+    'go: downloading golang.org/x/vuln v1.7.0',
+    'go: downloading golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5',
+    'go: downloading golang.org/x/mod v0.39.0',
+  ]
+  const REAL_ERROR = [
+    'govulncheck: loading packages:',
+    'There are errors with the provided package patterns:',
+    '',
+    'main.go:3:27: cannot use "not an int" (untyped string constant) as int value',
+  ]
+
+  /** Everything about a run a cold cache must not be able to move. */
+  async function evidenceOf(stderr: readonly string[], body: string) {
+    const result = await runUnder({ go: goSaying(stderr, body) }, ['go.mod', 'main.go'])
+    return {
+      state: result.state,
+      reason: result.reason,
+      staged: await Promise.all(
+        result.rawFiles.map(
+          async (file) => [basename(file), await readFile(file, 'utf8')] as const,
+        ),
+      ),
+    }
+  }
+
+  it('stages and explains a failed module identically on a cold and a warm cache', async () => {
+    const cold = await evidenceOf([...NARRATION, ...REAL_ERROR], 'exit 1')
+    const warm = await evidenceOf(REAL_ERROR, 'exit 1')
+
+    expect(cold).toEqual(warm)
+    expect(cold.state).toBe('error')
+    expect(cold.reason).toContain('govulncheck: loading packages:')
+    expect(cold.reason).not.toContain('go: downloading')
+    expect(cold.staged.map(([name]) => name)).toEqual(['govulncheck.stderr.txt'])
+    expect(cold.staged[0]?.[1]).not.toContain('go: downloading')
+  })
+
+  it('stages the same files on a cold and a warm cache when the run succeeds', async () => {
+    const cold = await evidenceOf(NARRATION, `cat ${CAPTURED}`)
+    const warm = await evidenceOf([], `cat ${CAPTURED}`)
+
+    expect(cold).toEqual(warm)
+    expect(cold.state).toBe('ok')
+    // Narration alone is not evidence — nothing to stage, cold or warm.
+    expect(cold.staged.map(([name]) => name)).toEqual(['govulncheck.json'])
+  })
+
+  /**
+   * The filter must buy silence without blindness. `go` reports an unreachable
+   * proxy as `go: <module>@<version>: … no such host`, which is not narration —
+   * verified against the real binary with `GOPROXY` pointed at a dead host,
+   * where a downloading/extracting/finding filter removes nothing at all.
+   */
+  it('keeps a fetch failure, which is not narration, as the explanation', async () => {
+    const failure =
+      'go: golang.org/x/vuln/cmd/govulncheck@v1.7.0: Get ' +
+      '"https://proxy.golang.org/golang.org/x/vuln/@v/v1.7.0.info": dial tcp: no such host'
+    const result = await evidenceOf([...NARRATION, failure], 'exit 1')
+
+    expect(result.state).toBe('error')
+    expect(result.reason).toContain('no such host')
+    expect(result.staged[0]?.[1]).toContain('no such host')
   })
 
   /** A tool that found something still reports it, whatever its exit code. */

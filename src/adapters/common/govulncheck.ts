@@ -597,14 +597,18 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
       timeoutMs: ctx.timeoutMs,
       env: goEnv(),
     })
+    // A cold module cache narrates its downloads on stderr and a warm one says
+    // nothing, so the narration goes before anything reads or stages the stream
+    // — see {@link FETCH_NARRATION}.
+    const stderr = withoutFetchNarration(execution.stderr)
     // eslint-disable-next-line no-await-in-loop
-    rawFiles.push(...(await stage(ctx.scratch, goMod, execution)))
+    rawFiles.push(...(await stage(ctx.scratch, goMod, execution.stdout, stderr)))
     if (execution.failure !== undefined) {
       failures.push(explainGo(execution.failure))
       continue
     }
     const vulnerabilities = parseGovulncheckStream(execution.stdout)
-    const collapsed = collapsedRun(execution, vulnerabilities.length, goMod)
+    const collapsed = collapsedRun(execution, stderr, vulnerabilities.length, goMod)
     if (collapsed !== undefined) {
       failures.push(collapsed)
       continue
@@ -630,18 +634,64 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
 }
 
 /**
+ * `go`'s narration of the fetch it does on a cold module cache, which is not
+ * evidence about the repo and must not reach the report.
+ *
+ * `go` is this runner's *fetcher* — `go run <path>@<version>` resolves and
+ * builds the analyzer — and every fetcher in this codebase narrates its first
+ * install and then goes quiet. Commit 7251444 ("A cold tool cache must not
+ * change the report") fixed exactly this for `uvx` and `dnx`, and it fixed it
+ * with each fetcher's own switch rather than by filtering, on the grounds that
+ * a pattern which has to keep matching a tool's wording can go quietly dead.
+ * `go` has no such switch — `-x`/`-v` add output, nothing removes it — so
+ * filtering is the only remedy available, and the trade-off is taken knowingly:
+ * if `go` ever rewords these lines the pattern stops matching and a cold run
+ * stages a file a warm one does not, which is a determinism wobble rather than
+ * a wrong grade or a leaked path.
+ *
+ * Measured on go 1.26.6 with a fresh `GOMODCACHE`, same command shape: the cold
+ * run's stderr opens with five `go: downloading …` lines that the warm run's
+ * does not have, and is otherwise byte-identical (stdout is identical too,
+ * which is why this only became a problem once stderr was staged). `extracting`
+ * and `finding` are the same narration from older toolchains.
+ *
+ * Silence, not blindness: a *failed* fetch is `go: <module>@<version>: Get "…":
+ * dial tcp: … no such host`, which this does not match — verified against the
+ * real binary with `GOPROXY` pointed at a dead host, where the filter removes
+ * nothing at all and the error still explains the run.
+ */
+const FETCH_NARRATION = /^go: (?:downloading|extracting|finding) \S/
+
+/** `stderr` with {@link FETCH_NARRATION} removed; everything else untouched. */
+function withoutFetchNarration(stderr: string): string {
+  return stderr
+    .split('\n')
+    .filter((line) => !FETCH_NARRATION.test(line))
+    .join('\n')
+}
+
+/**
  * One module's evidence, staged: the stream it produced and anything it said on
  * stderr. Both, because the run that failed is the one whose evidence a reader
  * most needs — and `go` says why on stderr while stdout carries only the
  * `config` and `progress` records it managed before giving up.
+ *
+ * `stderr` arrives already stripped of fetch narration, and the file is written
+ * only if something remains: an all-narration stderr stages nothing, on a cold
+ * cache and a warm one alike.
  */
-async function stage(scratch: string, goMod: string, execution: ToolExecution): Promise<string[]> {
+async function stage(
+  scratch: string,
+  goMod: string,
+  stdout: string,
+  stderr: string,
+): Promise<string[]> {
   const staged: string[] = []
-  if (execution.stdout.trim().length > 0) {
-    staged.push(await writeScratchRaw(scratch, rawName(goMod, 'json'), execution.stdout))
+  if (stdout.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, rawName(goMod, 'json'), stdout))
   }
-  if (execution.stderr.trim().length > 0) {
-    staged.push(await writeScratchRaw(scratch, rawName(goMod, 'stderr.txt'), execution.stderr))
+  if (stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, rawName(goMod, 'stderr.txt'), stderr))
   }
   return staged
 }
@@ -667,6 +717,7 @@ async function stage(scratch: string, goMod: string, execution: ToolExecution): 
  */
 function collapsedRun(
   execution: ToolExecution,
+  stderr: string,
   reported: number,
   goMod: string,
 ): ToolFailure | undefined {
@@ -675,7 +726,11 @@ function collapsedRun(
     state: 'error',
     reason:
       `govulncheck analyzed nothing in ${dirname(goMod)} ` +
-      `(exit ${execution.exitCode ?? 'on a signal'}): ${firstLine(execution.stderr)}`,
+      // Stripped of fetch narration first: on a cold cache the literal first
+      // line is `go: downloading …`, which would explain a compile error with
+      // whatever `go` happened to be downloading at the time — the `firstLine`
+      // hazard `core/exec.ts` documents for dnx. See {@link FETCH_NARRATION}.
+      `(exit ${execution.exitCode ?? 'on a signal'}): ${firstLine(stderr)}`,
   }
 }
 
