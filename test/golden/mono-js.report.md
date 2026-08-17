@@ -78,7 +78,7 @@ Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or se
 | --- | --- | --- | --- | --- |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files in this repo, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
-| opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
+| opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (packages/api, packages/web) |
 | osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
@@ -88,7 +88,7 @@ Not graded: no tsconfig.json and no TypeScript sources — nothing owns the type
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| tsc | not available | [default-config] | — (pinned 7.0.2) | no tsconfig.json and no TypeScript sources — nothing owns the types category |
+| tsc | not available | [default-config] | — (pinned 7.0.2) | no tsconfig.json and no TypeScript sources — nothing owns the types category (packages/api, packages/web) |
 
 ## dead code — A
 
@@ -98,8 +98,8 @@ Graded on weighted findings per KLOC: A ≤0.5, B ≤2, C ≤5, D ≤10, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-dead-code | ok | [default-config] | 3.14.0 | — |
-| knip | ok | [default-config] | 6.31.0 | — |
+| fallow-dead-code | ok | [default-config] | 3.14.0 | (packages/api, packages/web) |
+| knip | ok | [default-config] | 6.31.0 | (packages/api, packages/web) |
 
 Evidence: [raw/packages/api/fallow-dead-code.json](raw/packages/api/fallow-dead-code.json) · [raw/packages/api/fallow-dead-code.stderr.txt](raw/packages/api/fallow-dead-code.stderr.txt) · [raw/packages/web/fallow-dead-code.json](raw/packages/web/fallow-dead-code.json) · [raw/packages/web/fallow-dead-code.stderr.txt](raw/packages/web/fallow-dead-code.stderr.txt) · [raw/packages/api/knip.json](raw/packages/api/knip.json) · [raw/packages/web/knip.json](raw/packages/web/knip.json)
 
@@ -111,8 +111,8 @@ Graded on the measured percentage: A ≤2, B ≤5, C ≤10, D ≤20, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-health | ok | [default-config] | 3.14.0 | — |
-| fta | ok | [default-config] | 3.0.0 | — |
+| fallow-health | ok | [default-config] | 3.14.0 | (packages/api, packages/web) |
+| fta | ok | [default-config] | 3.0.0 | (packages/api, packages/web) |
 
 **Advisory findings — reported, not counted toward the grade** (6)
 
@@ -135,7 +135,7 @@ Graded on the measured percentage: A ≤3, B ≤5, C ≤10, D ≤20, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.14 | — |
+| jscpd | ok | [default-config] | 5.0.14 | (packages/api, packages/web) |
 
 **Advisory findings — reported, not counted toward the grade** (1)
 
@@ -154,10 +154,10 @@ Graded on weighted findings per KLOC: A ≤1, B ≤5, C ≤15, D ≤40, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| eslint | ok | [repo-config] | 10.8.0 | — |
-| oxlint | ok | [default-config] | 1.77.0 | — |
-| oxlint | ok | [default-config] | 1.77.0 | stood down: lint graded by eslint |
-| react-doctor | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
+| eslint | ok | [repo-config] | 10.8.0 | (packages/web) |
+| oxlint | ok | [default-config] | 1.77.0 | (packages/api) |
+| oxlint | ok | [default-config] | 1.77.0 | stood down: lint graded by eslint (packages/web) |
+| react-doctor | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected (packages/api, packages/web) |
 
 **Findings** (2)
 
@@ -176,7 +176,7 @@ Graded on the measured percentage: A ≤1, B ≤10, C ≤30, D ≤60, else F.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| prettier | ok | [repo-config] | 3.9.6 | — |
+| prettier | ok | [repo-config] | 3.9.6 | (packages/api, packages/web) |
 
 **Findings** (1)
 
