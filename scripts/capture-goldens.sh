@@ -4,9 +4,9 @@
 #
 # A golden snapshot records one machine's toolchain (see
 # `test/support/system-tools.ts`): gitleaks, opengrep and osv-scanner ship as
-# release binaries with no npm or PyPI distribution, so a machine that has one
-# installed produces a different — equally correct — report, and the goldens are
-# recorded against the machine that has none of them.
+# release binaries with no npm or PyPI distribution, and `go` runs govulncheck,
+# so a machine that has one installed produces a different — equally correct —
+# report, and the goldens are recorded against the machine that has none of them.
 #
 # This script builds that machine: a PATH made of the system utilities every
 # tool shells out to plus a symlink farm holding the development binaries the
@@ -42,9 +42,13 @@ required=(node npm npx uv uvx git dotnet)
 # `sh`, `cat`, `realpath`, `which` itself.
 system_path=/usr/bin:/bin
 
-# Tools crank-health can only use when the machine already has them. The goldens
-# are the toolchain that has none, so the PATH below must not resolve one.
-absent=(gitleaks opengrep osv-scanner)
+# Binaries whose presence makes a machine a different toolchain: the three
+# release-binary scanners crank-health can only use when they are installed, and
+# Go — govulncheck's fetcher and its analyzer both, so a machine with `go`
+# analyzes Go modules for reachability where this one reports the toolchain
+# absent. The goldens are the toolchain that has none of them, so the PATH below
+# must not resolve one; `test/support/system-tools.ts` gates the same list.
+absent=(gitleaks opengrep osv-scanner go govulncheck)
 
 farm="$(mktemp -d "${TMPDIR:-/tmp}/crank-golden-path.XXXXXX")"
 trap '/bin/rm -rf "$farm"' EXIT
@@ -60,9 +64,9 @@ done
 
 export PATH="$farm:$system_path"
 
-# The retiring check for this whole script: if any of the three resolves here,
-# every golden captured would record a toolchain the checked-in ones do not have,
-# and the suite would be red on every machine that does not have that one too.
+# The retiring check for this whole script: if any of them resolves here, every
+# golden captured would record a toolchain the checked-in ones do not have, and
+# the suite would be red on every machine that does not have that one too.
 for binary in "${absent[@]}"; do
   if which "$binary" >/dev/null 2>&1; then
     echo "capture-goldens: $binary resolves inside the sanitized PATH ($PATH)" >&2

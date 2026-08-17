@@ -10,7 +10,8 @@ import { renderTerminal } from '../src/render/terminal.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
-import { GOLDEN_TOOLCHAIN } from './support/system-tools.ts'
+import { GOLDEN_TOOLCHAIN, TOOLCHAIN_BINARIES, onPath } from './support/system-tools.ts'
+import { GO_ABSENT_REASON } from '../src/adapters/common/govulncheck.ts'
 import { reportFindings } from '../src/render/json.ts'
 
 /**
@@ -643,6 +644,36 @@ describe('quick scan of the mono-mixed fixture', () => {
     )
   })
 
+  /**
+   * The Go module in `services/go-api` is what gives this fixture a govulncheck
+   * row to pin. It is a `go.mod` and nothing else — no Go source, and no
+   * dependency to resolve — so neither a newer advisory database nor an older
+   * `go` can put a finding in this report: the fixture asserts the *row*, which
+   * is the part a scan of a Go module always has.
+   *
+   * With no `go` on `PATH` — the golden toolchain — that row is the
+   * deterministic `not-available` spec §8 requires, and it is exactly why `go`
+   * now gates the goldens: a machine that has it runs govulncheck instead.
+   */
+  it('reports a govulncheck run over the fixture’s Go module', async () => {
+    const row = scan.report.tools.find((tool) => tool.tool === 'govulncheck')
+    expect(row).toMatchObject({ category: 'security', repoWide: true })
+    expect(row?.detection?.ownedVia).toBe('services/go-api/go.mod')
+    if (!(await onPath('go'))) {
+      expect(row).toMatchObject({ state: 'not-available', reason: GO_ABSENT_REASON })
+    }
+  })
+
+  /**
+   * A machine with `go` is a different toolchain, in the same sense as one with
+   * gitleaks installed: govulncheck runs there and does not run here, so the
+   * goldens — which record the machine that has neither — must not be compared.
+   */
+  it('is not the golden toolchain on a machine that has go', async () => {
+    expect(TOOLCHAIN_BINARIES).toContain('go')
+    if (await onPath('go')) expect(GOLDEN_TOOLCHAIN).toBe(false)
+  })
+
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
     await expectGolden('mono-mixed.report.json', normalizeReport(scan.json))
   })
@@ -670,7 +701,16 @@ describe('quick scan of the mono-mixed fixture', () => {
     SCAN_TIMEOUT_MS,
   )
 
-  it('leaves the target repo clean', async () => {
+  /**
+   * Zero footprint (spec §7) over the toolchain that is most willing to write
+   * into the tree it is pointed at: `go` resolves modules, and a scan must
+   * leave neither a `go.sum` nor a rewritten `go.mod` behind. On a machine with
+   * `go` this is the real binary, spawned in `services/go-api` — asserted,
+   * because a footprint check passes trivially against a tool that never ran.
+   */
+  it('leaves the target repo clean, go module and all', async () => {
+    const row = scan.report.tools.find((tool) => tool.tool === 'govulncheck')
+    if (await onPath('go')) expect(row?.reason).not.toBe(GO_ABSENT_REASON)
     expect(await fixture.status()).toBe('')
   })
 
