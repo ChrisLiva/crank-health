@@ -444,12 +444,15 @@ describe('quick scan of the js-library fixture', () => {
 
   /**
    * agent.md asks a coding agent to *do* something, and there is nothing to do
-   * here: a category at A produces no task (`needsWork`). That absence is the
-   * demotion arriving at the artifact an agent actually reads — an advisory
-   * finding is reported in report.md and never becomes work.
+   * here: an advisory finding with nothing graded at the same place is not
+   * eligible for a task. That absence is the demotion arriving at the artifact
+   * an agent actually reads — the finding is in report.md and never becomes
+   * work.
    */
   it('raises no agent task for an advisory finding', () => {
-    expect(scan.agentMarkdown).toContain('No tasks: every assessed category is graded A.')
+    expect(scan.agentMarkdown).toContain(
+      'No tasks: nothing this scan found is work in hand-written code',
+    )
     expect(scan.agentMarkdown).not.toContain('src/util.js')
   })
 
