@@ -132,8 +132,8 @@ describe('quick scan of the js-react fixture', () => {
     const byTool = new Map(parse(scan.json).tools.map((tool) => [tool.tool, tool]))
     expect(byTool.get('react-doctor')).toMatchObject({
       state: 'ok',
-      version: '0.9.5',
-      pinned: '0.9.5',
+      version: '0.9.12',
+      pinned: '0.9.12',
       execution: 'ephemeral-pinned',
       provenance: 'default-config',
       detection: null,
@@ -148,7 +148,7 @@ describe('quick scan of the js-react fixture', () => {
   it('keeps react-doctor raw evidence next to the report', async () => {
     const raw = await readFile(join(scan.outputDir, 'raw', 'root', 'react-doctor.json'), 'utf8')
     expect(JSON.parse(raw)).toMatchObject({ reactDetected: true })
-    // 0.9.5 always prints its output-dir notice to stderr, and evidence is kept.
+    // 0.9.12 always prints its output-dir notice to stderr, and evidence is kept.
     const stderr = await readFile(
       join(scan.outputDir, 'raw', 'root', 'react-doctor.stderr.txt'),
       'utf8',
@@ -201,7 +201,7 @@ describe('react-doctor owned by the repo but not installed', () => {
         expect(result.findings).toHaveLength(3)
         expect(result.findings.every((finding) => finding.provenance === 'repo-config')).toBe(true)
         // No detection.version: the pin is the honest fallback.
-        expect(result.toolVersion).toBe('0.9.5')
+        expect(result.toolVersion).toBe('0.9.12')
       } finally {
         await rm(copy, { recursive: true, force: true })
         await rm(scratch, { recursive: true, force: true })

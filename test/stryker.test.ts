@@ -22,13 +22,13 @@ import type { RunContext } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 
 /**
- * StrykerJS wrapper: the captured `mutation-report.json` a real 9.6.1 run of the
- * `js-weak-tests` fixture produced, the config crank-health generates for it,
- * and the PR scoping. Everything here is a pure function over bytes or options,
- * so a format or flag shift fails a test instead of corrupting a grade.
+ * StrykerJS wrapper: the captured `mutation-report.json` a real 10.0.0 run of
+ * the `js-weak-tests` fixture produced, the config crank-health generates for
+ * it, and the PR scoping. Everything here is a pure function over bytes or
+ * options, so a format or flag shift fails a test instead of corrupting a grade.
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/stryker-9.6.1.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/stryker-10.0.0.json', import.meta.url))
 
 const CONTEXT: RunContext = {
   repoRoot: '/repo',

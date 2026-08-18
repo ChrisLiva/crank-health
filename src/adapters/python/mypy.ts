@@ -48,7 +48,7 @@ const MYPY_SECTIONS: readonly string[] = ['tool.mypy']
 export const MYPY_GENERAL_RULE = 'mypy/diagnostic'
 
 /**
- * mypy severities → the core's vocabulary (spec §2). mypy 2.3.0 asserts its own
+ * mypy severities → the core's vocabulary (spec §2). mypy 2.3.1 asserts its own
  * severity is `error` or `note`, and notes never reach here (see
  * {@link parseMypyJsonl}); the `warning` row is forward compatibility, so that a
  * severity mypy may add later cannot silently grade as an error, and anything
@@ -81,7 +81,7 @@ const BASE_ARGS: readonly string[] = ['--output=json']
  *
  * mypy's other four reports — `--txt-report`, `--html-report`, `--xml-report`
  * and `--cobertura-xml-report` — are deliberately *not* passed: each aborts
- * mypy with an internal error when lxml is absent (verified against 2.3.0), so
+ * mypy with an internal error when lxml is absent (verified against 2.3.1), so
  * passing them would trade a config we can neutralize for a run we cannot make.
  * A repo that sets one of the four either aborts honestly — surfaced as
  * `state: 'error'` — or, on a machine with lxml, still writes it where its own

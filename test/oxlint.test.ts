@@ -13,13 +13,13 @@ import type { DetectContext } from '../src/core/types.ts'
  * real oxlint output; regenerate it whenever the manifest pins a new version.
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/oxlint-1.77.0.sarif.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/oxlint-1.78.0.sarif.json', import.meta.url))
 
 describe('parseSarif', () => {
   it('reads rule id, category, level, message and range from real output', async () => {
     const report = parseSarif(await readFile(CAPTURED, 'utf8'))
 
-    expect(report.version).toBe('1.77.0')
+    expect(report.version).toBe('1.78.0')
     // Document order, exactly as captured — oxlint lints files in parallel, so
     // this order is not meaningful; `toPendingFindings` is what sorts it.
     expect(report.results).toEqual([

@@ -13,8 +13,8 @@ import type { PendingFinding } from '../src/core/types.ts'
  * Captured raw output: fallow against `test/fixtures/ts-owned`, knip against
  * `test/fixtures/js-basic`.
  */
-const FALLOW = fileURLToPath(new URL('./captured/fallow-dead-code-3.14.0.json', import.meta.url))
-const KNIP = fileURLToPath(new URL('./captured/knip-6.31.0.json', import.meta.url))
+const FALLOW = fileURLToPath(new URL('./captured/fallow-dead-code-3.17.0.json', import.meta.url))
+const KNIP = fileURLToPath(new URL('./captured/knip-6.32.2.json', import.meta.url))
 
 /** The first finding a mapper produced for `rule`. */
 function ruled(findings: readonly PendingFinding[], rule: string): PendingFinding | undefined {
@@ -24,7 +24,7 @@ function ruled(findings: readonly PendingFinding[], rule: string): PendingFindin
 describe('parseDeadCode', () => {
   it('reads entry points, unused files and unused exports from real output', async () => {
     const report = parseDeadCode(await readFile(FALLOW, 'utf8'))
-    expect(report.version).toBe('3.14.0')
+    expect(report.version).toBe('3.17.0')
     expect(report.entryPoints).toBe(2)
     expect(report.unusedFiles).toEqual(['src/lint.js'])
     expect(report.unusedExports).toEqual([
@@ -41,7 +41,7 @@ describe('parseDeadCode', () => {
 
 describe('toDeadCodeFindings', () => {
   const report = {
-    version: '3.14.0',
+    version: '3.17.0',
     entryPoints: 2,
     unusedFiles: ['src/dead.ts'],
     unusedExports: [{ file: 'src/util.ts', name: 'unusedHelper', line: 5, column: 16 }],

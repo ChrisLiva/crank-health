@@ -196,7 +196,7 @@ describe('quick scan of the js-basic fixture', () => {
       state: 'not-available',
       reason: 'no React dependency detected',
       version: null,
-      pinned: '0.9.5',
+      pinned: '0.9.12',
       execution: 'ephemeral-pinned',
       provenance: 'default-config',
       raw: [],
@@ -685,7 +685,7 @@ describe('quick scan of a repo that owns oxlint but has not installed it', () =>
           tool: 'oxlint',
           execution: 'ephemeral-pinned',
           provenance: 'repo-config',
-          version: '1.77.0',
+          version: '1.78.0',
           state: 'ok',
           detection: {
             reason: 'config+dependency',

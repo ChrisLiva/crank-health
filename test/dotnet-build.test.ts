@@ -17,7 +17,7 @@ import type { CsBuild } from '../src/adapters/csharp/build.ts'
 /**
  * The pure half of the `dotnet build` host, proven over captured real bytes:
  * a multi-targeting (`net8.0;net10.0`) scratch project compiled by SDK
- * 10.0.203 with the injected netanalyzers 10.0.302 assets. The capture's
+ * 10.0.203 with the injected netanalyzers 10.0.400 assets. The capture's
  * per-TFM SARIF files were folded through `mergeSarifLogs` — the same
  * function the runtime uses — so what the parse tests pin is exactly what a
  * run parses.
@@ -35,7 +35,7 @@ const CAPTURE_ROOT = '/private/tmp/crank-cs-capture/proj'
 const BROKEN_ROOT = '/private/tmp/crank-cs-capture/proj-broken'
 
 describe('parseBuildSarif partition', () => {
-  const parsed = parseBuildSarif(captured('netanalyzers-10.0.302.sarif.json'), CAPTURE_ROOT)
+  const parsed = parseBuildSarif(captured('netanalyzers-10.0.400.sarif.json'), CAPTURE_ROOT)
 
   it('sends CS diagnostics to types, with SARIF levels mapped', () => {
     const flagged = parsed.types.filter((finding) => finding.rule === 'CS0219')
@@ -52,7 +52,7 @@ describe('parseBuildSarif partition', () => {
 
   it('grades compile errors as error-severity types findings', () => {
     const failed = parseBuildSarif(
-      captured('netanalyzers-10.0.302.compile-failed.sarif.json'),
+      captured('netanalyzers-10.0.400.compile-failed.sarif.json'),
       BROKEN_ROOT,
     )
     const flagged = failed.types.filter((finding) => finding.rule === 'CS0029')
@@ -91,7 +91,7 @@ describe('multi-TFM dedupe', () => {
    * per TFM (two runs in the merged log), and exactly one copy may survive.
    */
   it('collapses the per-TFM copies the capture really holds', () => {
-    const raw = captured('netanalyzers-10.0.302.sarif.json')
+    const raw = captured('netanalyzers-10.0.400.sarif.json')
     expect(raw.match(/"ruleId":\s*"CS0219"/g)?.length).toBeGreaterThanOrEqual(2)
 
     const parsed = parseBuildSarif(raw, CAPTURE_ROOT)
@@ -200,12 +200,12 @@ const RAW_FILE = '/scratch/raw/dotnet-build.sarif.json'
 /** The five {@link CsBuild} outcomes the runtime can hand a mapper. */
 const okBuild: CsBuild = {
   state: 'ok',
-  sarif: captured('netanalyzers-10.0.302.sarif.json'),
+  sarif: captured('netanalyzers-10.0.400.sarif.json'),
   rawFile: RAW_FILE,
 }
 const failedBuild: CsBuild = {
   state: 'compile-failed',
-  sarif: captured('netanalyzers-10.0.302.compile-failed.sarif.json'),
+  sarif: captured('netanalyzers-10.0.400.compile-failed.sarif.json'),
   rawFile: RAW_FILE,
 }
 const quietlyUnavailable: CsBuild = {
@@ -220,7 +220,7 @@ const loudlyUnavailable: CsBuild = {
 
 /** The captured `ok` SARIF with every CA1502 record stripped (criterion 17). */
 function withoutCa1502(): CsBuild {
-  const document = JSON.parse(captured('netanalyzers-10.0.302.sarif.json')) as {
+  const document = JSON.parse(captured('netanalyzers-10.0.400.sarif.json')) as {
     runs: { results: { ruleId: string }[] }[]
   }
   for (const run of document.runs) {
@@ -319,7 +319,7 @@ describe('the three mappers over an unavailable build', () => {
 
     const result = await lintResultFor(loudlyUnavailable, '/repo')
     expect(result.state).toBe('error')
-    expect(result.reason).toContain('microsoft.codeanalysis.netanalyzers@10.0.302')
+    expect(result.reason).toContain('microsoft.codeanalysis.netanalyzers@10.0.400')
     expect(result.reason).toMatch(/did not resolve/)
 
     expect((await typesResultFor(loudlyUnavailable, '/repo')).state).toBe('error')

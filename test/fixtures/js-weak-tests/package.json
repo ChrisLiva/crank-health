@@ -7,6 +7,6 @@
     "test": "node --test"
   },
   "devDependencies": {
-    "@stryker-mutator/core": "9.6.1"
+    "@stryker-mutator/core": "10.0.0"
   }
 }

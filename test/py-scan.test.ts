@@ -160,7 +160,7 @@ describe('quick scan of the py-basic fixture', () => {
   /** Spec "Categories and tools": "ty (beta) → pyright when venv exists". */
   it('type-checks with ty and stands pyright down, because there is no virtualenv', () => {
     const byTool = new Map(parse(json).tools.map((tool) => [tool.tool, tool]))
-    expect(byTool.get('ty')).toMatchObject({ state: 'ok', version: '0.0.66' })
+    expect(byTool.get('ty')).toMatchObject({ state: 'ok', version: '0.0.72' })
     expect(byTool.get('pyright')).toMatchObject({
       state: 'not-available',
       reason: 'standing down: this project has no virtualenv, so ty type-checks it',
@@ -406,7 +406,7 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
     expect(byTool.get('mypy')).toMatchObject({
       state: 'ok',
       execution: 'ephemeral-pinned',
-      version: '2.3.0',
+      version: '2.3.1',
       provenance: 'repo-config',
     })
   })

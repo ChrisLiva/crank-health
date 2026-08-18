@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.9.0 · quick profile
+`<repo>` @ `acbb91a96406d62565ed52fa2009a8581e16b023` · crank-health 0.10.0 · quick profile
 
 ## Grades
 
@@ -67,7 +67,7 @@ The repo root is a workspace shell (declared by package.json): it holds no sourc
 
 | Tool | Category | Ownership | Owned via | Version |
 | --- | --- | --- | --- | --- |
-| eslint | lint | config+dependency, not installed | packages/web/eslint.config.js | 10.8.0 |
+| eslint | lint | config+dependency, not installed | packages/web/eslint.config.js | 10.8.1 |
 | prettier | format | dependency, not installed | package.json | 3.9.6 |
 
 ## security — not assessed
@@ -80,7 +80,7 @@ Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or se
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (packages/api, packages/web) |
-| osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| osv-scanner | not available | [default-config] | — (pinned 2.5.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
 ## types — not assessed
@@ -97,8 +97,8 @@ Nothing counted toward the grade.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-dead-code | ok | [default-config] | 3.14.0 | (packages/api, packages/web) |
-| knip | ok | [default-config] | 6.31.0 | (packages/api, packages/web) |
+| fallow-dead-code | ok | [default-config] | 3.17.0 | (packages/api, packages/web) |
+| knip | ok | [default-config] | 6.32.2 | (packages/api, packages/web) |
 
 Evidence: [raw/packages/api/fallow-dead-code.json](raw/packages/api/fallow-dead-code.json) · [raw/packages/api/fallow-dead-code.stderr.txt](raw/packages/api/fallow-dead-code.stderr.txt) · [raw/packages/web/fallow-dead-code.json](raw/packages/web/fallow-dead-code.json) · [raw/packages/web/fallow-dead-code.stderr.txt](raw/packages/web/fallow-dead-code.stderr.txt) · [raw/packages/api/knip.json](raw/packages/api/knip.json) · [raw/packages/web/knip.json](raw/packages/web/knip.json)
 
@@ -108,8 +108,8 @@ Evidence: [raw/packages/api/fallow-dead-code.json](raw/packages/api/fallow-dead-
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-health | ok | [default-config] | 3.14.0 | (packages/api, packages/web) |
-| fta | ok | [default-config] | 3.0.0 | (packages/api, packages/web) |
+| fallow-health | ok | [default-config] | 3.17.0 | (packages/api, packages/web) |
+| fta | ok | [default-config] | 3.0.1 | (packages/api, packages/web) |
 
 **Advisory findings** (6) — reported, not counted toward the grade: 5 × `fallow-health` `fallow/complexity`, 1 × `fta` `fta/file-score`.
 
@@ -127,7 +127,7 @@ Evidence: [raw/packages/api/fallow-health.json](raw/packages/api/fallow-health.j
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.14 | (packages/api, packages/web) |
+| jscpd | ok | [default-config] | 5.0.15 | (packages/api, packages/web) |
 
 **Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
@@ -142,10 +142,10 @@ Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.jso
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| eslint | ok | [repo-config] | 10.8.0 | (packages/web) |
-| oxlint | ok | [default-config] | 1.77.0 | (packages/api) |
-| oxlint | ok | [default-config] | 1.77.0 | stood down: lint graded by eslint (packages/web) |
-| react-doctor | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected (packages/api, packages/web) |
+| eslint | ok | [repo-config] | 10.8.1 | (packages/web) |
+| oxlint | ok | [default-config] | 1.78.0 | (packages/api) |
+| oxlint | ok | [default-config] | 1.78.0 | stood down: lint graded by eslint (packages/web) |
+| react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected (packages/api, packages/web) |
 
 **Findings** (2)
 

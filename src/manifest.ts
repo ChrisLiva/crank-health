@@ -11,19 +11,19 @@
  * bump and it must come with re-captured parse fixtures under `test/captured/`.
  */
 export const TOOL_MANIFEST = {
-  oxlint: '1.77.0',
-  eslint: '10.8.0',
-  '@biomejs/biome': '2.5.7',
+  oxlint: '1.78.0',
+  eslint: '10.8.1',
+  '@biomejs/biome': '2.5.9',
   prettier: '3.9.6',
   typescript: '7.0.2',
-  fallow: '3.14.0',
-  knip: '6.31.0',
-  'fta-cli': '3.0.0',
-  jscpd: '5.0.14',
+  fallow: '3.17.0',
+  knip: '6.32.2',
+  'fta-cli': '3.0.1',
+  jscpd: '5.0.15',
   // Modified-MIT license: forbids ML-training use and hosted resale, accepted
   // for scanner use. Releases daily, so this pin goes stale fast — bumping it
   // is a crank-health version bump with re-captured fixtures, per the header.
-  'react-doctor': '0.9.5',
+  'react-doctor': '0.9.12',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -35,12 +35,12 @@ export const TOOL_MANIFEST = {
  * here and its parser is tested against captured bytes.
  */
 export const PYTHON_TOOL_MANIFEST = {
-  ruff: '0.16.1',
-  ty: '0.0.66',
+  ruff: '0.16.3',
+  ty: '0.0.72',
   pyright: '1.1.411',
-  mypy: '2.3.0',
+  mypy: '2.3.1',
   vulture: '2.16',
-  complexipy: '6.2.0',
+  complexipy: '7.0.1',
   bandit: '1.9.4',
   zizmor: '1.29.0',
 } as const satisfies Readonly<Record<string, string>>
@@ -52,8 +52,8 @@ export const PYTHON_TOOL_MANIFEST = {
  * entry), so these pins only apply on a machine that has the SDK.
  */
 export const DOTNET_TOOL_MANIFEST = {
-  'microsoft.codeanalysis.netanalyzers': '10.0.302',
-  'roslynator.dotnet.cli': '0.12.0',
+  'microsoft.codeanalysis.netanalyzers': '10.0.400',
+  'roslynator.dotnet.cli': '0.13.1',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -98,7 +98,7 @@ export const SYSTEM_TOOL_MANIFEST = {
   dotnet: '10.0.203',
   gitleaks: '8.30.1',
   opengrep: '1.26.0',
-  'osv-scanner': '2.4.0',
+  'osv-scanner': '2.5.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -120,9 +120,9 @@ export const SYSTEM_TOOL_MANIFEST = {
  * {@link SYSTEM_TOOL_MANIFEST}, not a pin crank-health can enforce.
  */
 export const REPO_TOOL_MANIFEST = {
-  '@stryker-mutator/core': '9.6.1',
-  'cosmic-ray': '8.4.6',
-  coverage: '7.15.3',
+  '@stryker-mutator/core': '10.0.0',
+  'cosmic-ray': '8.7.0',
+  coverage: '7.15.4',
   'dotnet-stryker': '4.16.0',
 } as const satisfies Readonly<Record<string, string>>
 
@@ -165,7 +165,7 @@ export function pinnedVersion(tool: PinnedTool): string {
 }
 
 /**
- * The `name@version` spec for an ephemeral install, e.g. `oxlint@1.77.0`.
+ * The `name@version` spec for an ephemeral install, e.g. `oxlint@1.78.0`.
  * Pass this to `npx --yes`, never a bare name.
  */
 export function pinnedSpec(tool: PinnedTool): string {
@@ -192,7 +192,7 @@ export function pinnedPythonVersion(tool: PinnedPythonTool): string {
 }
 
 /**
- * The `name@version` spec `uvx` resolves, e.g. `ruff@0.16.1`. `uvx` reads the
+ * The `name@version` spec `uvx` resolves, e.g. `ruff@0.16.3`. `uvx` reads the
  * `@` form as an exact pin; the `==` form is only needed when the command name
  * differs from the distribution name (see
  * {@link import('./core/exec.ts').uvxCommand}).

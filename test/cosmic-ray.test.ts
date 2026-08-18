@@ -15,13 +15,13 @@ import type { RunContext } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 
 /**
- * cosmic-ray wrapper: the captured `cosmic-ray dump` a real 8.4.6 session
+ * cosmic-ray wrapper: the captured `cosmic-ray dump` a real 8.7.0 session
  * produced (13 killed, 14 survived over a deliberately weak suite), the TOML
  * config crank-health generates, and the PR scoping expressed in the two
  * settings cosmic-ray has.
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/cosmic-ray-8.4.6.jsonl', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/cosmic-ray-8.7.0.jsonl', import.meta.url))
 
 const CONTEXT: RunContext = {
   repoRoot: '/repo',

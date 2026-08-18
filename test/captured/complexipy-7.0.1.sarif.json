@@ -6,7 +6,7 @@
       "tool": {
         "driver": {
           "name": "complexipy",
-          "version": "6.2.0",
+          "version": "7.0.1",
           "informationUri": "https://rohaquinlop.github.io/complexipy/",
           "rules": [
             {

@@ -6,8 +6,8 @@
       "tool": {
         "driver": {
           "name": "oxlint",
-          "version": "1.77.0",
-          "semanticVersion": "1.77.0",
+          "version": "1.78.0",
+          "semanticVersion": "1.78.0",
           "informationUri": "https://oxc.rs/docs/guide/usage/linter.html",
           "rules": [
             {

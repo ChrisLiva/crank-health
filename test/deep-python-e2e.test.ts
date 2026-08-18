@@ -67,7 +67,7 @@ describe.runIf(ENABLED)('--deep on a Python repo with a weak test suite', () => 
     expect(score).toBeGreaterThan(0)
     /*
      * The fixture's counts, hand-checked against the captured run in
-     * `test/captured/cosmic-ray-8.4.6.jsonl`, which mutates the same `add` and
+     * `test/captured/cosmic-ray-8.7.0.jsonl`, which mutates the same `add` and
      * `classify`: 27 mutants there, 13 killed by the two assertions in
      * `test_calc.py` (48%). `shipping`, which no test calls, adds at least 15
      * more surviving mutants of its own (5 comparison-operator mutants on

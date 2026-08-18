@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `b56bfa4385957a69ba6c188096dd29abd4eecf1b` · crank-health 0.9.0 · quick profile
+`<repo>` @ `b56bfa4385957a69ba6c188096dd29abd4eecf1b` · crank-health 0.10.0 · quick profile
 
 ## Grades
 
@@ -31,7 +31,7 @@ Nothing counted toward the grade.
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
-| osv-scanner | not available | [default-config] | — (pinned 2.4.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| osv-scanner | not available | [default-config] | — (pinned 2.5.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
 Evidence: [raw/root/bandit.json](raw/root/bandit.json)
@@ -43,7 +43,7 @@ Evidence: [raw/root/bandit.json](raw/root/bandit.json)
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | pyright | not available | [default-config] | — (pinned 1.1.411) | standing down: this project has no virtualenv, so ty type-checks it |
-| ty | ok | [default-config] | 0.0.66 | — |
+| ty | ok | [default-config] | 0.0.72 | — |
 
 **Findings** (1)
 
@@ -75,7 +75,7 @@ Evidence: [raw/root/vulture.txt](raw/root/vulture.txt)
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| complexipy | ok | [default-config] | 6.2.0 | — |
+| complexipy | ok | [default-config] | 7.0.1 | — |
 
 **Findings** (1)
 
@@ -89,7 +89,7 @@ Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/comp
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.14 | — |
+| jscpd | ok | [default-config] | 5.0.15 | — |
 
 Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
@@ -99,7 +99,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| ruff-lint | ok | [default-config] | 0.16.1 | — |
+| ruff-lint | ok | [default-config] | 0.16.3 | — |
 
 **Findings** (2)
 
@@ -116,7 +116,7 @@ Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| ruff-format | ok | [default-config] | 0.16.1 | — |
+| ruff-format | ok | [default-config] | 0.16.3 | — |
 
 **Findings** (1)
 

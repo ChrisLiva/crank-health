@@ -461,7 +461,7 @@ describe('raw evidence sanitizing', () => {
 
 describe('parseOsvReport', () => {
   it('reads one finding per advisory group from a real lockfile scan', async () => {
-    const vulnerabilities = parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo')
+    const vulnerabilities = parseOsvReport(await readAsJson('osv-scanner-2.5.0.json'), '/repo')
     expect(vulnerabilities.every((entry) => entry.file === 'package-lock.json')).toBe(true)
     expect(vulnerabilities.every((entry) => entry.packageName === 'lodash')).toBe(true)
     expect(vulnerabilities.every((entry) => entry.packageVersion === '4.17.15')).toBe(true)
@@ -498,7 +498,7 @@ describe('parseOsvReport', () => {
    * count — a lodash advisory also lists lodash-es and lodash.trim.
    */
   it('walks the affected ranges for the version each advisory was fixed in', async () => {
-    const vulnerabilities = parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo')
+    const vulnerabilities = parseOsvReport(await readAsJson('osv-scanner-2.5.0.json'), '/repo')
     expect(vulnerabilities.map((entry) => [entry.id, entry.fixedIn] as const)).toEqual([
       // A group is fixed once every id in it is: GHSA-35jh is fixed in 4.17.21
       // and its group-mate GHSA-r5fr not until 4.18.0.
@@ -516,7 +516,7 @@ describe('parseOsvReport', () => {
    */
   it('reports one finding per package, with the advisories nested under it', async () => {
     const findings = toOsvFindings(
-      parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo'),
+      parseOsvReport(await readAsJson('osv-scanner-2.5.0.json'), '/repo'),
       false,
     )
     expect(findings).toHaveLength(1)
@@ -717,7 +717,7 @@ function idAt(findings: readonly Finding[], where: string | number): string | un
 
 describe('parseJscpdReport', () => {
   it('reads clone pairs and the token percentage from a real report', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.0.15.json'), '/repo')
     expect(report.duplicationPercent).toBeCloseTo(47.033_898_305_084_75)
     expect(report.clones).toEqual([
       {
@@ -745,7 +745,7 @@ describe('parseJscpdReport', () => {
    * carries it is the one `byLocation` orders first of the two.
    */
   it('reports a clone pair as one advisory finding anchored on the twin', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.0.15.json'), '/repo')
     const findings = toJscpdFindings(report.clones)
     expect(findings.map((finding) => [finding.file, finding.anchor])).toEqual([
       ['src/handler.js', 'src/report.js'],
@@ -759,7 +759,7 @@ describe('parseJscpdReport', () => {
 
   /** The pair is one finding, so the survivor has to carry the twin's location. */
   it('names the twin’s file and line range in the surviving finding’s message', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.0.15.json'), '/repo')
     const [finding] = toJscpdFindings(report.clones)
     expect(finding?.message).toBe('11 lines (111 tokens) duplicated from src/report.js:1-11')
   })
@@ -770,7 +770,7 @@ describe('parseJscpdReport', () => {
    * upgrade sees one finding resolved, not two findings replaced by one.
    */
   it('keeps a cross-file survivor’s id byte-identical to the id that side carried alone', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.14.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.0.15.json'), '/repo')
     const clone = report.clones.at(0)
     if (clone === undefined) throw new Error('the capture holds no clone')
 

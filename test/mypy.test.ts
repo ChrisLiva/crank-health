@@ -18,7 +18,7 @@ import { makeProject } from './factories.ts'
  * mypy — the type checker a Python repo opts into, and the only one of the three
  * crank-health runs solely on the repo's own say-so.
  *
- * The capture is real `uvx mypy@2.3.0 --output=json` output from two sibling
+ * The capture is real `uvx mypy@2.3.1 --output=json` output from two sibling
  * throwaway projects, concatenated: three lines from a run that exited **1**
  * (found type errors, one of them with `column: -1`) and one line from a run
  * that exited **2** (could not even start — two modules named `util`), whose
@@ -26,7 +26,7 @@ import { makeProject } from './factories.ts'
  * relative paths, so no machine path is recorded here.
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/mypy-2.3.0.jsonl', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/mypy-2.3.1.jsonl', import.meta.url))
 
 const captured = (): Promise<string> => readFile(CAPTURED, 'utf8')
 
@@ -89,7 +89,7 @@ describe('parseMypyJsonl', () => {
 })
 
 /**
- * A hand-built line, because the capture cannot contain one: mypy 2.3.0 asserts
+ * A hand-built line, because the capture cannot contain one: mypy 2.3.1 asserts
  * its own severity is `error` or `note` and emits nothing else. The row is
  * forward compatibility — a future `warning` must not silently grade as an
  * error — and the fallback is the safe direction for a severity we do not know.

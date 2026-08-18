@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `<sha>` · crank-health 0.9.0 · quick profile · PR vs `main` (merge-base `<short>`)
+`<repo>` @ `<sha>` · crank-health 0.10.0 · quick profile · PR vs `main` (merge-base `<short>`)
 
 ## Grades
 
@@ -39,10 +39,10 @@ Against `main`, merge-base `<short>`. 1 new finding (1 on lines this change touc
 
 | Tool | Scan | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- | --- |
-| oxlint | base | ok | [default-config] | 1.77.0 | — |
-| oxlint | head | ok | [default-config] | 1.77.0 | — |
-| react-doctor | base | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
-| react-doctor | head | not available | [default-config] | — (pinned 0.9.5) | no React dependency detected |
+| oxlint | base | ok | [default-config] | 1.78.0 | — |
+| oxlint | head | ok | [default-config] | 1.78.0 | — |
+| react-doctor | base | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
+| react-doctor | head | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
 
 **Findings** (2)
 

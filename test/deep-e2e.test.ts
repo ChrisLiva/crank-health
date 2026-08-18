@@ -70,7 +70,7 @@ describe.runIf(ENABLED)('--deep on a repo with a weak test suite', () => {
     expect((metrics?.mutantsDetected ?? 0) + (metrics?.mutantsUndetected ?? 0)).toBeGreaterThan(20)
     /*
      * The fixture's counts, hand-checked against the captured run in
-     * `test/captured/stryker-9.6.1.json`: Stryker generates 25 mutants in
+     * `test/captured/stryker-10.0.0.json`: Stryker generates 25 mutants in
      * `src/calc.js`, of which the two assertions in `test/calc.test.js` kill 7
      * (28%), and every mutant in `src/extra.js` — which no test imports —
      * survives, so the score can only fall from there. spec §3's band table
@@ -97,10 +97,10 @@ describe.runIf(ENABLED)('--deep on a repo with a weak test suite', () => {
       execution: 'repo-installed',
       provenance: 'repo-config',
       state: 'ok',
-      version: '9.6.1',
+      version: '10.0.0',
       detection: { reason: 'config+dependency', configFiles: ['stryker.config.json'] },
     })
-    expect(stryker?.raw).toContain('raw/stryker-mutation-report.json')
+    expect(stryker?.raw).toContain('raw/root/stryker-mutation-report.json')
   })
 
   it('says the score in the terminal summary and in report.md', () => {

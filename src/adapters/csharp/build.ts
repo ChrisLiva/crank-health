@@ -215,7 +215,7 @@ export function isUnresolvedPin(output: string): boolean {
 
 /**
  * How the CA1502 records carry what the parser needs (decided by the
- * 10.0.302 capture): the SARIF has no `logicalLocations`, so the method
+ * 10.0.400 capture): the SARIF has no `logicalLocations`, so the method
  * identity and the cyclomatic number both come from the message text —
  * `'Classify' has a cyclomatic complexity of '17'. …`. A record whose message
  * does not match is a parse throw, never a zero: a silently unparsed metric

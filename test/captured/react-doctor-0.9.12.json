@@ -2,17 +2,17 @@
   "schemaVersion": 3,
   "mode": "full",
   "reactDetected": true,
-  "version": "0.9.5",
+  "version": "0.9.12",
   "ok": true,
-  "directory": "/Users/chris/crank-analysis/.claude/worktrees/react-doctor-check/test/fixtures/js-react",
+  "directory": "/Users/chris/crank-analysis/test/fixtures/js-react",
   "diff": null,
   "projects": [
     {
-      "directory": "/Users/chris/crank-analysis/.claude/worktrees/react-doctor-check/test/fixtures/js-react",
-      "packageRoot": "/Users/chris/crank-analysis/.claude/worktrees/react-doctor-check/test/fixtures/js-react",
+      "directory": "/Users/chris/crank-analysis/test/fixtures/js-react",
+      "packageRoot": "/Users/chris/crank-analysis/test/fixtures/js-react",
       "framework": "unknown",
       "project": {
-        "rootDirectory": "/Users/chris/crank-analysis/.claude/worktrees/react-doctor-check/test/fixtures/js-react",
+        "rootDirectory": "/Users/chris/crank-analysis/test/fixtures/js-react",
         "projectName": "js-react-fixture",
         "reactVersion": "^19.0.0",
         "reactMajorVersion": 19,
@@ -136,7 +136,7 @@
       "analyzedFileCount": 3,
       "complete": true,
       "scannedFileCount": 3,
-      "elapsedMilliseconds": 24090.511291
+      "elapsedMilliseconds": 17004.15025
     }
   ],
   "diagnostics": [
@@ -208,6 +208,6 @@
     "score": null,
     "scoreLabel": null
   },
-  "elapsedMilliseconds": 24099.17875,
+  "elapsedMilliseconds": 17010.07125,
   "error": null
 }

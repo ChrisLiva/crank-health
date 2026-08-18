@@ -17,9 +17,9 @@ import { COMPLEXITY_CEILING } from '../src/core/grade.ts'
  * Both captures are real output against `test/fixtures/py-basic`, with the repo
  * root rewritten to `/repo`.
  */
-const JSON_REPORT = fileURLToPath(new URL('./captured/complexipy-6.2.0.json', import.meta.url))
+const JSON_REPORT = fileURLToPath(new URL('./captured/complexipy-7.0.1.json', import.meta.url))
 const SARIF_REPORT = fileURLToPath(
-  new URL('./captured/complexipy-6.2.0.sarif.json', import.meta.url),
+  new URL('./captured/complexipy-7.0.1.sarif.json', import.meta.url),
 )
 
 describe('parseComplexipyJson', () => {
