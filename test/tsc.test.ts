@@ -228,7 +228,7 @@ describe('tsc detection', () => {
     const files = ['package.json', 'tsconfig.json', 'packages/a/package.json', 'packages/a/a.ts']
     const inventory = {
       all: files,
-      byLanguage: { 'js-ts': ['packages/a/a.ts'], python: [], csharp: [] },
+      byLanguage: { 'js-ts': ['packages/a/a.ts'], python: [], csharp: [], go: [] },
     }
     const project = partitionProjects(inventory).find(({ path }) => path === 'packages/a')
     if (project === undefined) throw new Error('no project at packages/a')
@@ -332,6 +332,11 @@ describe('a tsconfig.json that type-checks nothing', () => {
 function context(repoRoot: string, files: string[]): DetectContext {
   return repoDetectContext(repoRoot, {
     all: files,
-    byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.ts')), python: [], csharp: [] },
+    byLanguage: {
+      'js-ts': files.filter((file) => file.endsWith('.ts')),
+      python: [],
+      csharp: [],
+      go: [],
+    },
   })
 }

@@ -227,6 +227,7 @@ describe('reactDoctorRunner.detect', () => {
         'js-ts': files.filter((file) => file.endsWith('.jsx')),
         python: [],
         csharp: [],
+        go: [],
       },
     }
     const project = partitionProjects(inventory).find((candidate) => candidate.path === path)
@@ -491,7 +492,7 @@ describe('reactDoctorRunner.run against a planted react-doctor', () => {
 
     const inventory = {
       all: ['package.json', 'packages/a/package.json', ...files],
-      byLanguage: { 'js-ts': files, python: [], csharp: [] },
+      byLanguage: { 'js-ts': files, python: [], csharp: [], go: [] },
     }
     const project = partitionProjects(inventory).find(
       (candidate) => candidate.path === 'packages/a',

@@ -155,6 +155,36 @@ describe('discoverFiles and C# build output', () => {
   })
 })
 
+describe('discoverFiles and Go vendoring', () => {
+  it('drops .go files under vendor/, keeping everything else there', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-go-'))
+    try {
+      await git(repo, 'init', '--quiet')
+      await plant(repo, 'go.mod', 'module example.com/svc\n')
+      await plant(repo, 'a.go', 'package main\n')
+      await plant(repo, 'vendor/dep/b.go', 'package dep\n')
+      await plant(repo, 'vendor/modules.txt', '# example.com/dep v1.0.0\n')
+      await plant(repo, 'vendor/dep/go.mod', 'module example.com/dep\n')
+      // The rule is a path segment, not a substring: this is ordinary source.
+      await plant(repo, 'vendored/dep/c.go', 'package dep\n')
+
+      const inventory = (await discoverFiles(repo)).files
+
+      expect(inventory.all).not.toContain('vendor/dep/b.go')
+      expect(inventory.all).toContain('a.go')
+      expect(inventory.all).toContain('vendor/modules.txt')
+      expect(inventory.all).toContain('vendor/dep/go.mod')
+      expect(inventory.all).toContain('vendored/dep/c.go')
+
+      // The vendored module's own go.mod keeps no source, so it is a shell.
+      const projects = partitionProjects(inventory)
+      expect(projects.some((project) => project.path === 'vendor/dep')).toBe(false)
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('discoverFiles and hidden directories', () => {
   let repo: string
   let inventory: FileInventory
@@ -347,6 +377,8 @@ describe('languageOf', () => {
     ['a.pyi', 'python'],
     ['a.cs', 'csharp'],
     ['A.CS', 'csharp'],
+    ['a.go', 'go'],
+    ['A.GO', 'go'],
   ])('classifies %s as %s', (file, language) => {
     expect(languageOf(file)).toBe(language)
   })
@@ -488,6 +520,22 @@ describe('partitionProjects', () => {
     expect(paths(projects)).toEqual(['src'])
     expect(projectAt(projects, 'src').manifests).toEqual(['src/App.CSPROJ'])
     expect(projectAt(projects, 'src').languages).toEqual(['csharp'])
+  })
+
+  it('makes a project of a directory holding a go.mod, and gives it the .go files below', () => {
+    const projects = partitionProjects(inventoryOf(['svc/go.mod', 'svc/a.go', 'svc/inner/b.go']))
+
+    expect(paths(projects)).toEqual(['svc'])
+    expect(projectAt(projects, 'svc').manifests).toEqual(['svc/go.mod'])
+    expect(projectAt(projects, 'svc').languages).toEqual(['go'])
+    expect(projectAt(projects, 'svc').files.byLanguage.go).toEqual(['svc/a.go', 'svc/inner/b.go'])
+  })
+
+  it('treats a go.mod with no .go file of its own as a workspace shell, not a project', () => {
+    const projects = partitionProjects(inventoryOf(['api/go.mod', 'api/README.md']))
+
+    expect(paths(projects)).toEqual(['.'])
+    expect(projects.some((project) => project.path === 'api')).toBe(false)
   })
 
   it('keeps the known manifest names case-sensitive', () => {

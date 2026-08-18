@@ -131,7 +131,12 @@ describe('detectNodeTool across a workspace', () => {
   function context(files: string[], path: string): DetectContext {
     const inventory = {
       all: files,
-      byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.ts')), python: [], csharp: [] },
+      byLanguage: {
+        'js-ts': files.filter((file) => file.endsWith('.ts')),
+        python: [],
+        csharp: [],
+        go: [],
+      },
     }
     const project = partitionProjects(inventory).find((candidate) => candidate.path === path)
     if (project === undefined) throw new Error(`no project at ${path}`)

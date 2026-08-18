@@ -502,9 +502,11 @@ export const govulncheckRunner: ToolRunner = {
   // Reachability is nobody else's job, and osv-scanner must never stand this
   // down or be stood down by it; see `ToolRunner.complementary`.
   complementary: true,
-  // Go modules are found by walking the repo, and a repo's modules do not line
-  // up with its `package.json`/`pyproject.toml` projects at all — so this is
-  // asked once, and it visits every go.mod it finds.
+  // "Is anything this repo depends on reachable-vulnerable?" is a question
+  // about the repo, not about one module of it: a caller in one module reaches
+  // a vulnerable symbol pulled in by another, and per-project answers would
+  // report that twice or not at all. So this is asked once, walking the repo,
+  // and it visits every go.mod it finds.
   repoScoped: true,
   timeoutMs: GOVULNCHECK_TIMEOUT_MS,
   detect: detectGovulncheck,

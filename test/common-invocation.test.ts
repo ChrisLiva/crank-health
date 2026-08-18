@@ -174,6 +174,76 @@ describe('jscpd’s ignore list, against the real tool', () => {
   )
 })
 
+/** Near-identical enough to clone: the same type and methods under two names. */
+const goSource = (typeName: string) => `package svc
+
+import "fmt"
+
+type ${typeName} struct {
+	Name  string
+	Count int
+}
+
+func (a *${typeName}) Describe() string {
+	if a.Count == 0 {
+		return fmt.Sprintf("%s is empty", a.Name)
+	}
+	if a.Count == 1 {
+		return fmt.Sprintf("%s has one item", a.Name)
+	}
+	return fmt.Sprintf("%s has %d items", a.Name, a.Count)
+}
+
+func (a *${typeName}) Add(n int) error {
+	if n < 0 {
+		return fmt.Errorf("negative delta %d", n)
+	}
+	a.Count += n
+	return nil
+}
+`
+
+/**
+ * `vendor/` is Go's copied module graph, and jscpd walks the tree itself rather
+ * than taking discovery's inventory — so the glob is language-blind here, the
+ * same trade `bin/` and `obj/` record. These two pin the halves separately:
+ * the list says `vendor/`, and the real tool both tokenizes Go and obeys it.
+ */
+describe('jscpd and Go', () => {
+  it('anchors a vendor/ rule onto the tree being measured', () => {
+    expect(jscpdIgnore(REPO)).toContain('/repo/**/vendor/**')
+  })
+
+  it('measures duplicated Go under src/ and never the copy under vendor/', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-go-'))
+    try {
+      const root = join(base, 'repo')
+      const scratch = join(base, 'scratch')
+      await mkdir(scratch, { recursive: true })
+      await Promise.all(
+        ['src', join('vendor', 'dep')].map(async (directory) => {
+          await mkdir(join(root, directory), { recursive: true })
+          await Promise.all([
+            writeFile(join(root, directory, 'a.go'), goSource('Alpha'), 'utf8'),
+            writeFile(join(root, directory, 'b.go'), goSource('Beta'), 'utf8'),
+          ])
+        }),
+      )
+
+      const { percentage, files } = await measureDuplication(root, scratch)
+
+      // jscpd tokenized Go at all: the src/ pair is a clone, in the ratio…
+      expect(files).toContain(join(root, 'src', 'a.go'))
+      expect(files).toContain(join(root, 'src', 'b.go'))
+      expect(percentage).toBeGreaterThan(0)
+      // …and its vendored copy is in neither the clones nor the ratio.
+      expect(files.filter((file) => file.includes(`${join(root, 'vendor')}/`))).toEqual([])
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
+  }, 120_000)
+})
+
 describe('zero footprint, in the arguments', () => {
   it('writes gitleaks’ report into the scratch dir, redacted', () => {
     const args = gitleaksArgs(REPO, join(SCRATCH, 'gitleaks.json'))
@@ -334,7 +404,7 @@ describe('jscpd on a tree it can measure nothing in', () => {
   const SCAN_TIMEOUT_MS = 180_000
 
   it(
-    'names all four languages when there is nothing to measure',
+    'names every language it tokenizes when there is nothing to measure',
     async () => {
       const runs = jscpdRuns(await scanTemp({ 'README.md': '# nothing to measure\n' }))
 
@@ -342,7 +412,7 @@ describe('jscpd on a tree it can measure nothing in', () => {
       for (const run of runs) {
         expect(run.state).toBe('not-available')
         expect(run.reason).toBe(
-          'no JavaScript, TypeScript, Python or C# files, so jscpd measured nothing',
+          'no JavaScript, TypeScript, Python, C# or Go files, so jscpd measured nothing',
         )
       }
     },

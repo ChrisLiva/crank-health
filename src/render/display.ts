@@ -29,12 +29,13 @@ export const CATEGORY_LABELS: Readonly<Record<Category, string>> = {
 
 /**
  * Human labels for the wire-format language ids. An exhaustive `Record`, so a
- * fourth language cannot ship without deciding what to call it.
+ * new language cannot ship without deciding what to call it.
  */
 export const LANGUAGE_LABELS: Readonly<Record<Language, string>> = {
   'js-ts': 'JS/TS',
   python: 'Python',
   csharp: 'C#',
+  go: 'Go',
 }
 
 /** The marker on a finding that was reported but did not move a grade (spec §1). */

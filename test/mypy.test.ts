@@ -203,6 +203,7 @@ describe('mypyRunner.detect', () => {
           'js-ts': [],
           python: files.filter((file) => file.endsWith('.py')),
           csharp: [],
+          go: [],
         },
       }),
     )
