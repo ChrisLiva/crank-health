@@ -311,6 +311,109 @@ describe('a change whose findings are not on the lines it touched', () => {
 })
 
 /**
+ * Two categories answering for one place, in the mode where the report's own
+ * record of that is easiest to lose: the delta is computed from the scans'
+ * findings, and `related` is added when the report is assembled — so a delta
+ * built from the raw scan carries no links at all, and every rule that reads
+ * them (`agent.md`'s advisory eligibility) is dead on a PR.
+ */
+describe('a change whose new findings answer for one place from two categories', () => {
+  let repo: HistoryRepo
+  let result: HealthScanResult
+
+  beforeAll(async () => {
+    repo = await createHistoryRepo({
+      base: { 'src/a.js': CLEAN },
+      head: [{ write: 'src/new.js', content: CLEAN }],
+    })
+    result = await runPrScan({
+      path: repo.root,
+      base: 'main',
+      only: ['lint', 'complexity'],
+      adapters: [twoCategoryAdapter],
+    })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await repo.remove()
+  })
+
+  it('links the two new findings to each other in the delta', () => {
+    expect(
+      (result.report.delta?.newFindings ?? []).map((finding) => [finding.rule, finding.related]),
+    ).toEqual([
+      ['fallow/complexity', ['pr-lint-row']],
+      ['no-unused-vars', ['pr-complexity-row']],
+    ])
+  })
+
+  /** And the link is what puts the advisory row in the list; see `agent-md.ts`. */
+  it('makes the advisory row work, because a graded one answers for the same place', () => {
+    expect(result.agentMarkdown).toContain('fallow/complexity')
+  })
+})
+
+/**
+ * A graded lint finding and an advisory complexity one at the same place, in a
+ * file only head has. Reported by stubs, so the case is about the wiring rather
+ * than about what a linter thinks of the fixture.
+ */
+const twoCategoryAdapter: LanguageAdapter = {
+  language: 'js-ts',
+  detect: () => Promise.resolve(true),
+  runners: [
+    prRunner('oxlint', 'lint', {
+      id: 'pr-lint-row',
+      rule: 'no-unused-vars',
+      gradeScope: true,
+    }),
+    prRunner('fallow-health', 'complexity', {
+      id: 'pr-complexity-row',
+      rule: 'fallow/complexity',
+      gradeScope: false,
+    }),
+  ],
+}
+
+/** One stub runner, reporting its finding only where head's file exists. */
+function prRunner(
+  tool: string,
+  category: 'lint' | 'complexity',
+  row: { id: string; rule: string; gradeScope: boolean },
+): ToolRunner {
+  return {
+    tool,
+    category,
+    pinnedVersion: '1.0.0',
+    detect: () => Promise.resolve(null),
+    run: (ctx) =>
+      Promise.resolve({
+        state: 'ok',
+        findings: ctx.files.includes(PR_LINKED_FILE)
+          ? [
+              {
+                id: row.id,
+                category,
+                tool,
+                rule: row.rule,
+                severity: 'warning',
+                file: PR_LINKED_FILE,
+                range: { startLine: 1, startCol: 1, endLine: 3, endCol: 1 },
+                message: `${row.rule} in ${PR_LINKED_FILE}`,
+                provenance: 'default-config',
+                gradeScope: row.gradeScope,
+              },
+            ]
+          : [],
+        rawFiles: [],
+      }),
+  }
+}
+
+/** The file only head has, so both stub findings are new in the delta. */
+const PR_LINKED_FILE = 'src/new.js'
+
+/**
  * Spec §7's zero footprint, in the mode that is hardest to keep it in: PR mode
  * registers a worktree inside the target repo's `.git`, and a crash between
  * `worktree add` and `worktree remove` would leave it there.

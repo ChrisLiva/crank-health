@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { forgetBuilds } from './adapters/csharp/build.ts'
 import type { DeltaProject } from './core/delta.ts'
 import { computeDelta } from './core/delta.ts'
+import { linkRelated } from './core/fingerprint.ts'
 import {
   addWorktree,
   headCommit,
@@ -124,9 +125,18 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
       changedFiles: diff.changedFiles,
     })
 
+    // Linked before the delta rather than only inside `buildReport`: `related`
+    // is what tells a reader — and `agent.md`'s advisory rule — that two
+    // categories answer for one place, and a delta computed from the raw scans
+    // carried none of it, so every PR row said `related: undefined` however many
+    // findings met on a line. `linkRelated` derives the links from scratch, so
+    // the report's own second pass over head's findings is the same answer.
+    const baseFindings = linkRelated(baseScan.scan.findings)
+    const headFindings = linkRelated(headScan.scan.findings)
+
     const delta = computeDelta({
-      baseFindings: baseScan.scan.findings,
-      headFindings: headScan.scan.findings,
+      baseFindings,
+      headFindings,
       renames: diff.renames,
       touchedLines: diff.touchedLines,
       baseCategories: headOnlyDeepNote(baseScan.categories, options.deep === true),
@@ -155,7 +165,7 @@ export async function runPrScan(options: PrScanOptions): Promise<HealthScanResul
         // Both scans' tool records, so a reader can see what ran on each side —
         // and, when a base tool failed, why a "resolved" count is not a promise.
         runs: [...baseRuns, ...(await adoptRawFiles(out, headScan.scan, 'head'))],
-        findings: headScan.scan.findings,
+        findings: headFindings,
         // Each side's own scope and its own tools, in one list. The head side
         // speaks for the report, so it is bare; the base side is marked, or a
         // reader cannot tell which of the two trees a note is about.
