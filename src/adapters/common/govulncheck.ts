@@ -540,9 +540,28 @@ function detectGovulncheck(ctx: DetectContext): Promise<Detection | null> {
  * rewrite files in the module, and none of them is on this command line. The
  * pin is exact — a bare import path would mean `@latest` and break determinism
  * (spec §6). `./...` is every package in the module at `cwd`.
+ *
+ * `db`, when given, becomes `-db <db>`: the vulnerability database to read
+ * instead of the public one. The public database gains advisories continuously,
+ * so a suite that reads it grades the same commit differently in a month; a
+ * pinned snapshot is what makes this runner's answer a property of the repo
+ * (spec §6, the same reason every other tool version is pinned exactly). A
+ * blank or absent value adds nothing rather than a malformed flag — the default
+ * command line, byte for byte.
+ *
+ * Reading the environment is the caller's job, not this function's: it stays
+ * pure so the test above can assert the whole command line without a process to
+ * set up.
  */
-export function invocationArgs(): string[] {
-  return ['run', pinnedGoSpec(GOVULNCHECK_PACKAGE), '-json', './...']
+export function invocationArgs(db: string | undefined): string[] {
+  const named = db?.trim()
+  return [
+    'run',
+    pinnedGoSpec(GOVULNCHECK_PACKAGE),
+    '-json',
+    ...(named === undefined || named === '' ? [] : ['-db', named]),
+    './...',
+  ]
 }
 
 /**
@@ -595,12 +614,17 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
   const rawFiles: string[] = []
   const pending: (PendingFinding & { readonly anchor: string })[] = []
   const failures: ToolFailure[] = []
+  // Read once, here rather than inside {@link invocationArgs}, so that builder
+  // stays a pure function of its argument. Unset means the public database,
+  // which is what a user scanning their own repo wants; the suite sets it to a
+  // checked-in snapshot so a new advisory cannot move a golden.
+  const database = process.env['CRANK_GOVULNCHECK_DB']
 
   for (const goMod of modules) {
     // Sequential: each module is a full package-graph load, and the scan's own
     // concurrency pool is what parallelizes work across tools.
     // eslint-disable-next-line no-await-in-loop
-    const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), {
+    const execution = await execTool(systemCommand(GO_BINARY, invocationArgs(database)), {
       cwd: join(ctx.repoRoot, dirname(goMod)),
       timeoutMs: ctx.timeoutMs,
       env: goEnv(),

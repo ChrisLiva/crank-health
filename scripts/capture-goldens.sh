@@ -64,6 +64,14 @@ done
 
 export PATH="$farm:$system_path"
 
+# The vulnerability database govulncheck reads, pinned to the checked-in
+# snapshot for the same reason every tool version is pinned: the public database
+# gains advisories continuously, so a capture that read it would bake the day it
+# ran into the goldens. `vitest.config.ts` defaults this to the same value, so a
+# plain `npm test` and a capture agree on what was read — it is exported here so
+# that agreement is visible at the capture, not inferred from a config file.
+export CRANK_GOVULNCHECK_DB="file://$repo_root/test/support/vulndb"
+
 # The retiring check for this whole script: if any of them resolves here, every
 # golden captured would record a toolchain the checked-in ones do not have, and
 # the suite would be red on every machine that does not have that one too.
