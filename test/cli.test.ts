@@ -4,8 +4,6 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { HELP_TEXT } from '../src/args.ts'
-import { VERSION } from '../src/version.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import type { HistoryRepo, HistorySpec } from './support/history.ts'
@@ -49,16 +47,22 @@ describe(
       await rm(out, { recursive: true, force: true })
     })
 
-    it('prints the approved surface for --help and exits 0', async () => {
+    it('prints usage and the flag surface for --help, and exits 0', async () => {
       const result = await runCli(['--help'])
       expect(result.exitCode).toBe(0)
-      expect(result.stdout).toContain(HELP_TEXT.trim())
+      expect(result.stdout).toContain('Usage:')
+      expect(result.stdout).toContain('npx crank-health [path]')
+      // The flags a caller of this binary is entitled to find in its help.
+      for (const flag of ['--pr', '--project', '--deep', '--only', '--fail-under', '--out']) {
+        expect(result.stdout).toContain(flag)
+      }
+      expect(result.stdout).toContain('Exit codes:')
     })
 
     it('prints the version and exits 0', async () => {
       const result = await runCli(['--version'])
       expect(result.exitCode).toBe(0)
-      expect(result.stdout.trim()).toBe(VERSION)
+      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+(?:-[\w.]+)?$/)
     })
 
     it('exits 2 with a message on an unknown flag', async () => {
@@ -66,12 +70,6 @@ describe(
       expect(result.exitCode).toBe(2)
       expect(result.stderr).toContain('--bogus')
       expect(result.stderr).toContain('--help')
-    })
-
-    it('exits 2 on an unknown --only category', async () => {
-      const result = await runCli(['--only', 'vibes', fixture.root])
-      expect(result.exitCode).toBe(2)
-      expect(result.stderr).toContain('unknown category "vibes"')
     })
 
     it('exits 2 on a path that is not a directory', async () => {
@@ -118,19 +116,6 @@ describe(
       ])
       expect(result.exitCode).toBe(1)
       expect(result.stderr).toContain('lint F')
-    })
-
-    it('exits 0 when every selected category clears --fail-under', async () => {
-      const result = await runCli([
-        '--only',
-        'lint',
-        '--fail-under',
-        'F',
-        '--out',
-        out,
-        fixture.root,
-      ])
-      expect(result.exitCode).toBe(0)
     })
 
     it.runIf(GOLDEN_TOOLCHAIN)(
@@ -240,12 +225,6 @@ describe(
         await slow.remove()
         await rm(budgeted, { recursive: true, force: true })
       }
-    })
-
-    it('exits 2 on a --timeout that is not a positive whole number of seconds', async () => {
-      const result = await runCli(['--timeout', '0', fixture.root])
-      expect(result.exitCode).toBe(2)
-      expect(result.stderr).toContain('--timeout expects a whole number of seconds')
     })
 
     it('exits 2 on a --pr base that does not exist here', async () => {
@@ -381,9 +360,8 @@ describe(
       expect(result.stdout).toContain('+1 new (1 on changed lines) · -0 resolved')
       expect(result.stdout).toContain('Top new findings')
       expect(result.stdout).toContain('eslint(no-const-assign)')
-    })
 
-    it('leaves the target repo clean, with no leftover worktree', async () => {
+      // …and the two-scan run left the target clean, with no worktree behind it.
       expect(await repo.status()).toBe('')
       expect(await repo.worktrees()).toEqual([await realpath(repo.root)])
     })

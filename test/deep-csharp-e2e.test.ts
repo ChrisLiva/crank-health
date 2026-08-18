@@ -55,9 +55,21 @@ describe.runIf(ENABLED)('--deep on cs-basic: the compiled trio lights up', () =>
   })
 
   it('grades types, complexity and lint from one dotnet build', () => {
-    for (const category of COMPILED) {
+    // cs-basic compiles: every `CS…` diagnostic it produces is a warning, and
+    // the types band counts critical/error severities only, so the numerator is
+    // empty and the letter is A whatever the KLOC denominator works out to.
+    expect(deep.report.categories['types']).toEqual({ status: 'graded', grade: 'A' })
+    // Complexity and lint come off the same build. Their letters divide the
+    // planted findings by denominators this fixture is too small to place
+    // safely by hand — 1 CA1823 over 0.19 KLOC sits on the B/C edge (5.0), and
+    // 1 over-ceiling method sits on the C/D edge of the function census — so
+    // what is pinned here is that each is graded, and graded off this build.
+    for (const category of ['complexity', 'lint'] as const) {
       expect(deep.report.categories[category]?.status).toBe('graded')
     }
+    const lint = deep.report.findings.filter((finding) => finding.category === 'lint')
+    expect(lint.every((finding) => finding.tool === 'dotnet-build')).toBe(true)
+    expect(lint.map((finding) => finding.rule)).toContain('CA1823')
   })
 
   /** The dormant complexity plant: `Classify` in complex.cs is over the ceiling. */
@@ -149,19 +161,11 @@ describe.runIf(ENABLED)('--deep on cs-multi-target: per-TFM copies collapse', ()
   })
 
   /** Criterion 15 live: net8.0 and net10.0 each report it, the report says it once. */
-  it('reports each planted diagnostic exactly once across the TFMs', () => {
+  it('reports each planted diagnostic exactly once across the TFMs', async () => {
     for (const rule of ['CS0219', 'CS0414', 'CA1823']) {
       expect(deep.report.findings.filter((finding) => finding.rule === rule)).toHaveLength(1)
     }
-  })
-
-  it('grades all three compiled categories from the merged log', () => {
-    for (const category of COMPILED) {
-      expect(deep.report.categories[category]?.status).toBe('graded')
-    }
-  })
-
-  it('leaves the target untouched', async () => {
+    // …and building every TFM left the target byte-identical (criterion 21).
     expect(await fixture.status()).toBe('')
   })
 })
@@ -184,20 +188,18 @@ describe.runIf(ENABLED)('--deep on cs-ca1502-suppressed: the repo wins the confi
   })
 
   /** Criterion 17: a missing census reads as the repo's own suppression, honestly. */
-  it('reports complexity not-assessed, naming the suppression', () => {
+  it('reports complexity not-assessed, naming the suppression', async () => {
     expect(deep.report.categories['complexity']).toEqual({
       status: 'not-assessed',
       reason: CA1502_SUPPRESSED_REASON,
     })
+    // …and the build that read the repo's own config left the target untouched.
+    expect(await fixture.status()).toBe('')
   })
 
   it('still grades types and lint from the same build', () => {
     expect(deep.report.categories['types']?.status).toBe('graded')
     expect(deep.report.categories['lint']?.status).toBe('graded')
-  })
-
-  it('leaves the target untouched', async () => {
-    expect(await fixture.status()).toBe('')
   })
 })
 
@@ -219,13 +221,11 @@ describe.runIf(ENABLED)('--deep on cs-custom-targets: the injection coexists', (
   })
 
   /** Criterion 22: a repo already using the hook still builds and still grades. */
-  it('completes with no errored build record', () => {
+  it('completes with no errored build record', async () => {
     const records = report(deep).tools.filter((tool) => tool.tool === 'dotnet-build')
     expect(records).toHaveLength(3)
     for (const record of records) expect(record.state).toBe('ok')
-  })
-
-  it('leaves the target untouched', async () => {
+    // …and coexisting with the repo's own targets left the target untouched.
     expect(await fixture.status()).toBe('')
   })
 })

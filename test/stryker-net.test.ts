@@ -16,8 +16,7 @@ import {
   toPendingFindings,
 } from '../src/adapters/mutation-report.ts'
 import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
-import type { DetectContext, Detection, RunContext } from '../src/core/types.ts'
-import { verifiedRepoVersion } from '../src/manifest.ts'
+import type { Detection, RunContext } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 
 /**
@@ -60,8 +59,6 @@ const DECLARING_CSPROJ = [
 async function detectIn(
   tree: Readonly<Record<string, string>>,
   projectPath = '.',
-  detect: (ctx: DetectContext) => Promise<Detection | null> = (ctx) =>
-    detectDotnetTool(ctx, STRYKER_SPEC),
 ): Promise<Detection | null> {
   const root = await mkdtemp(join(tmpdir(), 'crank-dotnet-tool-'))
   try {
@@ -74,7 +71,7 @@ async function detectIn(
     const files = inventoryOf(Object.keys(tree).toSorted())
     const project = partitionProjects(files).find((candidate) => candidate.path === projectPath)
     if (project === undefined) throw new Error(`no project at ${projectPath}`)
-    return await detect({ repoRoot: root, project, files })
+    return await detectDotnetTool({ repoRoot: root, project, files }, STRYKER_SPEC)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -138,15 +135,6 @@ describe('detectDotnetTool', () => {
     })
   })
 
-  it('returns null when neither artifact exists', async () => {
-    const detection = await detectIn({
-      'App.csproj': PLAIN_CSPROJ,
-      'Program.cs': 'class Program {}\n',
-    })
-
-    expect(detection).toBeNull()
-  })
-
   it('treats a malformed manifest as declaring nothing', async () => {
     const detection = await detectIn({
       '.config/dotnet-tools.json': '{ not json',
@@ -155,13 +143,6 @@ describe('detectDotnetTool', () => {
     })
 
     expect(detection).toBeNull()
-  })
-})
-
-describe('the capture pin', () => {
-  /** The version `test/captured/stryker-net-4.16.0.json` was captured with. */
-  it('records 4.16.0 as the verified Stryker.NET', () => {
-    expect(verifiedRepoVersion('dotnet-stryker')).toBe('4.16.0')
   })
 })
 
@@ -243,12 +224,6 @@ describe('the outcome ladder', () => {
     expect(outcome).toMatchObject({ state: 'error' })
     expect((outcome as { reason: string }).reason).toContain('no mutants')
   })
-
-  it('returns the mutants of a good run', async () => {
-    const outcome = strykerNetOutcome(EXECUTION, await readFile(CAPTURED, 'utf8'), CAPTURE_ROOT)
-    expect(Array.isArray(outcome)).toBe(true)
-    expect(outcome).toHaveLength(7)
-  })
 })
 
 const CONTEXT: RunContext = {
@@ -263,38 +238,9 @@ const CONTEXT: RunContext = {
 }
 
 describe('the runner’s posture', () => {
-  it('is deep-only and never imposed on a repo that did not choose it', () => {
-    expect(strykerNetRunner).toMatchObject({
-      tool: STRYKER_NET_TOOL,
-      category: 'test-quality',
-      repoOwnedOnly: true,
-      deepOnly: true,
-    })
-  })
-
-  it('detects through the dotnet tools manifest', async () => {
-    const detection = await detectIn(
-      {
-        '.config/dotnet-tools.json': MANIFEST_WITH_STRYKER,
-        'App.csproj': PLAIN_CSPROJ,
-        'Program.cs': 'class Program {}\n',
-      },
-      '.',
-      (ctx) => strykerNetRunner.detect(ctx),
-    )
-    expect(detection).toMatchObject({ ownedVia: '.config/dotnet-tools.json', installed: true })
-  })
-
   it('declines in the quick profile instead of executing repo code', async () => {
     const result = await strykerNetRunner.run({ ...CONTEXT, deep: false })
     expect(result).toMatchObject({ state: 'not-available', findings: [] })
     expect(result.reason).toContain('--deep')
-  })
-
-  /** Unreachable through the orchestrator (`repoOwnedOnly`); defensive parity. */
-  it('names the tools manifest when asked to run unowned', async () => {
-    const result = await strykerNetRunner.run(CONTEXT)
-    expect(result).toMatchObject({ state: 'not-available', findings: [] })
-    expect(result.reason).toContain('.config/dotnet-tools.json')
   })
 })

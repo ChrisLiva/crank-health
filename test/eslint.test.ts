@@ -43,10 +43,7 @@ describe('parseEslintJson', () => {
         endColumn: 14,
       },
     ])
-  })
-
-  it('keeps a clean file as a result with no messages, not as an absence', async () => {
-    const results = parseEslintJson(await readFile(CAPTURED, 'utf8'))
+    // A clean file is a result with no messages, not an absence.
     expect(results[0]?.messages).toEqual([])
   })
 
@@ -146,10 +143,6 @@ describe('eslint detection', () => {
 
   afterEach(async () => {
     await rm(repo, { recursive: true, force: true })
-  })
-
-  it('only ever runs when the repo owns it — there is no default ESLint', () => {
-    expect(eslintRunner.repoOwnedOnly).toBe(true)
   })
 
   it('is not repo-owned without a config artifact or a declared dependency', async () => {

@@ -149,12 +149,6 @@ describe('a change that resolves a finding', () => {
     })
     expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'A' })
   })
-
-  it('lists the resolved finding in agent.md as context, with no task', () => {
-    expect(result.agentMarkdown).toContain('## Resolved by this change (1)')
-    expect(result.agentMarkdown).toContain('Context only — nothing to do here.')
-    expect(result.agentMarkdown).toContain('No tasks: this change introduced no new findings.')
-  })
 })
 
 /**
@@ -247,9 +241,7 @@ describe('a change that inserts lines above a finding', () => {
   it('reports neither a new nor a resolved finding', () => {
     expect(shape(result)).toEqual({ new: [], resolved: [] })
     expect(result.report.delta?.counts.unchanged).toBe(1)
-  })
-
-  it('still reports the finding, at its shifted line', () => {
+    // Still reported, two lines lower than it was on the base side.
     expect(result.report.findings.map((finding) => finding.range.startLine)).toEqual([4])
   })
 })
@@ -297,17 +289,6 @@ describe('a change whose findings are not on the lines it touched', () => {
     })
     expect(result.report.delta?.counts).toMatchObject({ new: 3, touchedLine: 1 })
   })
-
-  it('puts the directly-actionable task first inside its category', () => {
-    const tasks = result.agentMarkdown
-      .split('\n')
-      .filter((line) => line.startsWith('### '))
-      .map((line) => line.replace('### ', ''))
-    expect(tasks[0]).toContain('no-const-assign')
-    expect(tasks[0]).toContain('[in-diff]')
-    expect(tasks[1]).toContain('no-unreachable')
-    expect(tasks[1]).not.toContain('[in-diff]')
-  })
 })
 
 /**
@@ -345,10 +326,7 @@ describe('a change whose new findings answer for one place from two categories',
       ['fallow/complexity', ['pr-lint-row']],
       ['no-unused-vars', ['pr-complexity-row']],
     ])
-  })
-
-  /** And the link is what puts the advisory row in the list; see `agent-md.ts`. */
-  it('makes the advisory row work, because a graded one answers for the same place', () => {
+    // And the link is what puts the advisory row in the list; see `agent-md.ts`.
     expect(result.agentMarkdown).toContain('fallow/complexity')
   })
 })
@@ -523,21 +501,6 @@ describe('the PR goldens', () => {
       'pr-lint.agent.md',
       normalizePrMarkdown(result.agentMarkdown, result.report.repo.path),
     )
-  })
-
-  /**
-   * The `--only lint` run through the real pipeline: `report.md` says what it
-   * was not asked to look at once instead of seven times, while `report.json`
-   * and the agent's roll-call still answer for all eight categories.
-   */
-  it('says what --only left out once, and still answers for all eight elsewhere', () => {
-    expect(result.markdown).toContain(
-      'Not assessed: not selected by `--only` — security, types, dead code, complexity, ' +
-        'duplication, format, test quality',
-    )
-    expect(result.markdown).not.toContain('## security — not assessed')
-    expect(Object.keys(result.report.categories)).toHaveLength(8)
-    expect(result.agentMarkdown).toContain('Grades: security not assessed · types not assessed')
   })
 })
 

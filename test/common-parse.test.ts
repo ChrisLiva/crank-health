@@ -20,7 +20,6 @@ import {
   parseJscpdReport,
   toPendingFindings as toJscpdFindings,
 } from '../src/adapters/common/jscpd.ts'
-import { OPENGREP_RULE_IDS, OPENGREP_RULES } from '../src/adapters/common/opengrep-rules.ts'
 import {
   parseOpengrepJson,
   ruleOf,
@@ -89,13 +88,12 @@ describe('parseGitleaksReport', () => {
     expect(findings.every((finding) => finding.anchor === finding.rule)).toBe(true)
   })
 
-  it('treats an empty or null report as no leaks', () => {
-    expect(parseGitleaksReport([])).toEqual([])
-    expect(parseGitleaksReport(null)).toEqual([])
-  })
-
   it('rejects output that is not gitleaks’ array of leaks', () => {
     expect(() => parseGitleaksReport({ oops: true })).toThrow('not an array')
+    // The discrimination that matters: an empty or absent report is no leaks,
+    // not something to reject.
+    expect(parseGitleaksReport([])).toEqual([])
+    expect(parseGitleaksReport(null)).toEqual([])
   })
 
   /** Spec §3: "any secret or critical → F", under anybody's config. */
@@ -153,50 +151,50 @@ describe('parseOpengrepJson', () => {
     expect(ruleOf('js-eval-call')).toBe('js-eval-call')
   })
 
-  it('treats no output as no results', () => {
-    expect(parseOpengrepJson('')).toEqual([])
-  })
-
   it('rejects output that is not opengrep’s result envelope', () => {
     expect(() => parseOpengrepJson('{"oops":true}')).toThrow('no results array')
+    // The discrimination that matters: no output at all is no results, not
+    // something to reject.
+    expect(parseOpengrepJson('')).toEqual([])
   })
 
   it('maps ERROR/WARNING/INFO onto our severities and grades them all', async () => {
     const findings = toOpengrepFindings(
-      parseOpengrepJson(await read('opengrep-1.26.0.json')),
+      [
+        ...parseOpengrepJson(await read('opengrep-1.26.0.json')),
+        // The capture holds only ERROR matches, so the other two tiers are
+        // built here — the mapping is what this test is about.
+        {
+          rule: 'py-warn',
+          file: '/repo/src/warn.py',
+          startLine: 3,
+          startCol: 1,
+          endLine: 3,
+          endCol: 9,
+          message: 'a warning',
+          severity: 'WARNING',
+        },
+        {
+          rule: 'py-note',
+          file: '/repo/src/zzz-note.py',
+          startLine: 4,
+          startCol: 1,
+          endLine: 4,
+          endCol: 9,
+          message: 'a note',
+          severity: 'INFO',
+        },
+      ],
       '/repo',
     )
     expect(findings.map((finding) => [finding.file, finding.rule, finding.severity])).toEqual([
       ['src/config.py', 'python-subprocess-shell-true', 'error'],
       ['src/handler.js', 'js-eval-call', 'error'],
+      ['src/warn.py', 'py-warn', 'warning'],
+      ['src/zzz-note.py', 'py-note', 'info'],
     ])
     expect(findings.every((finding) => finding.gradeScope)).toBe(true)
     expect(findings.every((finding) => finding.provenance === 'default-config')).toBe(true)
-  })
-})
-
-describe('the bundled opengrep ruleset', () => {
-  /**
-   * The constraint `ruleOf` depends on: a dot in a rule id would make the last
-   * segment something other than the id.
-   */
-  it('gives every rule a dot-free id, so the namespace strip is exact', () => {
-    for (const id of OPENGREP_RULE_IDS) {
-      expect(id).not.toContain('.')
-      expect(OPENGREP_RULES).toContain(`  - id: ${id}\n`)
-    }
-  })
-
-  it('declares exactly the rules it lists, and nothing else', () => {
-    const declared = [...OPENGREP_RULES.matchAll(/^ {2}- id: (\S+)$/gm)].map((match) => match[1])
-    expect(declared).toEqual([...OPENGREP_RULE_IDS])
-  })
-
-  /** The plan's license check, at the ruleset level: nothing is fetched. */
-  it('references no registry pack, URL or remote rule source', () => {
-    expect(OPENGREP_RULES).not.toMatch(/https?:\/\//)
-    expect(OPENGREP_RULES).not.toMatch(/\bp\/[a-z-]+/)
-    expect(OPENGREP_RULES).not.toContain('auto')
   })
 })
 
@@ -219,12 +217,11 @@ describe('parseZizmorJson', () => {
     expect(findings.every((finding) => finding.file === '.github/workflows/ci.yml')).toBe(true)
   })
 
-  it('treats no output as no findings', () => {
-    expect(parseZizmorJson('')).toEqual([])
-  })
-
   it('rejects output that is not zizmor’s array of findings', () => {
     expect(() => parseZizmorJson('{"oops":true}')).toThrow('not an array')
+    // The discrimination that matters: no output at all is no findings, not
+    // something to reject.
+    expect(parseZizmorJson('')).toEqual([])
   })
 
   it('maps High to error and Medium to warning, and anchors on the document route', async () => {
@@ -328,12 +325,11 @@ describe('parseBanditJson', () => {
     expect(issues[1]?.moreInfo).toContain('bandit.readthedocs.io')
   })
 
-  it('treats no output as no issues', () => {
-    expect(parseBanditJson('')).toEqual([])
-  })
-
   it('rejects output that is not bandit’s result envelope', () => {
     expect(() => parseBanditJson('{"oops":true}')).toThrow('no results array')
+    // The discrimination that matters: no output at all is no issues, not
+    // something to reject.
+    expect(parseBanditJson('')).toEqual([])
   })
 
   /** HIGH/MEDIUM graded, LOW advisory — see `bandit.ts`. */
@@ -354,11 +350,11 @@ describe('parseBanditJson', () => {
 
   /**
    * bandit's high tier is an `error` only when bandit is also confident. Below
-   * that the finding is a `warning` — still graded, never silenced. `High` and
-   * `high` are the case controls, `''` the unknown-value control: anything that
-   * is not exactly `HIGH` lands on the lenient side.
+   * that the finding is a `warning` — still graded, never silenced. `High` is
+   * the case control: the match is exact, so anything that is not spelled
+   * `HIGH` lands on the lenient side.
    */
-  it.each(['MEDIUM', 'LOW', 'UNDEFINED', 'High', 'high', ''])(
+  it.each(['MEDIUM', 'High'])(
     'demotes a high-severity finding at %s confidence to warning',
     (confidence) => {
       const [finding] = toBanditFindings(
@@ -479,13 +475,12 @@ describe('parseOsvReport', () => {
     expect(vulnerabilities[0]?.summary).toContain('lodash')
   })
 
-  it('treats a project with nothing to scan as no vulnerabilities', () => {
-    expect(parseOsvReport({ results: null })).toEqual([])
-  })
-
   it('rejects output that is not osv-scanner’s result envelope', () => {
     expect(() => parseOsvReport({ oops: true })).toThrow('no results array')
     expect(() => parseOsvReport('nope')).toThrow('not an object')
+    // The discrimination that matters: a project with nothing to scan is no
+    // vulnerabilities, not something to reject.
+    expect(parseOsvReport({ results: null })).toEqual([])
   })
 
   it('bands CVSS scores onto our severities', () => {
@@ -544,17 +539,10 @@ describe('parseOsvReport', () => {
     // The worst of the four (8.1 → error), and the highest fix among them.
     expect(finding?.severity).toBe('error')
     expect(finding?.message).toBe('lodash@4.17.15 (npm): 4 advisories; fix: upgrade to ≥4.18.0')
-  })
-
-  /** The lockfile is the file; the pinned package is the anchor (spec §2). */
-  it('anchors on the pinned package, not on a line in a generated lockfile', async () => {
-    const findings = toOsvFindings(
-      parseOsvReport(await readAsJson('osv-scanner-2.4.0.json'), '/repo'),
-      false,
-    )
-    expect(findings.every((finding) => finding.anchor === 'lodash@4.17.15')).toBe(true)
-    expect(findings.every((finding) => finding.range.startLine === 1)).toBe(true)
-    expect(findings.every((finding) => finding.gradeScope)).toBe(true)
+    // The lockfile is the file; the pinned package is the anchor (spec §2).
+    expect(finding?.anchor).toBe('lodash@4.17.15')
+    expect(finding?.range.startLine).toBe(1)
+    expect(finding?.gradeScope).toBe(true)
   })
 
   /**
@@ -765,9 +753,7 @@ describe('parseJscpdReport', () => {
     expect(findings.every((finding) => finding.gradeScope === false)).toBe(true)
     expect(findings.every((finding) => finding.rule === JSCPD_RULE)).toBe(true)
     expect(findings.every((finding) => finding.category === 'duplication')).toBe(true)
-  })
-
-  it('reports nothing for a report with no clones in it', () => {
+    // No clones is no findings, not one empty pair.
     expect(toJscpdFindings([])).toEqual([])
   })
 

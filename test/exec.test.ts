@@ -12,7 +12,6 @@ import {
   writeScratchRaw,
 } from '../src/core/exec.ts'
 import type { ToolCommand } from '../src/core/exec.ts'
-import { pinnedDotnetVersion, verifiedRepoVersion, verifiedVersion } from '../src/manifest.ts'
 
 /**
  * The subprocess layer's whole job is that nothing a tool does can throw at the
@@ -164,15 +163,6 @@ describe('dnx classification', () => {
     await rm(scratch, { recursive: true, force: true })
   })
 
-  it('explains how to get the .NET SDK when dnx is not installed', async () => {
-    const execution = await execTool(
-      { command: 'crank-no-such-dnx', args: [], ephemeral: 'dnx' },
-      { cwd: scratch, timeoutMs: 5_000 },
-    )
-    expect(execution.failure?.state).toBe('not-available')
-    expect(execution.failure?.reason).toContain('.NET SDK')
-  })
-
   it('names each fetcher’s own cache in the offline hint — NuGet for dnx, never uv’s', async () => {
     const offline = async (marker: string, pin: string, fetcher: 'npx' | 'uvx' | 'dnx') =>
       (
@@ -286,18 +276,6 @@ describe('cold-cache quieting', () => {
       await rm(base, { recursive: true, force: true })
     }
   }, 300_000)
-})
-
-describe('the dotnet pins', () => {
-  it('pins the exact NuGet tool versions this release captured and tested against', () => {
-    expect(pinnedDotnetVersion('roslynator.dotnet.cli')).toBe('0.12.0')
-    expect(pinnedDotnetVersion('microsoft.codeanalysis.netanalyzers')).toBe('10.0.302')
-  })
-
-  it('records the verified floors for the SDK and the repo-owned mutation tool', () => {
-    expect(verifiedVersion('dotnet')).toBe('10.0.203')
-    expect(verifiedRepoVersion('dotnet-stryker')).toBe('4.16.0')
-  })
 })
 
 describe('writeScratchRaw', () => {

@@ -3,10 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { gradeRatio } from '../src/core/grade.ts'
 import { QUICK_MODE_DEEP_REASON } from '../src/core/orchestrator.ts'
 import type { Finding } from '../src/core/types.ts'
-import { buildAgentTasks } from '../src/render/agent-md.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan, scanTree } from '../src/run.ts'
@@ -69,14 +67,17 @@ describe.runIf(ENABLED)('--deep on a repo with a weak test suite', () => {
     const metrics = deep.report.metrics['test-quality']
     const score = metrics?.mutationScore
     expect(score).toBeDefined()
-    expect(score).toBeGreaterThan(0)
-    expect(score).toBeLessThan(100)
-    // The grade is the score put through spec §3's band table, and nothing else.
-    expect(deep.report.categories['test-quality']).toEqual({
-      status: 'graded',
-      grade: gradeRatio('test-quality', score ?? 0),
-    })
     expect((metrics?.mutantsDetected ?? 0) + (metrics?.mutantsUndetected ?? 0)).toBeGreaterThan(20)
+    /*
+     * The fixture's counts, hand-checked against the captured run in
+     * `test/captured/stryker-9.6.1.json`: Stryker generates 25 mutants in
+     * `src/calc.js`, of which the two assertions in `test/calc.test.js` kill 7
+     * (28%), and every mutant in `src/extra.js` — which no test imports —
+     * survives, so the score can only fall from there. spec §3's band table
+     * puts anything under 35% at F.
+     */
+    expect(score).toBeLessThan(35)
+    expect(deep.report.categories['test-quality']).toEqual({ status: 'graded', grade: 'F' })
     expect(deep.report.profile).toBe('deep')
   })
 
@@ -100,16 +101,6 @@ describe.runIf(ENABLED)('--deep on a repo with a weak test suite', () => {
       detection: { reason: 'config+dependency', configFiles: ['stryker.config.json'] },
     })
     expect(stryker?.raw).toContain('raw/stryker-mutation-report.json')
-  })
-
-  it('gives an agent one task per weakly tested file', () => {
-    const tasks = buildAgentTasks(deep.report)
-    expect(tasks.map((task) => task.title)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('Strengthen the tests covering `src/calc.js`'),
-      ]),
-    )
-    expect(tasks.every((task) => task.category === 'test-quality')).toBe(true)
   })
 
   it('says the score in the terminal summary and in report.md', () => {

@@ -1,12 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import {
-  biomeFormatRunner,
-  biomeLintRunner,
-  parseBiomeReport,
-  toPendingFindings,
-} from '../src/adapters/jsts/biome.ts'
+import { parseBiomeReport, toPendingFindings } from '../src/adapters/jsts/biome.ts'
 
 /** Captured raw stdout from the pinned Biome, run against `test/fixtures/js-multi-tool`. */
 const LINT = fileURLToPath(new URL('./captured/biome-lint-2.5.7.txt', import.meta.url))
@@ -116,15 +111,6 @@ describe('toPendingFindings', () => {
     )
     expect(findings).toHaveLength(1)
     expect(findings[0]).toMatchObject({ rule: 'parse', severity: 'error', gradeScope: false })
-  })
-})
-
-describe('the biome runners', () => {
-  it('only ever run when the repo owns Biome — it is never our default', () => {
-    expect(biomeLintRunner.repoOwnedOnly).toBe(true)
-    expect(biomeFormatRunner.repoOwnedOnly).toBe(true)
-    expect(biomeLintRunner.category).toBe('lint')
-    expect(biomeFormatRunner.category).toBe('format')
   })
 })
 

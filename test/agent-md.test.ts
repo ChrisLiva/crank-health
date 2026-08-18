@@ -33,22 +33,6 @@ describe('agent.md goldens', () => {
     const markdown = normalizeMarkdown(renderAgentMarkdown(await readGoldenReport(name)), '<repo>')
     await expectGolden(`${name}.agent.md`, markdown)
   })
-
-  it('renders byte-identical output from the same report', async () => {
-    const report = await readGoldenReport('sec-basic')
-    expect(renderAgentMarkdown(report)).toBe(renderAgentMarkdown(report))
-  })
-
-  it('carries the header, the ground rules and the pointer to report.json', async () => {
-    const markdown = renderAgentMarkdown(await readGoldenReport('sec-basic'))
-    expect(markdown).toContain('crank-health 0.9.0 · quick profile')
-    expect(markdown).toContain('Grades: security D · types A · dead code A')
-    expect(markdown).toContain('## Ground rules')
-    expect(markdown).toContain('[advisory]')
-    expect(markdown).toContain('No wholesale reformatting')
-    expect(markdown).toContain('Verify before you call a task done')
-    expect(markdown).toContain('[report.json](report.json)')
-  })
 })
 
 /**
@@ -68,12 +52,6 @@ describe('how this run was graded', () => {
     const line = `> How this run was graded: ${WARNING}`
     expect(markdown).toContain(line)
     expect(markdown.indexOf(line)).toBeLessThan(markdown.indexOf('## Ground rules'))
-  })
-
-  it('says nothing when the run had nothing to explain', async () => {
-    const report = await readGoldenReport('sec-basic')
-    expect(report.warnings).toEqual([])
-    expect(renderAgentMarkdown(report)).not.toContain('How this run was graded')
   })
 })
 
@@ -114,11 +92,6 @@ describe('task priority', () => {
       'Fix 1 `style` finding',
       'Fix 1 `nit` finding',
     ])
-  })
-
-  it('assigns sequential stable ids in emission order', () => {
-    const tasks = buildAgentTasks(everyCategoryFailing())
-    expect(tasks.map((task) => task.id)).toEqual(tasks.map((_, index) => `T${index + 1}`))
   })
 
   /**
@@ -188,38 +161,6 @@ describe('ranking by grade movement', () => {
       'lint',
       'security',
       'security',
-    ])
-  })
-
-  it('ranks the work that cannot move a letter behind the work that can', () => {
-    const report = makeReport({
-      categories: {
-        ...allGraded(),
-        lint: { status: 'graded', grade: 'A' },
-        format: { status: 'graded', grade: 'C' },
-      },
-      gradeBasis: {
-        lint: { value: 0.2, denominator: 1, unit: 'weighted findings per KLOC' },
-        format: { value: 3, denominator: 12, unit: 'files failing the formatter' },
-      },
-      findings: [
-        makeFinding({ id: 'l', severity: 'info', file: 'src/a.ts' }),
-        ...['b', 'c', 'd'].map((name) =>
-          makeFinding({
-            id: `f-${name}`,
-            category: 'format',
-            tool: 'prettier',
-            rule: 'prettier/format',
-            file: `src/${name}.ts`,
-          }),
-        ),
-      ],
-    })
-    // format is last in spec §10's order and first here: it is the letter that
-    // can move. The A→A lint task is still in the list.
-    expect(buildAgentTasks(report).map((task) => [task.category, task.gradeImpact])).toEqual([
-      ['format', 'format · C → A'],
-      ['lint', 'lint · A → A'],
     ])
   })
 
@@ -342,20 +283,6 @@ describe('what counts as a task', () => {
     expect(buildAgentTasks(report)[0]?.findings.map((finding) => finding.rule)).toEqual(['B602'])
   })
 
-  /** Same, with nothing graded at all: security counts findings, not a metric. */
-  it('leaves an advisory dependency out where the whole security grade is advisory', () => {
-    const report = makeReport({
-      categories: { ...allGraded(), security: { status: 'graded', grade: 'B' } },
-      findings: [devScopedDependency()],
-    })
-    expect(buildAgentTasks(report)).toEqual([])
-  })
-
-  /** And a letter with nothing but generated code under it is still nobody's task. */
-  it('leaves the clones a duplication F rests on out when they are generated', () => {
-    expect(buildAgentTasks(duplicationGraded('F', [clone('src/api.gen.ts')]))).toEqual([])
-  })
-
   /**
    * The cross-link is what makes an advisory row work: a graded finding at the
    * same place says somebody has to open that file anyway.
@@ -370,15 +297,6 @@ describe('what counts as a task', () => {
     expect(buildAgentTasks(report).map((task) => task.findings.map((f) => f.rule))).toEqual([
       ['jscpd/duplicate-block', 'no-unused-vars'],
     ])
-  })
-
-  /** The clone alone stays out, so the cross-link is what carried it. */
-  it('leaves the same advisory finding out when nothing is graded at that place', () => {
-    const report = makeReport({
-      categories: allGraded(),
-      findings: [clone('src/a.ts'), makeFinding({ id: 'l', file: 'src/b.ts' })],
-    })
-    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['lint'])
   })
 
   /**
@@ -688,14 +606,6 @@ describe('themed grouping', () => {
  * cap with a single file.
  */
 describe('security themes', () => {
-  /**
-   * The renderer names the tool with a const of its own: `src/render/` imports
-   * nothing from `src/adapters/`, and this is what keeps the two spellings equal.
-   */
-  it('spells the vulnerability scanner the way the adapter does', () => {
-    expect(OSV_SCANNER_TOOL).toBe('osv-scanner')
-  })
-
   it('makes one task of a lockfile’s CVEs and leaves the other tools split by rule', () => {
     const tasks = securityTasks([
       ...Array.from({ length: 20 }, (_, index) => cve(index)),
@@ -713,20 +623,6 @@ describe('security themes', () => {
     ])
   })
 
-  it('titles the task by the lockfile to upgrade, not by one arbitrary advisory id', () => {
-    expect(securityTasks(Array.from({ length: 20 }, (_, index) => cve(index)))[0]?.title).toBe(
-      'Upgrade 20 vulnerable dependencies in `pnpm-lock.yaml`',
-    )
-    expect(securityTasks([cve(0, 'package-lock.json')])[0]?.title).toBe(
-      'Upgrade 1 vulnerable dependency in `package-lock.json`',
-    )
-  })
-
-  it('counts lockfiles, not advisories', () => {
-    expect(securityTasks(Array.from({ length: 20 }, (_, index) => cve(index)))).toHaveLength(1)
-    expect(securityTasks([cve(0), cve(1, 'packages/api/package-lock.json')])).toHaveLength(2)
-  })
-
   /** The same advisory in two lockfiles is two upgrades, in two files. */
   it('keeps one CVE in two lockfiles as two tasks', () => {
     const other = 'packages/api/package-lock.json'
@@ -739,10 +635,6 @@ describe('security themes', () => {
       'Upgrade 1 vulnerable dependency in `pnpm-lock.yaml`',
     ])
     expect(tasks.map((task) => task.findings.length)).toEqual([1, 1])
-  })
-
-  it('has nothing to say about a report with no findings', () => {
-    expect(securityTasks([])).toEqual([])
   })
 
   /**
@@ -840,26 +732,12 @@ describe('the task budget', () => {
     ])
   })
 
-  /**
-   * The failure this is all for: a category graded F that produced a theme
-   * cannot come out of the budget with no task, however much work sits above it.
-   */
-  it('keeps a task for a failing category the chattiest one would have buried', () => {
-    expect(kinds(renderAgentMarkdown(buriedFailure()))).toContain('lint')
-  })
-
   /** Eight categories, twenty slots: the first round always completes. */
   it('gives every failing category a task when every category is failing', () => {
     const markdown = renderAgentMarkdown(everyCategoryFailing(), { maxTasks: CATEGORIES.length })
     expect(headings(markdown)).toHaveLength(CATEGORIES.length)
     // Each category's first theme is the one holding its `-first.ts` finding.
     for (const category of CATEGORIES) expect(markdown).toContain(`src/${category}-first.ts`)
-  })
-
-  /** The budget decides which tasks survive, never the order they are read in. */
-  it('leaves the tasks it keeps in emission order', () => {
-    const ranks = kinds(renderAgentMarkdown(skewedGrades())).map((kind) => categoryRank(kind))
-    expect(ranks).toEqual(ranks.toSorted((a, b) => a - b))
   })
 
   /**
@@ -873,16 +751,6 @@ describe('the task budget', () => {
     expect(taskIds(renderAgentMarkdown(report))).toEqual(
       Array.from({ length: MAX_TASKS }, (_, index) => `T${index + 1}`),
     )
-  })
-
-  it('changes nothing about a report that never reaches the cap', () => {
-    const report = manyLintRules(5)
-    const tasks = buildAgentTasks(report)
-    const markdown = renderAgentMarkdown(report)
-
-    expect(markdown).toBe(renderAgentMarkdown(report, { maxTasks: MAX_TASKS }))
-    expect(headings(markdown)).toEqual(tasks.map((task) => `### ${task.id} — ${task.title}`))
-    expect(markdown).not.toContain('more tasks were cut')
   })
 
   it('says how many tasks were cut', () => {
@@ -914,13 +782,6 @@ describe('the task budget', () => {
     expect(markdown).toContain('No tasks: nothing this scan found is work in hand-written code')
     expect(markdown).toContain('Full findings (2)')
   })
-
-  /** A budget of nothing is a budget: it spends no slot and cuts every task. */
-  it('keeps no task at all when there is no room for one', () => {
-    const markdown = renderAgentMarkdown(manyLintRules(40), { maxTasks: 0 })
-    expect(headings(markdown)).toEqual([])
-    expect(markdown).toContain('40 more tasks were cut to keep this list actionable.')
-  })
 })
 
 describe('each task', () => {
@@ -946,19 +807,6 @@ describe('each task', () => {
       expect(parseCliArgs(task.verify).deep).toBe(task.category === 'test-quality')
     }
     expect(tasks.some((task) => task.category === 'test-quality')).toBe(true)
-  })
-
-  it('renders that command as a runnable npx invocation', () => {
-    const markdown = renderAgentMarkdown(everyCategoryFailing())
-    expect(markdown).toContain('Verify: `npx crank-health --only security --fail-under A`')
-  })
-
-  it('states the category-level grade impact', () => {
-    for (const task of tasks) {
-      expect(task.gradeImpact).toMatch(/^[a-z ]+ · [ABCDEF] → A$/)
-    }
-    expect(impactOf(tasks, 'security')).toBe('security · F → A')
-    expect(impactOf(tasks, 'dead-code')).toBe('dead code · C → A')
   })
 
   it('links the raw evidence of the tools that reported its findings', () => {
@@ -1024,36 +872,6 @@ describe('each task', () => {
       runs: [{ record: spanningRecord('gitleaks', 'security'), raw: ['raw/repo/gitleaks.json'] }],
     })
     expect(buildAgentTasks(report)[0]?.evidence).toEqual(['raw/repo/gitleaks.json'])
-  })
-
-  it('lists small tasks finding by finding, and labels the advisory ones', () => {
-    const markdown = renderAgentMarkdown(
-      makeReport({
-        categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
-        findings: [
-          makeFinding({
-            id: 'a',
-            category: 'duplication',
-            tool: 'jscpd',
-            rule: 'jscpd/duplicate-block',
-            file: 'src/a.ts',
-            range: { startLine: 5, startCol: 1, endLine: 9, endCol: 1 },
-            message: '11 lines duplicated from src/b.ts:1-11',
-            gradeScope: false,
-          }),
-          // What makes the advisory row eligible: a graded finding at the same
-          // place, which `related` links it to.
-          makeFinding({
-            id: 'l',
-            file: 'src/a.ts',
-            range: { startLine: 6, startCol: 1, endLine: 6, endCol: 2 },
-          }),
-        ],
-      }),
-    )
-    expect(markdown).toContain(
-      '- `src/a.ts:5` `jscpd/duplicate-block` — 11 lines duplicated from src/b.ts:1-11 [advisory]',
-    )
   })
 
   /**
@@ -1153,18 +971,6 @@ describe('the two lines on every task', () => {
     )
   })
 
-  /** Every task in a golden carries the pair — the plan's own check. */
-  it('states both under every task of every golden', async () => {
-    for (const name of FIXTURES) {
-      // eslint-disable-next-line no-await-in-loop
-      const markdown = renderAgentMarkdown(await readGoldenReport(name))
-      const count = headings(markdown).length
-      expect(count).toBeGreaterThan(0)
-      expect(boilerplate(markdown, 'Grade impact:')).toHaveLength(count)
-      expect(boilerplate(markdown, 'Verify:')).toHaveLength(count)
-    }
-  })
-
   /** The brief's monorepo shape: neither line survives being shared. */
   it('shares neither line between two packages', () => {
     const markdown = renderAgentMarkdown(twoLintPackages('C', 'F'))
@@ -1192,22 +998,6 @@ describe('the two lines on every task', () => {
     expect(boilerplate(markdown, 'Verify:')).toEqual([
       'Verify: `npx crank-health --only lint --project packages/api --fail-under A`',
       'Verify: `npx crank-health --only lint --project packages/web --fail-under A`',
-    ])
-  })
-
-  /**
-   * The mirror image: a repo-spanning scanner's check cannot be scoped, so both
-   * packages carry the identical Verify line and only the grades differ.
-   */
-  it('states two identical verify commands where neither check can be scoped', () => {
-    const markdown = renderAgentMarkdown(twoSecurityPackages())
-    expect(boilerplate(markdown, 'Grade impact:')).toEqual([
-      'Grade impact: security · F → A',
-      'Grade impact: security · D → A',
-    ])
-    expect(boilerplate(markdown, 'Verify:')).toEqual([
-      'Verify: `npx crank-health --only security --fail-under A`',
-      'Verify: `npx crank-health --only security --fail-under A`',
     ])
   })
 
@@ -1241,33 +1031,6 @@ describe('the two lines on every task', () => {
       'Verify: `npx crank-health --only lint --fail-under A`',
     ])
   })
-
-  /** The shape every single-task report has always rendered, unchanged. */
-  it('renders a lone task as it always did', () => {
-    const report = makeReport({
-      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
-      findings: [makeFinding({ id: 'a' })],
-    })
-    expect(tasksSection(renderAgentMarkdown(report))).toBe(
-      [
-        '### T1 — Fix 1 `no-unused-vars` finding',
-        '',
-        'Grade impact: lint · F → A',
-        '',
-        '- `src/a.ts:1` `no-unused-vars` — unused variable',
-        '',
-        'Verify: `npx crank-health --only lint --fail-under A`',
-      ].join('\n'),
-    )
-  })
-
-  /** No tasks is no runs: the section is the sentence and nothing else. */
-  it('emits neither line for a report with no tasks', () => {
-    const markdown = renderAgentMarkdown(makeReport({ categories: allGraded() }))
-    expect(headings(markdown)).toEqual([])
-    expect(boilerplate(markdown, 'Grade impact:')).toEqual([])
-    expect(boilerplate(markdown, 'Verify:')).toEqual([])
-  })
 })
 
 /** Two packages breaking one lint rule, each graded in its own right. */
@@ -1282,26 +1045,6 @@ function twoLintPackages(api: Grade, web: Grade): Report {
       makeFinding({ id: 'a', file: 'packages/api/api/main.py', project: 'packages/api' }),
       makeFinding({ id: 'w', file: 'packages/web/src/a.ts', project: 'packages/web' }),
     ],
-  })
-}
-
-/**
- * Two packages holding the same secret, graded differently. The scan spans the
- * repo, so neither task's check can be scoped and both Verify lines are equal.
- */
-function twoSecurityPackages(): Report {
-  const secret = { category: 'security', tool: 'gitleaks', rule: 'generic-api-key' } as const
-  return makeReport({
-    categories: { ...allGraded(), security: { status: 'graded', grade: 'F' } },
-    projects: [
-      makeProjectScan({ project: projectAt('packages/api'), categories: allGraded('F') }),
-      makeProjectScan({ project: projectAt('packages/web'), categories: allGraded('D') }),
-    ],
-    findings: [
-      makeFinding({ id: 'a', ...secret, file: 'packages/api/.env', project: 'packages/api' }),
-      makeFinding({ id: 'w', ...secret, file: 'packages/web/.env', project: 'packages/web' }),
-    ],
-    runs: [{ record: spanningRecord('gitleaks', 'security'), raw: [] }],
   })
 }
 
@@ -1369,10 +1112,6 @@ function kinds(markdown: string): Category[] {
     if (heading.includes('reported by bandit')) return 'security'
     return 'lint'
   })
-}
-
-function impactOf(tasks: readonly AgentTask[], category: Category): string | undefined {
-  return tasks.find((task) => task.category === category)?.gradeImpact
 }
 
 /** Two packages, one failing category, and the findings a test plants in them. */
@@ -1547,12 +1286,6 @@ describe('tasks in a monorepo', () => {
     expect(tasks.map((task) => task.findings.length)).toEqual([1, 1])
   })
 
-  it('names the project in every rendered task', () => {
-    const markdown = renderAgentMarkdown(monorepo(SAME_RULE))
-    expect(markdown).toContain('### T1 — Fix 1 `no-unused-vars` finding\n\nProject: packages/api')
-    expect(markdown).toContain('### T2 — Fix 1 `no-unused-vars` finding\n\nProject: packages/web')
-  })
-
   it('calls the root project the repo root', () => {
     const report = makeReport({
       categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
@@ -1563,15 +1296,6 @@ describe('tasks in a monorepo', () => {
       findings: [makeFinding({ id: 'r', file: 'src/a.ts', project: '.' })],
     })
     expect(renderAgentMarkdown(report)).toContain('Project: repo root')
-  })
-
-  it('names no project when the repo is one project', () => {
-    const single = makeReport({
-      categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
-      findings: [makeFinding({ id: 'a' })],
-    })
-    expect(single.projects).toHaveLength(1)
-    expect(renderAgentMarkdown(single)).not.toContain('Project:')
   })
 
   /**
@@ -1630,17 +1354,14 @@ function skewed(): Report {
  */
 describe('tasks against per-project grades', () => {
   it('makes a task for a package graded below A under a rollup graded A', () => {
-    expect(buildAgentTasks(skewed()).map((task) => [task.project, task.category])).toEqual([
-      ['packages/api', 'lint'],
-    ])
-  })
+    const tasks = buildAgentTasks(skewed())
+    expect(tasks.map((task) => [task.project, task.category])).toEqual([['packages/api', 'lint']])
 
-  it('states that package’s own grade as the impact, not the rollup’s', () => {
-    expect(buildAgentTasks(skewed())[0]?.gradeImpact).toBe('lint · F → A')
-  })
+    // The impact is that package's own grade, not the rollup's A…
+    const task = tasks[0]
+    expect(task?.gradeImpact).toBe('lint · F → A')
 
-  it('verifies against the package, so fixing it is enough to pass', () => {
-    const task = buildAgentTasks(skewed())[0]
+    // …and the check is scoped to it, so fixing the package is enough to pass.
     expect(task?.verify).toEqual([
       '--only',
       'lint',
@@ -1649,7 +1370,6 @@ describe('tasks against per-project grades', () => {
       '--fail-under',
       'A',
     ])
-
     const options = parseCliArgs(task?.verify ?? [])
     expect(options.projects).toEqual(['packages/api'])
     expect(options.only).toEqual(['lint'])

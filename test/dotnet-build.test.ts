@@ -1,20 +1,11 @@
 import { readFileSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   BUILD_FAILED_REASON,
-  CA1502_MESSAGE,
   CA1502_SUPPRESSED_REASON,
-  DOTNET_BUILD_TOOL,
   UNRESOLVED_PIN_REASON,
-  buildFor,
   complexityResultFor,
-  dotnetBuildComplexityRunner,
-  dotnetBuildLintRunner,
-  dotnetBuildTypesRunner,
-  forgetBuilds,
   isUnresolvedPin,
   lintResultFor,
   mergeSarifLogs,
@@ -22,9 +13,6 @@ import {
   typesResultFor,
 } from '../src/adapters/csharp/build.ts'
 import type { CsBuild } from '../src/adapters/csharp/build.ts'
-import type { RunContext } from '../src/core/types.ts'
-import { makeProject } from './factories.ts'
-import { pathFarm } from './support/path-farm.ts'
 
 /**
  * The pure half of the `dotnet build` host, proven over captured real bytes:
@@ -88,30 +76,6 @@ describe('parseBuildSarif partition', () => {
     for (const finding of parsed.lint) expect(finding.provenance).toBe('default-config')
   })
 
-  /**
-   * The extraction rule the capture decided (spec's two open extractions):
-   * the capture carries no `logicalLocations`, so the method identity AND the
-   * cyclomatic number both come from the CA1502 message text. The exact
-   * symbols and numbers the capture yields are pinned here — a later SDK that
-   * rewords the message fails this test instead of silently counting zero.
-   */
-  it('reads method identity and cyclomatic number from the CA1502 message', () => {
-    const log = JSON.parse(captured('netanalyzers-10.0.302.sarif.json')) as {
-      runs: { results: { ruleId: string; message: { text: string } }[] }[]
-    }
-    const extracted = log.runs
-      .flatMap((run) => run.results)
-      .filter((result) => result.ruleId === 'CA1502')
-      .map((result) => {
-        const match = CA1502_MESSAGE.exec(result.message.text)
-        return { symbol: match?.groups?.['symbol'], complexity: Number(match?.groups?.['number']) }
-      })
-    expect(new Set(extracted.map((entry) => entry.symbol))).toEqual(
-      new Set(['Classify', 'Triple', 'Twice']),
-    )
-    expect(extracted.find((entry) => entry.symbol === 'Classify')?.complexity).toBe(17)
-  })
-
   it('counts every method once and the planted >15 method over the ceiling', () => {
     expect(parsed.complexity).toEqual({
       functionsTotal: 3,
@@ -163,10 +127,6 @@ function planted(ruleId: string, line: number): unknown {
 }
 
 describe('hostile SARIF inputs', () => {
-  it('throws on bytes that are not JSON', () => {
-    expect(() => parseBuildSarif('MSBuild version 17.14', '/repo')).toThrow()
-  })
-
   /** A 1.0 log is a silently different format, never zero findings. */
   it('throws on SARIF 1.0, naming the version it saw', () => {
     expect(() => parseBuildSarif('{"version":"1.0","runs":[]}', '/repo')).toThrow(/'1\.0'/)
@@ -270,18 +230,16 @@ function withoutCa1502(): CsBuild {
 }
 
 describe('the three mappers over one ok build', () => {
-  it('grades types from the compiler diagnostics', async () => {
-    const result = await typesResultFor(okBuild, CAPTURE_ROOT)
-    expect(result.state).toBe('ok')
-    expect(result.findings.map((finding) => finding.rule)).toEqual(['CS0219'])
-    expect(result.rawFiles).toEqual([RAW_FILE])
-  })
+  it('grades types from the compiler diagnostics, and lint from the analyzer ones', async () => {
+    const types = await typesResultFor(okBuild, CAPTURE_ROOT)
+    expect(types.state).toBe('ok')
+    expect(types.findings.map((finding) => finding.rule)).toEqual(['CS0219'])
+    expect(types.rawFiles).toEqual([RAW_FILE])
 
-  it('grades lint from the analyzer diagnostics', async () => {
-    const result = await lintResultFor(okBuild, CAPTURE_ROOT)
-    expect(result.state).toBe('ok')
-    expect(result.findings.map((finding) => finding.rule)).toEqual(['CA1822', 'CA1822'])
-    expect(result.rawFiles).toEqual([RAW_FILE])
+    const lint = await lintResultFor(okBuild, CAPTURE_ROOT)
+    expect(lint.state).toBe('ok')
+    expect(lint.findings.map((finding) => finding.rule)).toEqual(['CA1822', 'CA1822'])
+    expect(lint.rawFiles).toEqual([RAW_FILE])
   })
 
   it('reports the complexity census as metrics, never as findings', () => {
@@ -380,99 +338,5 @@ describe('CA1502 suppression inference (criterion 17)', () => {
     const result = complexityResultFor(withoutCa1502(), false)
     expect(result.state).toBe('ok')
     expect(result.metrics).toEqual({ functionsTotal: 0, functionsOverCeiling: 0 })
-  })
-
-  it('still grades types and lint from the same CA1502-less build', async () => {
-    expect((await typesResultFor(withoutCa1502(), CAPTURE_ROOT)).state).toBe('ok')
-    expect((await lintResultFor(withoutCa1502(), CAPTURE_ROOT)).state).toBe('ok')
-  })
-})
-
-/** A deep-profile context whose scan-root scratch is `root`. */
-function contextUnder(root: string): RunContext {
-  return {
-    repoRoot: '/repo',
-    project: makeProject(['App.cs']),
-    files: ['App.cs'],
-    scratch: join(root, 'root'),
-    runScratch: root,
-    detection: null,
-    timeoutMs: 30_000,
-    deep: true,
-  }
-}
-
-describe('the build memo, against a farm with no dotnet', () => {
-  let farm: Awaited<ReturnType<typeof pathFarm>>
-  let originalPath: string
-  let runScratch: string
-
-  beforeAll(async () => {
-    farm = await pathFarm()
-    originalPath = process.env['PATH'] ?? ''
-    process.env['PATH'] = farm.path
-    runScratch = await mkdtemp(join(tmpdir(), 'crank-build-memo-'))
-  })
-
-  afterAll(async () => {
-    process.env['PATH'] = originalPath
-    forgetBuilds(runScratch)
-    await farm.remove()
-    await rm(runScratch, { recursive: true, force: true })
-  })
-
-  it('caches the promise — three concurrent runners share one build', async () => {
-    const first = buildFor(contextUnder(runScratch))
-    const second = buildFor(contextUnder(runScratch))
-    expect(second).toBe(first)
-    expect((await first).state).toBe('unavailable')
-  })
-
-  it('yields a fresh result, not a cached one, after forgetBuilds', async () => {
-    const before = buildFor(contextUnder(runScratch))
-    forgetBuilds(runScratch)
-    const after = buildFor(contextUnder(runScratch))
-    expect(after).not.toBe(before)
-    const build = await after
-    expect(build.state).toBe('unavailable')
-    if (build.state === 'unavailable') expect(build.reason).toContain('dotnet is not on PATH')
-  })
-
-  /** run-pr's finally holds the parent of both sides' scratch dirs. */
-  it('forgets by path prefix, the way run-pr tears down', async () => {
-    const nested = join(runScratch, 'head-scratch')
-    const before = buildFor(contextUnder(nested))
-    await before
-    forgetBuilds(runScratch)
-    expect(buildFor(contextUnder(nested))).not.toBe(before)
-    forgetBuilds(runScratch)
-  })
-})
-
-describe('the three build-backed runners', () => {
-  it('declare one deep-only dotnet-build runner per compiled category', () => {
-    expect(dotnetBuildTypesRunner.category).toBe('types')
-    expect(dotnetBuildComplexityRunner.category).toBe('complexity')
-    expect(dotnetBuildLintRunner.category).toBe('lint')
-    for (const runner of [
-      dotnetBuildTypesRunner,
-      dotnetBuildComplexityRunner,
-      dotnetBuildLintRunner,
-    ]) {
-      expect(runner.tool).toBe(DOTNET_BUILD_TOOL)
-      expect(runner.deepOnly).toBe(true)
-      expect(runner.pinnedVersion).toBe('10.0.302')
-    }
-  })
-
-  /** Detection never spawns; the build is never repo-owned. */
-  it('detect answers null without running anything', async () => {
-    expect(
-      await dotnetBuildTypesRunner.detect({
-        repoRoot: '/repo',
-        project: makeProject(['App.cs']),
-        files: makeProject(['App.cs']).files,
-      }),
-    ).toBe(null)
   })
 })

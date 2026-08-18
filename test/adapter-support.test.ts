@@ -7,16 +7,23 @@ import { batchFiles, repoRelative } from '../src/adapters/support.ts'
  * file the rest of the pipeline has never heard of.
  */
 describe('batchFiles', () => {
-  it('keeps a small file list in one invocation', () => {
-    expect(batchFiles(['a.js', 'b.js'])).toEqual([['a.js', 'b.js']])
-  })
-
   it('splits a file list that would overflow the command line', () => {
     const files = Array.from({ length: 10 }, (_, index) => `src/file-${index}.js`)
-    const batches = batchFiles(files, 40)
-    expect(batches.flat()).toEqual(files)
+    const budget = 40
+    const batches = batchFiles(files, budget)
+
+    // Every batch is one invocation's worth of argument bytes — the point of
+    // splitting at all is that none of them can overflow.
     expect(batches.length).toBeGreaterThan(1)
-    expect(batches.every((batch) => batch.length > 0)).toBe(true)
+    for (const batch of batches) {
+      expect(batch.length).toBeGreaterThan(0)
+      expect(Buffer.byteLength(batch.join(' '), 'utf8')).toBeLessThanOrEqual(budget)
+    }
+    // …and between them the batches scan exactly the list they were handed.
+    expect(batches.flat()).toEqual(files)
+
+    // A list that fits stays one invocation.
+    expect(batchFiles(['a.js', 'b.js'])).toEqual([['a.js', 'b.js']])
   })
 
   it('never drops a file longer than the whole budget', () => {
@@ -25,12 +32,15 @@ describe('batchFiles', () => {
 })
 
 describe('repoRelative', () => {
-  it('leaves an already repo-relative path alone', () => {
-    expect(repoRelative('src/a.ts')).toBe('src/a.ts')
-  })
-
   it('strips the ./ prefix some tools emit', () => {
-    expect(repoRelative('./src/a.ts')).toBe('src/a.ts')
+    const cases = [
+      ['./src/a.ts', 'src/a.ts'],
+      // …and a path already in repo-relative form is left alone.
+      ['src/a.ts', 'src/a.ts'],
+    ] as const
+    for (const [reported, expected] of cases) {
+      expect(repoRelative(reported)).toBe(expected)
+    }
   })
 
   it('relativizes the absolute paths ESLint and tsc report', () => {

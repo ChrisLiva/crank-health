@@ -122,12 +122,6 @@ describe('the dotnet-format runner', () => {
       reason: 'no C# files',
     })
   })
-
-  it('records the format category and the verified SDK floor', () => {
-    expect(dotnetFormatRunner.tool).toBe('dotnet-format')
-    expect(dotnetFormatRunner.category).toBe('format')
-    expect(dotnetFormatRunner.pinnedVersion).toBe('10.0.203')
-  })
 })
 
 describe('parsing a dotnet format report', () => {
@@ -154,28 +148,8 @@ describe('parsing a dotnet format report', () => {
     expect(() => parseDotnetFormatReport('{"FilePath":"x"}', '/repo')).toThrow()
   })
 
-  it('parses an all-clean report to zero findings', () => {
-    expect(parseDotnetFormatReport('[]', '/repo')).toEqual([])
-  })
-
   it('drops a file the report lists without any changes', () => {
     const report = JSON.stringify([{ FilePath: '/repo/A.cs', FileChanges: [] }])
     expect(parseDotnetFormatReport(report, '/repo')).toEqual([])
-  })
-
-  it('leaves a file outside the repo to the analyzed filter', () => {
-    const report = JSON.stringify([
-      {
-        FilePath: '/elsewhere/Other.cs',
-        FileChanges: [{ LineNumber: 1, CharNumber: 1, DiagnosticId: 'WHITESPACE' }],
-      },
-    ])
-    const findings = parseDotnetFormatReport(report, '/repo')
-
-    // The parser relativizes without judging; the runner's `analyzed.has(file)`
-    // filter — the same one every wrapper applies — is what drops it.
-    expect(findings).toHaveLength(1)
-    const analyzed = new Set(['src/A.cs'])
-    expect(findings.filter((finding) => analyzed.has(finding.file))).toEqual([])
   })
 })

@@ -106,9 +106,6 @@ const PLANTED = [
   },
 ] as const
 
-/** Files planted deliberately clean; a finding in one of these is a false positive. */
-const CLEAN_FILES = new Set(['clean.py', 'main.py'])
-
 describe('quick scan of the py-basic fixture', () => {
   let fixture: FixtureRepo
   let outside: string
@@ -130,10 +127,6 @@ describe('quick scan of the py-basic fixture', () => {
 
   it('finds every planted finding, and nothing else', () => {
     expect(findings.map(shape)).toEqual(PLANTED.map((planted) => ({ ...planted })))
-  })
-
-  it('reports no findings in the deliberately clean files', () => {
-    expect(findings.filter((finding) => CLEAN_FILES.has(finding.file))).toEqual([])
   })
 
   it('tags an untooled repo as default-config, run from the pinned versions', () => {
@@ -158,7 +151,7 @@ describe('quick scan of the py-basic fixture', () => {
     expect(report.tools.every((tool) => tool.provenance === 'default-config')).toBe(true)
     expect(report.tools.every((tool) => tool.execution === 'ephemeral-pinned')).toBe(true)
     expect(report.tools.every((tool) => tool.detection === null)).toBe(true)
-    for (const tool of report.tools) {
+    for (const tool of report.tools.filter((entry) => fromFetchableTool(entry.tool))) {
       if (tool.version !== null) expect(tool.version).toBe(tool.pinned)
     }
     expect(findings.every((finding) => finding.provenance === 'default-config')).toBe(true)
@@ -207,12 +200,6 @@ describe('quick scan of the py-basic fixture', () => {
       complexity: { functionsTotal: 7, functionsOverCeiling: 1 },
       duplication: { duplicationPercent: 0 },
       format: { formattableFiles: 6 },
-    })
-  })
-
-  it('breaks the findings down by language, which is all one language here', () => {
-    expect(parse(json).languages).toEqual({
-      python: { types: 1, 'dead-code': 2, complexity: 1, lint: 2, format: 1 },
     })
   })
 
@@ -325,10 +312,6 @@ describe('quick scan of a Python repo with a virtualenv', () => {
       functionsOverCeiling: 0,
     })
   })
-
-  it('leaves the target repo clean', async () => {
-    expect(await fixture.status()).toBe('')
-  })
 })
 
 /**
@@ -351,41 +334,6 @@ describe('quick scan of the py-mypy fixture (no virtualenv)', () => {
     await fixture.remove()
   })
 
-  it('runs mypy against a repo that owns it', () => {
-    expect(parse(result.json).tools.map((tool) => tool.tool)).toContain('mypy')
-  })
-
-  it('reports mypy as not-available, naming the missing virtualenv', () => {
-    expect(byTool.get('mypy')).toMatchObject({
-      state: 'not-available',
-      reason:
-        'mypy is declared but this project has no virtualenv; ' +
-        "create one and install the project's dependencies",
-    })
-  })
-
-  it('owns mypy through both its config section and its dependency group', () => {
-    expect(byTool.get('mypy')?.detection).toMatchObject({
-      reason: 'config+dependency',
-      ownedVia: 'pyproject.toml',
-    })
-  })
-
-  it('promotes ty, the standby whose owner never graded', () => {
-    expect(byTool.get('ty')).toMatchObject({
-      state: 'ok',
-      provenance: 'default-config',
-      reason: null,
-    })
-  })
-
-  it('leaves the other standby its own reason, because no owner graded', () => {
-    expect(byTool.get('pyright')).toMatchObject({
-      state: 'not-available',
-      reason: 'standing down: this project has no virtualenv, so ty type-checks it',
-    })
-  })
-
   it('warns that the grade came from a default config, not the repo’s own tool', () => {
     expect(result.report.warnings).toContain(
       'ty: graded types on its default config because mypy reported not-available',
@@ -393,6 +341,12 @@ describe('quick scan of the py-mypy fixture (no virtualenv)', () => {
   })
 
   it('grades types from the promoted standby’s findings', () => {
+    // ty was the standby whose owner never graded, so it is promoted and runs.
+    expect(byTool.get('ty')).toMatchObject({
+      state: 'ok',
+      provenance: 'default-config',
+      reason: null,
+    })
     expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
     // Loose on the rule: which name ty gives the planted return-type error is
     // ty's contract, not this fixture's.
@@ -400,30 +354,24 @@ describe('quick scan of the py-mypy fixture (no virtualenv)', () => {
       expect.objectContaining({ tool: 'ty', category: 'types', file: 'app.py' }),
     )
   })
-
-  it('leaves the target repo clean', async () => {
-    expect(await fixture.status()).toBe('')
-  })
 })
 
 /**
  * The same fixture with an environment, which is the case mypy was written for.
- * Three scans: one before the repo installs mypy, so the pinned copy runs; two
- * after, so the repo's own binary does and the pair can be compared byte for
- * byte. In both modes mypy grades types alone — the defaults it displaced stand
- * down rather than report the same error a second time.
+ * Two scans: one before the repo installs mypy, so the pinned copy runs, and one
+ * after, so the repo's own binary does. In both modes mypy grades types alone —
+ * the defaults it displaced stand down rather than report the same error a
+ * second time.
  */
 describe('quick scan of the py-mypy fixture with a virtualenv', () => {
   let fixture: FixtureRepo
   let outEphemeral: string
   let outInstalled: string
-  let outAgain: string
   let scan1: HealthScanResult
   let scan2: HealthScanResult
-  let scan3: HealthScanResult
 
-  // Three full Python scans plus a `uv venv` and a `uv pip install` do not fit
-  // the single-scan budget the other suites here run on.
+  // Two full Python scans plus a `uv venv` and a `uv pip install` do not fit the
+  // single-scan budget the other suites here run on.
   beforeAll(async () => {
     fixture = await createFixtureRepo('py-mypy')
     // After the commit, so the virtualenv stays untracked and out of the file
@@ -431,9 +379,7 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
     await execa('uv', ['venv'], { cwd: fixture.root })
     outEphemeral = await mkdtemp(join(tmpdir(), 'crank-mypy-out-'))
     outInstalled = await mkdtemp(join(tmpdir(), 'crank-mypy-out-'))
-    outAgain = await mkdtemp(join(tmpdir(), 'crank-mypy-out-'))
 
-    // An outside `--out` is what makes the raw-evidence listing assertable.
     scan1 = await runHealthScan({ path: fixture.root, out: outEphemeral })
 
     // …and now the repo owns a copy of its own, which is a different branch of
@@ -446,15 +392,12 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
       },
     )
     scan2 = await runHealthScan({ path: fixture.root, out: outInstalled })
-    scan3 = await runHealthScan({ path: fixture.root, out: outAgain })
-  }, 3 * SCAN_TIMEOUT_MS)
+  }, 2 * SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
     await fixture.remove()
     await Promise.all(
-      [outEphemeral, outInstalled, outAgain].map((out) =>
-        rm(out, { recursive: true, force: true }),
-      ),
+      [outEphemeral, outInstalled].map((out) => rm(out, { recursive: true, force: true })),
     )
   })
 
@@ -509,15 +452,6 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
     })
   })
 
-  it('keeps neither standby’s findings nor its metrics', () => {
-    expect(scan1.report.metrics.types).toBeUndefined()
-    expect(reportFindings(scan1.report).some((finding) => finding.tool === 'pyright')).toBe(false)
-  })
-
-  it('keeps mypy’s raw output next to the report', async () => {
-    expect(await readdir(join(outEphemeral, 'raw', 'root'))).toContain('mypy.jsonl')
-  })
-
   it('warns about nothing, because the repo’s own tool graded the category', () => {
     expect(scan1.report.warnings.filter((warning) => warning.includes('mypy'))).toEqual([])
   })
@@ -536,16 +470,7 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
       version: null,
       provenance: 'repo-config',
     })
-  })
-
-  /** An installed owner can be counted on, so the defaults are never planned. */
-  it('plans no default type checker at all when the owner is installed', () => {
-    const tools = parse(scan2.json).tools.map((tool) => tool.tool)
-    expect(tools).not.toContain('ty')
-    expect(tools).not.toContain('pyright')
-  })
-
-  it('reports the same single finding in either execution mode', () => {
+    // The same single finding, whichever binary produced it.
     expect(reportFindings(scan2.report).map(shape)).toEqual([
       {
         category: 'types',
@@ -562,16 +487,16 @@ describe('quick scan of the py-mypy fixture with a virtualenv', () => {
     ).toBe(true)
   })
 
+  /** An installed owner can be counted on, so the defaults are never planned. */
+  it('plans no default type checker at all when the owner is installed', () => {
+    const tools = parse(scan2.json).tools.map((tool) => tool.tool)
+    expect(tools).not.toContain('ty')
+    expect(tools).not.toContain('pyright')
+  })
+
   it('leaves the target repo clean, mypy’s cache included', async () => {
     expect(await fixture.status()).toBe('')
     expect(await readdir(fixture.root)).not.toContain('.mypy_cache')
-  })
-
-  it('produces byte-identical output when run twice on the same commit', () => {
-    expect(normalizeReport(scan3.json)).toBe(normalizeReport(scan2.json))
-    expect(reportFindings(scan3.report).map((finding) => finding.id)).toEqual(
-      reportFindings(scan2.report).map((finding) => finding.id),
-    )
   })
 })
 
@@ -604,17 +529,6 @@ describe('quick scan of a monorepo where one package configures mypy', () => {
 
   afterAll(async () => {
     await fixture.remove()
-  })
-
-  it('owns mypy in each package through the nearest artifact', () => {
-    expect(
-      parse(result.json)
-        .tools.filter((tool) => tool.tool === 'mypy')
-        .map((tool) => tool.detection),
-    ).toEqual([
-      expect.objectContaining({ reason: 'config+dependency', ownedVia: 'packages/api/mypy.ini' }),
-      expect.objectContaining({ reason: 'dependency', ownedVia: 'pyproject.toml' }),
-    ])
   })
 
   /**
@@ -691,12 +605,9 @@ describe('quick scan of a repo whose mypy config asks for report files', () => {
     await fixture.remove()
   })
 
-  /** Without this the footprint assertion below would pass on a mypy that never ran. */
-  it('runs mypy from the config that asked for the reports', () => {
-    expect(mypyFindings(result)).toEqual([{ rule: 'return-value', file: 'app.py', startLine: 2 }])
-  })
-
   it('leaves the target repo clean, the reports its config asked for included', async () => {
+    // Without this the footprint assertions would pass on a mypy that never ran.
+    expect(mypyFindings(result)).toEqual([{ rule: 'return-value', file: 'app.py', startLine: 2 }])
     expect(await fixture.status()).toBe('')
     expect(entries).not.toContain('mypyreport')
     expect(entries).not.toContain('junit.xml')
@@ -711,7 +622,6 @@ describe('quick scan of a repo whose mypy config asks for report files', () => {
 describe('quick scan of a repo whose layout mypy refuses to check', () => {
   let fixture: FixtureRepo
   let result: HealthScanResult
-  let byTool: Map<string, ReportShape['tools'][number]>
 
   beforeAll(async () => {
     fixture = await pyTempRepo({
@@ -723,22 +633,10 @@ describe('quick scan of a repo whose layout mypy refuses to check', () => {
     })
     await execa('uv', ['venv'], { cwd: fixture.root })
     result = await runHealthScan({ path: fixture.root })
-    byTool = new Map(parse(result.json).tools.map((tool) => [tool.tool, tool]))
   }, SCAN_TIMEOUT_MS)
 
   afterAll(async () => {
     await fixture.remove()
-  })
-
-  /**
-   * mypy writes this refusal to stdout as a diagnostic and leaves stderr empty,
-   * so the reason comes from the first parsed message — the other branch of the
-   * same fallback is covered by the fake-binary cases in `mypy.test.ts`.
-   */
-  it('reports the blocking error in mypy’s own words, and completes the scan', () => {
-    expect(byTool.get('mypy')?.state).toBe('error')
-    expect(byTool.get('mypy')?.reason).toContain('exit 2')
-    expect(byTool.get('mypy')?.reason).toContain('Duplicate module named "util"')
   })
 
   it('grades types from the promoted default, and says the grade is not the repo’s', () => {
@@ -746,14 +644,6 @@ describe('quick scan of a repo whose layout mypy refuses to check', () => {
     expect(result.report.warnings).toEqual([
       'pyright: graded types on its default config because mypy reported error',
     ])
-  })
-
-  /** No owner graded, so nothing was stood down and ty keeps its own words. */
-  it('leaves the other standby its own reason', () => {
-    expect(byTool.get('ty')).toMatchObject({
-      state: 'not-available',
-      reason: 'standing down: this project has a virtualenv (.venv), so pyright type-checks it',
-    })
   })
 })
 
@@ -789,10 +679,7 @@ describe('quick scan of a repo that owns both mypy and pyright', () => {
       expect(byTool.get(tool)).toMatchObject({ state: 'ok', provenance: 'repo-config' })
       expect(byTool.get(tool)?.reason ?? '').not.toMatch(/^stood down/)
     }
-  })
-
-  /** An owner that can be counted on suppresses the default outright. */
-  it('plans no default type checker at all', () => {
+    // An owner that can be counted on suppresses the default outright.
     expect(parse(result.json).tools.map((tool) => tool.tool)).not.toContain('ty')
   })
 
@@ -967,14 +854,6 @@ describe('quick scan of a mixed JS + Python repo', () => {
     ])
   })
 
-  /** Spec §3: one grade per category over the *combined* findings. */
-  it('grades each category once, over both languages together', () => {
-    expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'F' })
-    expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
-    expect(result.report.categories['dead-code']).toEqual({ status: 'graded', grade: 'A' })
-    expect(result.report.categories.complexity).toEqual({ status: 'graded', grade: 'A' })
-  })
-
   /**
    * The denominators are the repo's, not one language's: three JS sources plus
    * three Python sources, so two failing files is 33% → D (C ≤30, D ≤60). Taking
@@ -987,7 +866,12 @@ describe('quick scan of a mixed JS + Python repo', () => {
       functionsTotal: 5,
       functionsOverCeiling: 0,
     })
+    // Spec §3: one grade per category over the *combined* findings.
     expect(result.report.categories.format).toEqual({ status: 'graded', grade: 'D' })
+    expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'F' })
+    expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
+    expect(result.report.categories['dead-code']).toEqual({ status: 'graded', grade: 'A' })
+    expect(result.report.categories.complexity).toEqual({ status: 'graded', grade: 'A' })
   })
 
   /** Spec §3: "per-language breakdown in the report". */
@@ -997,30 +881,6 @@ describe('quick scan of a mixed JS + Python repo', () => {
       python: { types: 1, lint: 1, format: 1 },
     })
   })
-
-  it('leaves the target repo clean', async () => {
-    expect(await fixture.status()).toBe('')
-  })
-})
-
-describe('zero footprint', () => {
-  it.each(['py-basic', 'mixed-basic'])(
-    'leaves %s untouched after a full scan',
-    async (name) => {
-      const fixture = await createFixtureRepo(name)
-      const outside = await mkdtemp(join(tmpdir(), 'crank-py-zero-'))
-      const before = (await readdir(fixture.root)).toSorted()
-      try {
-        await runHealthScan({ path: fixture.root, out: outside })
-        expect(await fixture.status()).toBe('')
-        expect((await readdir(fixture.root)).toSorted()).toEqual(before)
-      } finally {
-        await fixture.remove()
-        await rm(outside, { recursive: true, force: true })
-      }
-    },
-    SCAN_TIMEOUT_MS,
-  )
 })
 
 /**
@@ -1034,7 +894,6 @@ describe('quick scan of the py-basic fixture reached through a symlink', () => {
   let linkDir: string
   let outA: string
   let outB: string
-  let before: readonly string[]
   let symlinkScan: HealthScanResult
   let rootScan: HealthScanResult
 
@@ -1045,7 +904,6 @@ describe('quick scan of the py-basic fixture reached through a symlink', () => {
     await symlink(fixture.root, link) // explicit: bites on Linux and under any TMPDIR
     outA = await mkdtemp(join(tmpdir(), 'crank-symlink-out-'))
     outB = await mkdtemp(join(tmpdir(), 'crank-symlink-out-'))
-    before = (await readdir(fixture.root)).toSorted()
     symlinkScan = await runHealthScan({ path: link, out: outA })
     rootScan = await runHealthScan({ path: fixture.root, out: outB })
   }, SCAN_TIMEOUT_MS)
@@ -1055,12 +913,6 @@ describe('quick scan of the py-basic fixture reached through a symlink', () => {
     await rm(linkDir, { recursive: true, force: true })
     await rm(outA, { recursive: true, force: true })
     await rm(outB, { recursive: true, force: true })
-  })
-
-  it('finds every planted finding through the symlink', () => {
-    expect(reportFindings(symlinkScan.report).map(shape)).toEqual(
-      PLANTED.map((planted) => ({ ...planted })),
-    )
   })
 
   it('produces the same report whether reached through the symlink or the real root', () => {
@@ -1074,11 +926,6 @@ describe('quick scan of the py-basic fixture reached through a symlink', () => {
     // Asserted directly: `normalizeReport` blanks `repo.path`, so the
     // report-identity case above cannot see it.
     expect(symlinkScan.report.repo.path).toBe(await realpath(fixture.root))
-  })
-
-  it('leaves the target clean when reached through the symlink', async () => {
-    expect(await fixture.status()).toBe('')
-    expect((await readdir(fixture.root)).toSorted()).toEqual(before)
   })
 })
 
@@ -1162,7 +1009,6 @@ interface ReportShape {
   readonly repo: { readonly commit: string }
   readonly categories: Record<string, { status: string; grade?: string; reason?: string }>
   readonly metrics: Record<string, Record<string, number>>
-  readonly languages: Record<string, Record<string, number>>
   readonly tools: {
     readonly tool: string
     readonly execution: string

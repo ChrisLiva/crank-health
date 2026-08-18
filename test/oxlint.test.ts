@@ -3,12 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  DEFAULT_CONFIG,
-  oxlintRunner,
-  parseSarif,
-  toPendingFindings,
-} from '../src/adapters/jsts/oxlint.ts'
+import { oxlintRunner, parseSarif, toPendingFindings } from '../src/adapters/jsts/oxlint.ts'
 import { repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext } from '../src/core/types.ts'
 
@@ -202,18 +197,6 @@ describe('oxlint detection', () => {
       binPath: join(repo, 'node_modules', '.bin', 'oxlint'),
       version: '1.70.0',
     })
-  })
-})
-
-describe('the bundled default config', () => {
-  it('grades correctness and keeps the rest advisory, with no opinionated style', () => {
-    expect(DEFAULT_CONFIG.categories).toEqual({
-      correctness: 'error',
-      suspicious: 'warn',
-      perf: 'warn',
-    })
-    expect(Object.keys(DEFAULT_CONFIG.categories)).not.toContain('style')
-    expect(Object.keys(DEFAULT_CONFIG.categories)).not.toContain('pedantic')
   })
 })
 

@@ -18,7 +18,6 @@ import { writeScratchRaw } from '../src/core/exec.ts'
 import {
   BASE_RAW_DIRNAME,
   DEFAULT_OUTPUT_DIRNAME,
-  REPO_RAW_DIRNAME,
   ROOT_RAW_DIRNAME,
   RUN_DIRNAME_PATTERN,
   createOutputDir,
@@ -39,19 +38,21 @@ function projectPrefix(path: string): string {
  * called `root/`.
  */
 describe('rawPrefix', () => {
-  it('gives the reserved meanings their reserved directories', () => {
-    expect(rawPrefix(REPO_SCOPE, true)).toBe(REPO_RAW_DIRNAME)
-    expect(projectPrefix('.')).toBe(ROOT_RAW_DIRNAME)
-  })
-
-  it('keeps an ordinary project at its own path', () => {
-    expect(projectPrefix('packages/api')).toBe('packages/api')
-    expect(projectPrefix('rooted')).toBe('rooted')
-    expect(projectPrefix('packages/root')).toBe('packages/root')
-  })
-
   it('never collides a real project with a reserved directory', () => {
-    const paths = ['.', 'root', 'repo', 'base', 'root_', 'repo_', 'root/nested', 'repo/nested']
+    const paths = [
+      '.',
+      'root',
+      'repo',
+      'base',
+      'root_',
+      'repo_',
+      'root/nested',
+      'repo/nested',
+      // …while an ordinary project keeps its own path, escape or no escape.
+      'packages/api',
+      'rooted',
+      'packages/root',
+    ]
     const prefixes = [rawPrefix(REPO_SCOPE, true), ...paths.map((path) => projectPrefix(path))]
 
     expect(new Set(prefixes).size).toBe(prefixes.length)
@@ -65,6 +66,9 @@ describe('rawPrefix', () => {
       'repo__',
       'root_/nested',
       'repo_/nested',
+      'packages/api',
+      'rooted',
+      'packages/root',
     ])
   })
 
@@ -200,10 +204,7 @@ describe('createOutputDir', () => {
         expect(() => out.path(name)).toThrow(/unsafe output file name/)
       }),
     )
-  })
-
-  it('allows a nested raw path', async () => {
-    const out = await createOutputDir(repo)
+    // The positive control: a nested raw path is still allowed.
     expect(out.path('raw/oxlint.json')).toBe(join(out.root, 'raw', 'oxlint.json'))
   })
 
@@ -230,9 +231,8 @@ describe('createOutputDir', () => {
       await rm(linkDir, { recursive: true, force: true })
     }
     expect(await readdir(repo)).toEqual([])
-  })
 
-  it('accepts a directory inside the repo, which is what the default is', async () => {
+    // The positive control: a directory *inside* the repo — what the default is.
     const out = await createRunDirectory(repo, join(repo, DEFAULT_OUTPUT_DIRNAME))
     expect(out.root).toBe(join(repo, DEFAULT_OUTPUT_DIRNAME))
   })

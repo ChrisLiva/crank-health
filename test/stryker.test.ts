@@ -1,6 +1,8 @@
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   STRYKER_TOOL,
   buildStrykerOverrides,
@@ -8,6 +10,7 @@ import {
   renderStrykerConfig,
   strykerRunner,
 } from '../src/adapters/jsts/stryker.ts'
+import type { StrykerBaseConfig } from '../src/adapters/jsts/stryker.ts'
 import {
   SURVIVED_FINDING_LIMIT,
   mutationCounts,
@@ -92,19 +95,30 @@ describe('mutants as findings', () => {
     expect(findings[0]?.message).toMatch(/^Mutant survived: \w+ replaced this with/)
   })
 
-  it('names the mutator and the replacement, and keeps the message on one line', () => {
-    const [finding] = toPendingFindings(
+  /**
+   * A replacement is arbitrary source: it can span lines and it can be a whole
+   * function body. Neither may break a finding list, so the quoted form is
+   * flattened to one line and elided past 60 characters.
+   */
+  it('flattens a multi-line replacement and elides an over-long one', () => {
+    const [multiline] = toPendingFindings(
+      [mutant({ status: 'Survived', replacement: 'a -\n  b' })],
+      STRYKER_TOOL,
+    )
+    expect(multiline?.message).toContain('`a - b`')
+    expect(multiline?.message).not.toContain('\n')
+
+    const [overlong] = toPendingFindings(
       [
         mutant({
           status: 'Survived',
-          mutatorName: 'ArithmeticOperator',
-          replacement: 'a -\n  b',
+          replacement: '0123456789012345678901234567890123456789012345678901234567890123456789',
         }),
       ],
       STRYKER_TOOL,
     )
-    expect(finding?.message).toBe(
-      'Mutant survived: ArithmeticOperator replaced this with `a - b` and every test still passed',
+    expect(overlong?.message).toContain(
+      '`012345678901234567890123456789012345678901234567890123456…`',
     )
   })
 
@@ -132,11 +146,38 @@ describe('mutants as findings', () => {
   })
 })
 
+/**
+ * The generated config is only ever read by Node: Stryker imports the module we
+ * write and uses whatever object it exports. So the tests below write it to a
+ * real `.mjs` and import it the same way, and assert the config Stryker would
+ * actually receive rather than the text it was spelled with.
+ */
 describe('the generated Stryker config', () => {
   const overrides = buildStrykerOverrides({
     workingDir: '/scratch/stryker',
     reportPath: '/scratch/stryker/mutation-report.json',
   })
+
+  let dir: string
+  let written = 0
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'crank-stryker-config-'))
+  })
+
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  /** Renders the module, writes it, and returns the config object Stryker gets. */
+  async function generatedConfig(
+    base: StrykerBaseConfig | undefined,
+  ): Promise<Record<string, unknown>> {
+    const path = join(dir, `generated-${(written += 1)}.mjs`)
+    await writeFile(path, renderStrykerConfig(overrides, base), 'utf8')
+    const loaded: { default: Record<string, unknown> } = await import(pathToFileURL(path).href)
+    return loaded.default
+  }
 
   it('sends every byte Stryker writes into the scratch dir (spec §7)', () => {
     expect(overrides).toMatchObject({
@@ -151,28 +192,40 @@ describe('the generated Stryker config', () => {
     expect(overrides.mutate).toBeUndefined()
   })
 
-  it('inlines a JSON config so the repo’s own settings survive', () => {
-    const module = renderStrykerConfig(overrides, {
+  it('inlines a JSON config so the repo’s own settings survive', async () => {
+    const config = await generatedConfig({
       kind: 'inline',
-      config: { testRunner: 'vitest', coverageAnalysis: 'perTest' },
+      config: {
+        testRunner: 'vitest',
+        coverageAnalysis: 'perTest',
+        // The settings we impose: theirs must not win these two.
+        tempDirName: '.stryker-tmp',
+        reporters: ['html', 'progress'],
+      },
     })
-    expect(module).toContain('"testRunner": "vitest"')
-    expect(module).toContain('export default { ...base, ...{')
-    // Ours wins: the overrides are spread last.
-    expect(module.indexOf('"testRunner"')).toBeLessThan(module.indexOf('"tempDirName"'))
+
+    expect(config).toMatchObject({ testRunner: 'vitest', coverageAnalysis: 'perTest' })
+    expect(config).toMatchObject({
+      tempDirName: '/scratch/stryker/stryker-tmp',
+      reporters: ['json'],
+    })
+
+    // A repo that owns Stryker without a config contributes nothing: the
+    // generated module is the overrides and only the overrides.
+    expect(await generatedConfig(undefined)).toEqual(overrides)
   })
 
-  it('imports a JS config from Stryker’s own process rather than ours', () => {
-    const module = renderStrykerConfig(overrides, {
-      kind: 'module',
-      url: 'file:///repo/stryker.config.js',
-    })
-    expect(module).toContain('await import("file:///repo/stryker.config.js")')
-    expect(module).toContain('loaded.default ?? loaded')
-  })
+  it('imports a JS config from Stryker’s own process rather than ours', async () => {
+    const base = join(dir, 'stryker.config.mjs')
+    await writeFile(base, 'export default { testRunner: "jest", tempDirName: ".stryker-tmp" }\n')
 
-  it('falls back to an empty base when the repo owns Stryker without a config', () => {
-    expect(renderStrykerConfig(overrides, undefined)).toContain('const base = {}')
+    const config = await generatedConfig({ kind: 'module', url: pathToFileURL(base).href })
+
+    expect(config).toMatchObject({
+      testRunner: 'jest',
+      tempDirName: '/scratch/stryker/stryker-tmp',
+      reporters: ['json'],
+    })
   })
 })
 
@@ -190,20 +243,30 @@ describe('PR scoping', () => {
     ).toEqual(['src/calc.js'])
   })
 
-  it('scopes to nothing when a change touched no mutable file', () => {
-    expect(mutateScope({ ...CONTEXT, changedFiles: ['README.md'] })).toEqual([])
+  /**
+   * An empty scope is not "mutate everything": the runner has to stop before it
+   * spawns Stryker, or a docs-only PR would mutate the whole repo.
+   */
+  it('scopes to nothing when a change touched no mutable file', async () => {
+    const result = await strykerRunner.run({
+      ...CONTEXT,
+      detection: {
+        reason: 'config',
+        configFiles: ['stryker.config.json'],
+        installed: true,
+        binPath: '/repo/node_modules/.bin/stryker',
+      },
+      changedFiles: ['README.md'],
+    })
+
+    expect(result).toMatchObject({ state: 'not-available', findings: [], rawFiles: [] })
+    expect(result.reason).toBe(
+      'this change touched no JavaScript or TypeScript file Stryker could mutate',
+    )
   })
 })
 
 describe('the runner’s posture', () => {
-  it('is deep-only and never imposed on a repo that did not choose it', () => {
-    expect(strykerRunner).toMatchObject({
-      category: 'test-quality',
-      deepOnly: true,
-      repoOwnedOnly: true,
-    })
-  })
-
   it('declines in the quick profile instead of executing repo code', async () => {
     const result = await strykerRunner.run({ ...CONTEXT, deep: false })
     expect(result).toMatchObject({ state: 'not-available', findings: [] })

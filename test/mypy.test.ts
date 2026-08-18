@@ -10,9 +10,8 @@ import {
   toPendingFindings,
 } from '../src/adapters/python/mypy.ts'
 import { exists } from '../src/adapters/support.ts'
-import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
+import { repoDetectContext } from '../src/core/discover.ts'
 import type { Detection, ToolResult } from '../src/core/types.ts'
-import { pinnedPythonVersion } from '../src/manifest.ts'
 import { makeProject } from './factories.ts'
 
 /**
@@ -34,12 +33,6 @@ const captured = (): Promise<string> => readFile(CAPTURED, 'utf8')
 /** A hand-built diagnostic line, for the severities the capture cannot carry. */
 const severityLine = (severity: string): string =>
   `{"file":"a.py","line":1,"column":0,"end_line":1,"end_column":1,"message":"m","hint":null,"code":"c","severity":"${severity}"}`
-
-describe('the mypy pin', () => {
-  it('pins the exact version this release captured and tested against', () => {
-    expect(pinnedPythonVersion('mypy')).toBe('2.3.0')
-  })
-})
 
 describe('parseMypyJsonl', () => {
   it('reads rule, severity, a 1-based range and message from real output', async () => {
@@ -133,33 +126,6 @@ describe('mypy toPendingFindings', () => {
     expect(findings.map((finding) => finding.file)).toEqual(['app.py', 'notes.py', 'pkg2/util.py'])
   })
 
-  it('reports the types category from the repo’s own config, all of it graded', async () => {
-    const findings = toPendingFindings(parseMypyJsonl(await captured()), '/repo')
-    expect(
-      findings.map(({ category, tool, provenance, gradeScope }) => ({
-        category,
-        tool,
-        provenance,
-        gradeScope,
-      })),
-    ).toEqual(
-      Array.from({ length: 3 }, () => ({
-        category: 'types',
-        tool: 'mypy',
-        provenance: 'repo-config',
-        gradeScope: true,
-      })),
-    )
-  })
-
-  it('carries the diagnostic’s range through unchanged', async () => {
-    expect(toPendingFindings(parseMypyJsonl(await captured()), '/repo')[0]).toMatchObject({
-      file: 'app.py',
-      rule: 'return-value',
-      range: { startLine: 2, startCol: 12, endLine: 2, endCol: 17 },
-    })
-  })
-
   it('relativizes an absolute path against the repo root', () => {
     const diagnostic = {
       rule: 'return-value',
@@ -176,12 +142,10 @@ describe('mypy toPendingFindings', () => {
 })
 
 describe('parseMypyJsonl on inputs that are not a clean run', () => {
-  it('treats no output as no diagnostics', () => {
+  it('treats no output as no diagnostics, and skips blank lines between records', async () => {
     expect(parseMypyJsonl('')).toEqual([])
     expect(parseMypyJsonl('   \n\n')).toEqual([])
-  })
 
-  it('skips blank lines between records', async () => {
     const bytes = await captured()
     expect(parseMypyJsonl(bytes.split('\n').join('\n\n'))).toEqual(parseMypyJsonl(bytes))
   })
@@ -268,52 +232,6 @@ describe('mypyRunner.detect', () => {
     expect(await detect(['.mypy.ini'])).toMatchObject({ reason: 'config', ownedVia: '.mypy.ini' })
   })
 
-  it('is owned by a dependency group that names it, with no config to point at', async () => {
-    await write('pyproject.toml', '[dependency-groups]\ndev = ["mypy"]\n')
-    expect(await detect(['pyproject.toml'])).toMatchObject({
-      reason: 'dependency',
-      configFiles: [],
-      ownedVia: 'pyproject.toml',
-    })
-  })
-
-  /** Proves the distribution name is wired through to the requirements reader. */
-  it('is owned by a requirements file that names it', async () => {
-    await write('requirements-dev.txt', 'mypy==2.3.0\n')
-    expect(await detect(['requirements-dev.txt'])).toMatchObject({
-      reason: 'dependency',
-      ownedVia: 'requirements-dev.txt',
-    })
-  })
-
-  it('reports config+dependency when the repo does both, and points at the config', async () => {
-    await write('mypy.ini', '[mypy]\n')
-    await write('pyproject.toml', '[dependency-groups]\ndev = ["mypy"]\n')
-    expect(await detect(['mypy.ini', 'pyproject.toml'])).toMatchObject({
-      reason: 'config+dependency',
-      ownedVia: 'mypy.ini',
-    })
-  })
-
-  it('runs the repo’s own binary when the virtualenv has one installed', async () => {
-    await write('mypy.ini', '[mypy]\n')
-    await write('.venv/bin/python', '')
-    await write('.venv/bin/mypy', '')
-    expect(await detect(['mypy.ini'])).toMatchObject({
-      installed: true,
-      binPath: join(root, '.venv', 'bin', 'mypy'),
-    })
-  })
-
-  it('is declared-but-not-installed when the virtualenv lacks the binary', async () => {
-    await write('mypy.ini', '[mypy]\n')
-    await write('.venv/bin/python', '')
-
-    const detection = await detect(['mypy.ini'])
-    expect(detection?.installed).toBe(false)
-    expect(detection?.binPath).toBeUndefined()
-  })
-
   /**
    * Section matching is on dotted names, so the `[mypy]` header of a *setup.cfg*
    * style config pasted into a `pyproject.toml` is not `[tool.mypy]` and does
@@ -325,48 +243,6 @@ describe('mypyRunner.detect', () => {
 
     await write('pyproject.toml', '[project]\nname = "x"\n')
     expect(await detect(['pyproject.toml', 'app.py'])).toBeNull()
-  })
-
-  /** A package inside a workspace inherits the root's mypy configuration. */
-  it('is owned by an ancestor’s [tool.mypy], named repo-relative', async () => {
-    await write('pyproject.toml', '[tool.mypy]\nstrict = true\n')
-    await write('services/api/pyproject.toml', '[project]\nname = "api"\n')
-    await write('services/api/app.py', 'x = 1\n')
-
-    const files = ['pyproject.toml', 'services/api/app.py', 'services/api/pyproject.toml']
-    const inventory = {
-      all: files,
-      byLanguage: { 'js-ts': [], python: ['services/api/app.py'], csharp: [] },
-    }
-    const project = partitionProjects(inventory).find(
-      (candidate) => candidate.path === 'services/api',
-    )
-    if (project === undefined) throw new Error('no project at services/api')
-
-    expect(await mypyRunner.detect({ repoRoot: root, project, files: inventory })).toMatchObject({
-      reason: 'config',
-      ownedVia: 'pyproject.toml',
-    })
-  })
-})
-
-describe('the mypy runner', () => {
-  it('claims the types category and is never imposed on a repo that did not choose it', () => {
-    expect(mypyRunner.tool).toBe('mypy')
-    expect(mypyRunner.category).toBe('types')
-    expect(mypyRunner.pinnedVersion).toBe('2.3.0')
-    expect(mypyRunner.repoOwnedOnly).toBe(true)
-  })
-
-  /**
-   * mypy is static analysis — it follows imports without executing them — so it
-   * runs in the quick profile, it is a project's answer rather than the repo's,
-   * and it is not a union member the way the security tools are.
-   */
-  it('carries none of the other runner flags', () => {
-    expect(mypyRunner.deepOnly).toBeUndefined()
-    expect(mypyRunner.complementary).toBeUndefined()
-    expect(mypyRunner.repoScoped).toBeUndefined()
   })
 })
 

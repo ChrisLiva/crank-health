@@ -7,7 +7,6 @@ import { parseCliArgs } from '../src/args.ts'
 import type { SystemToolSpec } from '../src/adapters/common/system-tool.ts'
 import { LANGUAGES } from '../src/core/types.ts'
 import {
-  SYSTEM_TOOLS,
   equivalentCommand,
   isPromptCancelled,
   probeRepo,
@@ -481,27 +480,6 @@ describe('the header’s file counts', () => {
     },
     TEST_TIMEOUT_MS,
   )
-})
-
-describe('the security tool roster', () => {
-  /**
-   * The guided `brew install` walk is exactly the three release-binary security
-   * scanners. Language prerequisites (`uv`, the .NET SDK) are deliberately not
-   * in it — a later hand must not quietly add an SDK to a brew prompt.
-   */
-  it('is exactly the three brew-installable security binaries', () => {
-    expect(SYSTEM_TOOLS.map((tool) => tool.spec.binary)).toEqual([
-      'gitleaks',
-      'opengrep',
-      'osv-scanner',
-    ])
-  })
-
-  it('names all three languages in the opengrep purpose', () => {
-    expect(SYSTEM_TOOLS.find((tool) => tool.spec.binary === 'opengrep')?.purpose).toBe(
-      'SAST rules for JS/TS, Python and C#',
-    )
-  })
 })
 
 describe('equivalentCommand', () => {

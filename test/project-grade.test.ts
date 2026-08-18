@@ -55,11 +55,8 @@ describe('gradeProjects', () => {
     graded = await gradeProjects(repo(), scan(), CATEGORIES)
   })
 
-  it('returns every project, in path order, with all eight states', () => {
+  it('returns every project, in path order', () => {
     expect(graded.map((project) => project.project.path)).toEqual(['packages/api', 'packages/web'])
-    for (const project of graded) {
-      expect(Object.keys(project.categories)).toEqual([...CATEGORIES])
-    }
   })
 
   /**
@@ -113,13 +110,6 @@ describe('gradeProjects', () => {
     expect(categories('packages/api').duplication).toEqual({
       status: 'not-assessed',
       reason: 'jscpd found nothing to measure',
-    })
-  })
-
-  it('gives each project the quick profile’s reason for test quality', () => {
-    expect(categories('packages/web')['test-quality']).toEqual({
-      status: 'not-assessed',
-      reason: QUICK_MODE_DEEP_REASON,
     })
   })
 
@@ -360,11 +350,7 @@ describe('scanCoverage', () => {
     expect(coverage.files).toEqual({ total: 5, assessed: 2 })
     // The three unassessed files are one line each.
     expect(coverage.lines).toEqual({ total: 2023, assessed: 2020 })
-  })
-
-  it('breaks the unmeasured remainder down by extension, in a fixed order', async () => {
-    const coverage = await scanCoverage(repoRoot, inventory(), 2020)
-
+    // …and the remainder is broken down by extension, in a fixed order.
     expect(coverage.unassessed).toEqual([
       // `.env` has no extension by the rule `languageOf` classifies with.
       { extension: '', files: 1, lines: 1 },

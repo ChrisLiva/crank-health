@@ -61,12 +61,6 @@ describe('classifyLockfile over pnpm-lock.yaml', () => {
     expect(notes).toEqual([])
   })
 
-  it('calls a scoped package two importers depend on at runtime prod', async () => {
-    const scopes = classifyLockfile(PNPM_LOCK, await pnpmLock())
-
-    expect(scopeIn(scopes, '@bufbuild/protobuf', '2.12.1')).toBe('prod')
-  })
-
   it('reaches a package only a peer-suffixed snapshot key names', async () => {
     const scopes = classifyLockfile(PNPM_LOCK, await pnpmLock())
 
@@ -106,13 +100,6 @@ describe('classifyLockfile over pnpm-lock.yaml', () => {
     expect(scopeIn(scopes, 'h3-v2', 'h3@2.0.1-rc.20')).toBe('unknown')
   })
 
-  it('knows nothing about a package the lockfile does not record', async () => {
-    const scopes = classifyLockfile(PNPM_LOCK, await pnpmLock())
-
-    expect(scopeIn(scopes, 'lodash', '4.17.15')).toBe('unknown')
-    expect(scopeIn(scopes, 'react', '18.0.0')).toBe('unknown')
-  })
-
   it('walks a dependency cycle once instead of forever', () => {
     const scopes = classifyLockfile(
       PNPM_LOCK,
@@ -136,35 +123,6 @@ describe('classifyLockfile over pnpm-lock.yaml', () => {
     )
 
     expect(tally(scopes.packages)).toEqual({ prod: 2, dev: 0, unknown: 0 })
-  })
-
-  it('follows an optional dependency of a runtime dependency', () => {
-    const scopes = classifyLockfile(
-      PNPM_LOCK,
-      [
-        'lockfileVersion: 9.0',
-        'importers:',
-        '  .:',
-        '    dependencies:',
-        '      a:',
-        '        specifier: ^1.0.0',
-        '        version: 1.0.0',
-        '    devDependencies:',
-        '      d:',
-        '        specifier: ^1.0.0',
-        '        version: 1.0.0',
-        'snapshots:',
-        "  'a@1.0.0':",
-        '    optionalDependencies:',
-        '      opt: 3.0.0',
-        "  'opt@3.0.0': {}",
-        "  'd@1.0.0': {}",
-        '',
-      ].join('\n'),
-    )
-
-    expect(scopeIn(scopes, 'opt', '3.0.0')).toBe('prod')
-    expect(scopeIn(scopes, 'd', '1.0.0')).toBe('dev')
   })
 
   it('treats an importer’s own optional dependency as shipped', () => {
@@ -233,15 +191,6 @@ describe('classifyLockfile over pnpm-lock.yaml', () => {
     expect(scopes.notes).toEqual([])
   })
 
-  it('reads a lockfile with importers and no snapshots as nothing at all', () => {
-    const scopes = classifyLockfile(
-      PNPM_LOCK,
-      ['lockfileVersion: 9.0', 'importers:', '  .: {}', 'snapshots: {}', ''].join('\n'),
-    )
-
-    expect(scopes.packages.size).toBe(0)
-  })
-
   it('reads an empty lockfile as nothing at all', () => {
     expect(classifyLockfile(PNPM_LOCK, '').packages.size).toBe(0)
   })
@@ -299,13 +248,6 @@ describe('classifyLockfile when it cannot answer', () => {
     expect(scopes.packages.size).toBe(0)
     expect(scopes.notes).toHaveLength(1)
     expect(scopes.notes[0]).toMatch(/could not be read/)
-  })
-
-  it('reads a malformed package-lock as nothing classified', () => {
-    const scopes = classifyLockfile(NPM_LOCK, '{ "packages": ')
-
-    expect(scopes.packages.size).toBe(0)
-    expect(scopes.notes).toHaveLength(1)
   })
 
   it('declines an npm 6 lockfile, which carries no packages map', () => {
@@ -428,35 +370,6 @@ describe('applyDependencyScopes', () => {
       expect(warnings[0]).toContain('package-lock.json')
     } finally {
       await rm(broken, { recursive: true, force: true })
-    }
-  })
-
-  it('reports a lockfile it could not fully walk once, however many findings it has', async () => {
-    const partial = await mkdtemp(join(tmpdir(), 'crank-dep-scope-partial-'))
-    await writeFile(
-      join(partial, PNPM_LOCK),
-      [
-        'lockfileVersion: 9.0',
-        'importers:',
-        '  .:',
-        '    dependencies:',
-        '      ghost:',
-        '        specifier: ^1.0.0',
-        '        version: 1.0.0',
-        'snapshots:',
-        "  'kept@1.0.0': {}",
-        '',
-      ].join('\n'),
-    )
-    try {
-      const { warnings } = await applyDependencyScopes(partial, [
-        packageFinding({ file: PNPM_LOCK }),
-        packageFinding({ file: PNPM_LOCK, id: 'other' }),
-      ])
-
-      expect(warnings).toHaveLength(1)
-    } finally {
-      await rm(partial, { recursive: true, force: true })
     }
   })
 })

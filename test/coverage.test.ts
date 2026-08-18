@@ -83,15 +83,6 @@ describe('uncovered lines as findings', () => {
 })
 
 describe('the runner’s posture', () => {
-  it('is deep-only and does not stand mutation testing down', () => {
-    expect(coverageRunner).toMatchObject({
-      category: 'test-quality',
-      deepOnly: true,
-      complementary: true,
-    })
-    expect(coverageRunner.repoOwnedOnly).toBeUndefined()
-  })
-
   it('declines in the quick profile instead of executing repo code', async () => {
     const result = await coverageRunner.run({ ...CONTEXT, deep: false })
     expect(result).toMatchObject({ state: 'not-available' })

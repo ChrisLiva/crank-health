@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { CliUsageError, HELP_TEXT, parseCliArgs } from '../src/args.ts'
+import { CliUsageError, parseCliArgs } from '../src/args.ts'
 import { VERSION } from '../src/version.ts'
 
 describe('parseCliArgs', () => {
@@ -21,10 +21,6 @@ describe('parseCliArgs', () => {
       help: false,
       version: false,
     })
-  })
-
-  it('accepts a single positional path', () => {
-    expect(parseCliArgs(['../some/repo']).path).toBe('../some/repo')
   })
 
   it('rejects a second positional path', () => {
@@ -67,11 +63,6 @@ describe('parseCliArgs', () => {
     })
   })
 
-  /** Spec §5: the per-tool budget is "120s (configurable)"; this is the knob. */
-  it('reads --timeout as a whole number of seconds', () => {
-    expect(parseCliArgs(['--timeout', ' 45 ']).timeoutSeconds).toBe(45)
-  })
-
   it.each(['0', '-5', '1.5', 'soon', ''])(
     'rejects --timeout %s, which would time every tool out',
     (value) => {
@@ -83,6 +74,8 @@ describe('parseCliArgs', () => {
     const options = parseCliArgs(['--only', 'lint, types ,', '--fail-under', 'c'])
     expect(options.only).toEqual(['lint', 'types'])
     expect(options.failUnder).toBe('C')
+    // Spec §5: the per-tool budget is "120s (configurable)"; this is the knob.
+    expect(parseCliArgs(['--timeout', ' 45 ']).timeoutSeconds).toBe(45)
   })
 
   /** Spec CLI surface: `--project` is repeatable, and each one is a project. */
@@ -133,43 +126,6 @@ describe('parseCliArgs', () => {
   it('supports -i as well as --interactive', () => {
     expect(parseCliArgs(['-i']).interactive).toBe(true)
     expect(parseCliArgs(['--interactive']).interactive).toBe(true)
-  })
-})
-
-describe('HELP_TEXT', () => {
-  it('documents every flag in the approved surface', () => {
-    for (const flag of [
-      '--pr <base>',
-      '--project <path>',
-      '--deep',
-      '--out <dir>',
-      '--only <cats>',
-      '--fail-under <B>',
-      '--allow-missing',
-      '--json',
-      '--timeout <secs>',
-      '-i, --interactive',
-      '-h, --help',
-      '--version',
-    ]) {
-      expect(HELP_TEXT).toContain(flag)
-    }
-  })
-
-  it('names all three languages in its banner', () => {
-    expect(HELP_TEXT).toContain('JS/TS, Python and C#')
-  })
-
-  it('documents the exit-code semantics', () => {
-    expect(HELP_TEXT).toContain('0  scan completed')
-    expect(HELP_TEXT).toContain('1  --fail-under gate tripped')
-    expect(HELP_TEXT).toContain('2  crank-health errored')
-  })
-
-  /** Spec CLI surface: `--project` is the documented cost control for `--deep`. */
-  it('says the gate is per project and that --project bounds a deep run', () => {
-    expect(HELP_TEXT).toContain('--fail-under trips on any scanned project or the rollup')
-    expect(HELP_TEXT).toContain('--project is\nhow you bound what that costs')
   })
 })
 

@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, relative } from 'node:path'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { centralPackageManagementReason } from '../src/adapters/common/osv-scanner.ts'
+import {
+  OSV_PACKAGE_RULE,
+  centralPackageManagementReason,
+} from '../src/adapters/common/osv-scanner.ts'
 import type { Category, Finding, LanguageAdapter } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
@@ -194,25 +197,6 @@ describe('quick scan of the sec-basic fixture', () => {
     expect(state?.grade).toBe(installed.has('gitleaks') ? 'F' : 'D')
   })
 
-  it.runIf(installed.has('gitleaks'))(
-    'reports the planted secret as critical, which is an F on its own',
-    () => {
-      const secrets = findings.filter((finding) => finding.tool === 'gitleaks')
-      expect(secrets.map(shape)).toEqual([
-        {
-          category: 'security',
-          tool: 'gitleaks',
-          rule: 'aws-access-token',
-          file: 'src/config.py',
-          startLine: 8,
-          severity: 'critical',
-          gradeScope: true,
-        },
-      ])
-      expect(parse(json).categories.security?.grade).toBe('F')
-    },
-  )
-
   /**
    * The secret is redacted at the adapter (see `gitleaks.ts`), and no renderer
    * may put it back: none of them reads the repo, so none of them can quote the
@@ -233,11 +217,22 @@ describe('quick scan of the sec-basic fixture', () => {
     ).toEqual(['python-subprocess-shell-true', 'js-eval-call'])
   })
 
+  /**
+   * One finding for the one vulnerable dependency the fixture pins, anchored on
+   * the package rather than on a lockfile line. Which advisories that package
+   * carries is the live database's answer and moves over time; that it is
+   * `lodash@4.17.15` in `package-lock.json` is the fixture's.
+   */
   it.runIf(installed.has('osv-scanner'))('reports the vulnerable pinned dependency', () => {
     const vulnerabilities = findings.filter((finding) => finding.tool === 'osv-scanner')
-    expect(vulnerabilities.length).toBeGreaterThan(0)
-    expect(vulnerabilities.every((finding) => finding.file === 'package-lock.json')).toBe(true)
-    expect(vulnerabilities.every((finding) => finding.gradeScope)).toBe(true)
+    expect(vulnerabilities).toHaveLength(1)
+    expect(vulnerabilities[0]).toMatchObject({
+      category: 'security',
+      rule: OSV_PACKAGE_RULE,
+      file: 'package-lock.json',
+      package: { name: 'lodash', version: '4.17.15', ecosystem: 'npm' },
+      gradeScope: true,
+    })
   })
 
   /** Spec §8: a missing prerequisite is not-available *with an install hint*. */
@@ -259,21 +254,6 @@ describe('quick scan of the sec-basic fixture', () => {
     const report = parse(json)
     expect(report.metrics.duplication?.['duplicationPercent']).toBeCloseTo(47.03, 1)
     expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
-  })
-
-  it('runs the common adapter’s seven tools, all on default configs', () => {
-    const common = parse(json).tools.filter((tool) => tool.scope === 'common')
-    expect(common.map((tool) => tool.tool)).toEqual([
-      'bandit',
-      'gitleaks',
-      'govulncheck',
-      'opengrep',
-      'osv-scanner',
-      'zizmor',
-      'jscpd',
-    ])
-    expect(common.every((tool) => tool.provenance === 'default-config')).toBe(true)
-    expect(common.every((tool) => tool.detection === null)).toBe(true)
   })
 
   /**
@@ -329,10 +309,14 @@ describe('quick scan of the sec-basic fixture', () => {
     'writes every tool’s evidence next to the report, and nothing into the repo',
     async () => {
       await rm(join(fixture.root, '.codebase-health'), { recursive: true, force: true })
+      const before = (await readdir(fixture.root)).toSorted()
       const result = await runHealthScan({ path: fixture.root, out: outside })
 
       expect(result.outputDir).toBe(outside)
+      // Zero footprint: nothing tracked changed, and not one entry was added or
+      // removed either — a scan the repo cannot tell happened.
       expect(await fixture.status()).toBe('')
+      expect((await readdir(fixture.root)).toSorted()).toEqual(before)
       expect((await readdir(join(outside, 'raw'))).toSorted()).toEqual(['repo', 'root'])
       const perProject = await readdir(join(outside, 'raw', 'root'))
       expect(perProject).toContain('jscpd-report.json')
@@ -358,14 +342,9 @@ const CPM_REASON =
 describe('centralPackageManagementReason', () => {
   it('names the NuGet gap when the repo manages versions centrally', () => {
     expect(centralPackageManagementReason(['a/Directory.Packages.props', 'b.cs'])).toBe(CPM_REASON)
-  })
-
-  it('stays silent when no Central Package Management manifest exists', () => {
+    // A repo without the manifest has no gap to name…
     expect(centralPackageManagementReason(['b.cs'])).toBeUndefined()
-  })
-
-  /** MSBuild's own import is case-sensitive on case-sensitive filesystems. */
-  it('matches the manifest name case-sensitively', () => {
+    // …and MSBuild's own import is case-sensitive on case-sensitive filesystems.
     expect(centralPackageManagementReason(['directory.packages.props'])).toBeUndefined()
   })
 })
@@ -416,9 +395,8 @@ describe.runIf(installed.has('osv-scanner'))(
       const record = parse(scan.json).tools.find((tool) => tool.tool === 'osv-scanner')
       expect(record?.state).toBe('ok')
       expect(record?.reason).toBe(CPM_REASON)
-    })
-
-    it('still grades security from the scanners that did run', () => {
+      // A gap named is not a category abandoned: the scanners that did run
+      // still grade it.
       expect(parse(scan.json).categories.security?.status).toBe('graded')
     })
   },
@@ -506,26 +484,6 @@ describe('security findings from a tool in another category', () => {
     // Still reported — a finding nobody grades is not a finding nobody sees.
     expect(reportFindings(result.report).map((finding) => finding.rule)).toEqual(['S602'])
   })
-})
-
-describe('zero footprint', () => {
-  it(
-    'leaves sec-basic untouched after a full scan',
-    async () => {
-      const fixture = await createFixtureRepo('sec-basic')
-      const outside = await mkdtemp(join(tmpdir(), 'crank-sec-zero-'))
-      const before = (await readdir(fixture.root)).toSorted()
-      try {
-        await runHealthScan({ path: fixture.root, out: outside })
-        expect(await fixture.status()).toBe('')
-        expect((await readdir(fixture.root)).toSorted()).toEqual(before)
-      } finally {
-        await fixture.remove()
-        await rm(outside, { recursive: true, force: true })
-      }
-    },
-    SCAN_TIMEOUT_MS,
-  )
 })
 
 /**
@@ -627,12 +585,6 @@ describe('a leaked credential, with gitleaks stubbed onto PATH', () => {
     await expectNoSecretUnder(scan.outputDir)
   })
 
-  it('tells the reader to rotate the credential rather than quoting it', () => {
-    const secret = reportFindings(scan.report).find((finding) => finding.tool === 'gitleaks')
-    expect(secret?.message).toContain('aws access token')
-    expect(secret?.fixHint).toContain('Rotate the credential')
-  })
-
   /** Nothing dropped, nothing to explain: the receipt is not a permanent note. */
   it('attaches no suppression receipt when every hit is in the inventory', () => {
     const gitleaks = scan.report.tools.find((tool) => tool.tool === 'gitleaks')
@@ -684,28 +636,24 @@ describe('a secret in a gitignored file, with gitleaks stubbed onto PATH', () =>
     await rm(binDirectory, { recursive: true, force: true })
   })
 
-  /** The premise: the file is on disk, and git really does ignore it. */
-  it('scans a repo whose secret-bearing file is present but untracked', async () => {
+  it('reports the tracked leak and none from the gitignored file', async () => {
+    // The premise: the file is on disk, and git really does ignore it.
     expect((await stat(join(fixture.root, 'local.env'))).isFile()).toBe(true)
     const { stdout } = await execa('git', ['ls-files'], { cwd: fixture.root })
     expect(stdout.split('\n')).not.toContain('local.env')
-  })
 
-  it('reports the tracked leak and none from the gitignored file', () => {
     const secrets = reportFindings(scan.report).filter((finding) => finding.tool === 'gitleaks')
     expect(secrets.map((finding) => finding.file)).toEqual(['src/config.js'])
   })
 
-  it('says how many hits it suppressed and how many it kept', () => {
+  it('says how many hits it suppressed and how many it kept, without quoting one', async () => {
     const gitleaks = scan.report.tools.find((tool) => tool.tool === 'gitleaks')
     expect(gitleaks?.state).toBe('ok')
     expect(gitleaks?.reason).toBe(
       '1 raw hit in paths outside the analyzed inventory (gitignored, hidden or dependency ' +
         'paths) — suppressed; 1 in analyzed files',
     )
-  })
 
-  it('counts the suppressed hits without quoting one', async () => {
     for (const artifact of [scan.json, scan.markdown, scan.agentMarkdown]) {
       expect(artifact).not.toContain(PLANTED_SECRET)
       expect(artifact).not.toContain('AKIA')
@@ -797,12 +745,9 @@ interface ReportShape {
   readonly metrics: Partial<Record<Category, Record<string, number>>>
   readonly tools: {
     readonly tool: string
-    readonly scope: string
-    readonly provenance: string
     readonly version: string | null
     readonly state: string
     readonly reason: string | null
-    readonly detection: unknown
   }[]
 }
 

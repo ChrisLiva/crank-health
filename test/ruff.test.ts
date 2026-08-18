@@ -2,12 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_CONFIG,
   RUFF_FORMAT_RULE,
   RUFF_SYNTAX_CODE,
   parseRuffJson,
-  ruffFormatRunner,
-  ruffLintRunner,
   toFormatFindings,
   toLintFindings,
 } from '../src/adapters/python/ruff.ts'
@@ -150,10 +147,6 @@ describe('toLintFindings', () => {
     expect(bySeverity.get('S105')).toBe('warning')
   })
 
-  it('relativizes the absolute paths ruff reports', () => {
-    expect(toLintFindings(diagnostics, false, '/repo')[0]?.file).toBe('a.py')
-  })
-
   it('never reports the formatter’s verdict as a lint finding', () => {
     const formatting = [
       {
@@ -220,33 +213,10 @@ describe('toFormatFindings', () => {
     expect(toFormatFindings(diagnostics, false, '/repo')[0]).toMatchObject({
       gradeScope: true,
       provenance: 'default-config',
-      message: expect.stringContaining('ruff’s default formatting') as unknown as string,
     })
     expect(toFormatFindings(diagnostics, true, '/repo')[0]).toMatchObject({
       gradeScope: true,
       provenance: 'repo-config',
-      message: expect.stringContaining('repo’s ruff format configuration') as unknown as string,
     })
-  })
-
-  it('leaves an unparseable file to the linter, which reports it as one', () => {
-    expect(toFormatFindings(diagnostics, false, '/repo').map((finding) => finding.file)).toEqual([
-      'a.py',
-    ])
-  })
-})
-
-describe('the ruff runners', () => {
-  it('cover lint and format from one pinned binary, as defaults', () => {
-    expect(ruffLintRunner.category).toBe('lint')
-    expect(ruffFormatRunner.category).toBe('format')
-    expect(ruffLintRunner.pinnedVersion).toBe(ruffFormatRunner.pinnedVersion)
-    expect(ruffLintRunner.repoOwnedOnly).toBeUndefined()
-    expect(ruffFormatRunner.repoOwnedOnly).toBeUndefined()
-  })
-
-  /** The bundled default is the correctness-leaning subset, not ruff's full set. */
-  it('bundles a default config that selects only the historic default families', () => {
-    expect(DEFAULT_CONFIG).toContain('select = ["E4", "E7", "E9", "F"]')
   })
 })

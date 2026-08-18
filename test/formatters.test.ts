@@ -55,8 +55,6 @@ describe('toPendingFindings', () => {
     const bundled = toPendingFindings(['src/a.ts'], false)[0]
     expect(repo).toMatchObject({ provenance: 'repo-config', gradeScope: true })
     expect(bundled).toMatchObject({ provenance: 'default-config', gradeScope: true })
-    expect(repo?.message).toContain('repo’s prettier configuration')
-    expect(bundled?.message).toContain('default formatting')
   })
 })
 
@@ -69,10 +67,6 @@ describe('prettier detection', () => {
 
   afterEach(async () => {
     await rm(repo, { recursive: true, force: true })
-  })
-
-  it('is our default formatter, so it runs whether or not the repo owns it', () => {
-    expect(prettierRunner.repoOwnedOnly).toBeUndefined()
   })
 
   it('is not repo-owned by a .prettierignore alone — that is not a config', async () => {

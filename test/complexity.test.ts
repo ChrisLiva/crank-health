@@ -1,13 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { fallowHealthRunner, parseHealth, toHealthFindings } from '../src/adapters/jsts/fallow.ts'
-import {
-  FTA_ADVISORY_SCORE,
-  ftaRunner,
-  parseFtaJson,
-  toPendingFindings,
-} from '../src/adapters/jsts/fta.ts'
+import { parseHealth, toHealthFindings } from '../src/adapters/jsts/fallow.ts'
+import { parseFtaJson, toPendingFindings } from '../src/adapters/jsts/fta.ts'
 import { COMPLEXITY_CEILING } from '../src/core/grade.ts'
 
 /**
@@ -121,13 +116,6 @@ describe('toHealthFindings', () => {
   })
 })
 
-describe('the fallow health runner', () => {
-  it('reports the complexity category and runs as a default (nothing owns it)', () => {
-    expect(fallowHealthRunner.category).toBe('complexity')
-    expect(fallowHealthRunner.repoOwnedOnly).toBeUndefined()
-  })
-})
-
 describe('parseFtaJson', () => {
   it('reads per-file scores from real output', async () => {
     const scores = parseFtaJson(await readFile(FTA, 'utf8'))
@@ -171,7 +159,6 @@ describe('fta toPendingFindings', () => {
       'src/awful.ts',
       'src/rough.ts',
     ])
-    expect(FTA_ADVISORY_SCORE).toBe(60)
   })
 
   /**
@@ -180,7 +167,10 @@ describe('fta toPendingFindings', () => {
    * health supplies the ratio.
    */
   it('never grades: a file score is not the ratio the spec grades on', () => {
-    expect(toPendingFindings(scores, false).every((finding) => finding.gradeScope)).toBe(false)
+    expect(toPendingFindings(scores, false).map((finding) => finding.gradeScope)).toEqual([
+      false,
+      false,
+    ])
   })
 
   it('escalates severity with the score, and anchors file-level', () => {
@@ -190,12 +180,5 @@ describe('fta toPendingFindings', () => {
     expect(bySeverity.get('src/rough.ts')).toBe('info')
     expect(bySeverity.get('src/awful.ts')).toBe('warning')
     expect(toPendingFindings(scores, false).every((finding) => finding.anchor === '')).toBe(true)
-  })
-})
-
-describe('the fta runner', () => {
-  it('reports the complexity category as a second, advisory signal', () => {
-    expect(ftaRunner.category).toBe('complexity')
-    expect(ftaRunner.repoOwnedOnly).toBeUndefined()
   })
 })

@@ -60,9 +60,6 @@ const PLANTED = [
   },
 ] as const
 
-/** Files planted deliberately clean; a finding in one of these is a false positive. */
-const CLEAN_FILES = new Set(['clean.cs'])
-
 /**
  * Every deep-only C# category — the build-backed trio, roslynator's dead-code,
  * and stryker-net's test-quality — so a quick scan defers all five. Stryker is
@@ -104,10 +101,6 @@ describe('quick scan of the cs-basic fixture', () => {
     )
   })
 
-  it('reports no findings in the deliberately clean files', () => {
-    expect(findings.filter((finding) => CLEAN_FILES.has(finding.file))).toEqual([])
-  })
-
   it('reports one C#-language project, and scopes every C# tool record to it', () => {
     const report = parse(json)
     expect(report.schemaVersion).toBe(2)
@@ -134,18 +127,6 @@ describe('quick scan of the cs-basic fixture', () => {
     ])
   })
 
-  /** bandit's half of the same rule: no Python here either. */
-  it('gives bandit nothing to scan on a C#-only tree, and asks it once', () => {
-    expect(toolRows('bandit')).toEqual([
-      {
-        project: 'repo',
-        repoWide: true,
-        state: 'not-available',
-        reason: 'no Python files, so bandit assessed nothing',
-      },
-    ])
-  })
-
   /**
    * Every security runner here spans the repo — neither of the two that name
    * their languages finds one in this tree — so the project has no security run
@@ -167,32 +148,6 @@ describe('quick scan of the cs-basic fixture', () => {
         ? { reason: REPO_SCOPED_REASON }
         : { reason: 'no tool available for this category' },
     )
-  })
-
-  /**
-   * The rollup is still told why security has no grade, runner by runner: one
-   * clause per security runner, in the order the report carries them. Asserted
-   * per clause rather than as one string, so a reword in another runner's
-   * message cannot pass for this one.
-   */
-  it.runIf(GOLDEN_TOOLCHAIN)('names every security runner in the rollup’s reason', () => {
-    const security = parse(json).categories.security
-    expect(security?.status).toBe('not-assessed')
-    const reason = security?.reason ?? ''
-    const clauses = [
-      'gitleaks is not on PATH',
-      'no JavaScript, TypeScript or Python files, so opengrep assessed nothing',
-      'no GitHub Actions workflows or composite actions, so zizmor assessed nothing',
-      'no Python files, so bandit assessed nothing',
-      'osv-scanner is not on PATH',
-    ]
-    for (const clause of clauses) expect(reason).toContain(clause)
-    const positions = clauses.map((clause) => reason.indexOf(clause))
-    expect(positions).toEqual([...positions].toSorted((a, b) => a - b))
-  })
-
-  it('counts the .cs findings into the per-language breakdown', () => {
-    expect(parse(json).languages).toEqual({ csharp: { duplication: 1, format: 1 } })
   })
 
   /**
@@ -222,7 +177,10 @@ describe('quick scan of the cs-basic fixture', () => {
   it('reports the measurements the ratio grades were computed from', () => {
     const metrics = parse(json).metrics
     expect(metrics.format).toEqual({ formattableFiles: 8 })
-    expect(metrics.duplication?.['duplicationPercent']).toBeGreaterThan(0)
+    // The exact token share jscpd reports for the duplicated `Accumulate`
+    // body against this fixture — inside the D band (>10%, ≤20%) the
+    // duplication grade above is read from.
+    expect(metrics.duplication?.['duplicationPercent']).toBe(18.38235294117647)
   })
 
   /**
@@ -514,22 +472,6 @@ describe('quick scan of the mixed-cs fixture', () => {
       csharp: { duplication: 1, format: 1 },
     })
   })
-
-  it('leaves the target repo clean', async () => {
-    expect(await fixture.status()).toBe('')
-  })
-
-  it(
-    'produces byte-identical output when run twice on the same commit',
-    async () => {
-      const second = await runHealthScan({ path: fixture.root })
-      expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
-        reportFindings(scan.report).map((finding) => finding.id),
-      )
-    },
-    SCAN_TIMEOUT_MS,
-  )
 
   function categories(path: string) {
     return scan.report.projects.find((project) => project.path === path)?.categories

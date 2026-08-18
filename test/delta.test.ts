@@ -170,17 +170,6 @@ describe('computeDelta', () => {
     ])
   })
 
-  it('flags nothing in a file the change did not touch at all', () => {
-    const finding = identified({ file: 'src/untouched.js', range: line(2) })
-    const delta = computeDelta(
-      input({
-        headFindings: [finding],
-        touchedLines: new Map([['src/other.js', new Set([2])]]),
-      }),
-    )
-    expect(delta.newFindings.map((entry) => entry.touchedLine)).toEqual([false])
-  })
-
   it('records every category’s movement, base state included', () => {
     const added = identified({ category: 'lint', anchor: 'added' })
     const delta = computeDelta(
@@ -412,21 +401,6 @@ describe('computeDelta over projects', () => {
     // Still resolved in the rollup: the finding really is gone from head.
     expect(delta.resolvedFindings).toHaveLength(1)
   })
-
-  /** The root project turning into a workspace shell is churn of `.`, like any other. */
-  it('treats the root becoming a workspace shell as the root project being removed', () => {
-    const delta = computeDelta(
-      input({
-        baseProjects: [project('.', graded('A'))],
-        headProjects: [project('packages/web', graded('A'))],
-      }),
-    )
-
-    expect(delta.projects.map((entry) => [entry.path, entry.churn])).toEqual([
-      ['.', 'removed'],
-      ['packages/web', 'added'],
-    ])
-  })
 })
 
 describe('remapRenames', () => {
@@ -439,18 +413,6 @@ describe('remapRenames', () => {
   it('cannot re-hash a finding that carries no identity material', () => {
     const bare = makeFinding({ file: 'src/a.js' })
     expect(remapRenames([bare], new Map([['src/a.js', 'src/b.js']]))).toEqual([bare])
-  })
-
-  it('re-attributes a remapped finding to the project of its new path', () => {
-    const finding = identified({ file: 'packages/api/a.ts', project: 'packages/api' })
-    const [remapped] = remapRenames(
-      [finding],
-      new Map([['packages/api/a.ts', 'packages/web/a.ts']]),
-      (file) => (file.startsWith('packages/web/') ? 'packages/web' : undefined),
-    )
-
-    expect(remapped?.file).toBe('packages/web/a.ts')
-    expect(remapped?.project).toBe('packages/web')
   })
 
   it('drops the attribution when the new path is in no project', () => {

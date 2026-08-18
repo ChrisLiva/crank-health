@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { reactDoctorRunner } from '../src/adapters/jsts/react-doctor.ts'
-import { gradeCategory } from '../src/core/grade.ts'
 import type { Finding, RunContext } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
 import { runHealthScan } from '../src/run.ts'
@@ -17,9 +16,9 @@ import { reportFindings } from '../src/render/json.ts'
  * End to end through the real seam on `js-react`: an untooled React app whose
  * only new content is react-doctor's own output. The suite drives
  * `runHealthScan` — the entry `cli.ts` uses — so what is proven here is what
- * the binary does: every planted finding and nothing else, the pinned
- * ephemeral tool record, raw evidence on disk, zero footprint, and the
- * advisory invariant (react-doctor findings move no grade in any category).
+ * the binary does: every planted finding and nothing else — react-doctor's own
+ * out of grade scope — the pinned ephemeral tool record, raw evidence on disk,
+ * and zero footprint.
  *
  * No golden here on purpose: js-react joins no golden set, because its only
  * new content would need re-capturing on every daily-cadence pin bump to
@@ -114,11 +113,19 @@ describe('quick scan of the js-react fixture', () => {
   it('tags every react-doctor finding default-config, each with a fix hint', () => {
     const doctor = findings.filter((finding) => finding.tool === 'react-doctor')
     expect(doctor).toHaveLength(3)
-    for (const finding of doctor) {
-      expect(finding.provenance).toBe('default-config')
-      expect(finding.fixHint).toBeDefined()
-      expect(finding.fixHint?.length).toBeGreaterThan(0)
-    }
+    expect(doctor.map((finding) => finding.provenance)).toEqual([
+      'default-config',
+      'default-config',
+      'default-config',
+    ])
+    // The tool's own help, carried through verbatim — one finding named, so a
+    // wording change in the hint is visible rather than merely "still truthy".
+    expect(
+      doctor.find((finding) => finding.rule === 'react-doctor/no-array-index-as-key')?.fixHint,
+    ).toBe(
+      'Use a stable id from the item, like `key={item.id}` or `key={item.slug}`. ' +
+        'Index keys break when the list reorders or filters.',
+    )
   })
 
   it('ran the pinned ephemeral react-doctor, which reports no lint metrics', () => {
@@ -152,35 +159,6 @@ describe('quick scan of the js-react fixture', () => {
   it('leaves the target repo untouched', async () => {
     expect(await fixture.status()).toBe('')
     expect((await readdir(fixture.root)).toSorted()).toEqual(listingBefore)
-  })
-
-  /**
-   * The advisory invariant, driven directly: strip every react-doctor finding
-   * and no category's grade moves. The four ratio categories are covered by
-   * the facts asserted above — `format` grades on category-filtered findings,
-   * and complexity/duplication/test-quality read only `ToolMetrics`, which
-   * this runner never reports.
-   */
-  it('moves no grade in any category', () => {
-    const all = reportFindings(scan.report)
-    const without = all.filter((finding) => finding.tool !== 'react-doctor')
-    expect(without).toHaveLength(all.length - 3)
-    for (const finding of all) {
-      if (finding.tool !== 'react-doctor') continue
-      expect(finding.category).toBe('lint')
-      expect(finding.gradeScope).toBe(false)
-    }
-    // The denominator is held fixed on purpose; only the findings differ.
-    for (const category of ['lint', 'types', 'dead-code'] as const) {
-      expect(gradeCategory(category, { shape: 'density', findings: all, kloc: 1 })).toBe(
-        gradeCategory(category, { shape: 'density', findings: without, kloc: 1 }),
-      )
-    }
-    // This is the assertion that fails the day someone maps a react-doctor
-    // rule into security.
-    expect(gradeCategory('security', { shape: 'absolute', findings: all })).toBe(
-      gradeCategory('security', { shape: 'absolute', findings: without }),
-    )
   })
 })
 

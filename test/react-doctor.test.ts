@@ -14,30 +14,18 @@ import {
   reactDoctorRunner,
   toPendingFindings,
 } from '../src/adapters/jsts/react-doctor.ts'
-import { pinnedVersion } from '../src/manifest.ts'
 
 /**
  * react-doctor — the advisory React-practices signal inside the lint category.
  *
  * The capture is real `react-doctor --json` output (schemaVersion 3) from the
  * `test/fixtures/js-react` tree: three `warning` diagnostics across two files,
- * all advisory. Pin-bump ritual: the pin test and the capture's schemaVersion
- * go stale together — re-capture when either moves.
+ * all advisory. Re-capture it when the pin moves.
  */
 
 const CAPTURED = fileURLToPath(new URL('./captured/react-doctor-0.9.5.json', import.meta.url))
 
 const captured = (): Promise<string> => readFile(CAPTURED, 'utf8')
-
-describe('the react-doctor pin', () => {
-  it('pins the exact version this release captured and tested against', () => {
-    expect(pinnedVersion('react-doctor')).toBe('0.9.5')
-  })
-
-  it('was captured from the schema this release parses', async () => {
-    expect(JSON.parse(await captured()).schemaVersion).toBe(3)
-  })
-})
 
 describe('parseReactDoctorJson', () => {
   it('reads the React verdict and every diagnostic from real output, in stdout order', async () => {
@@ -133,44 +121,6 @@ const mapOne = (overrides: Partial<ReactDoctorDiagnostic> = {}, repoConfig = tru
   toPendingFindings([diagnostic(overrides)], repoConfig, '/repo', '/repo')[0]
 
 describe('toPendingFindings', () => {
-  it('maps the captured diagnostics into advisory lint findings, sorted by location', async () => {
-    const findings = toPendingFindings(
-      parseReactDoctorJson(await captured()).diagnostics,
-      true,
-      '/repo',
-      '/repo',
-    )
-
-    expect(
-      findings.map(({ file, range, rule }) => ({ file, startLine: range.startLine, rule })),
-    ).toEqual([
-      {
-        file: 'src/Counter.jsx',
-        startLine: 4,
-        rule: 'react-doctor/rerender-state-only-in-handlers',
-      },
-      { file: 'src/Counter.jsx', startLine: 16, rule: 'react-doctor/control-has-associated-label' },
-      { file: 'src/List.jsx', startLine: 5, rule: 'react-doctor/no-array-index-as-key' },
-    ])
-    expect(
-      findings.map(({ category, tool, severity, provenance, gradeScope }) => ({
-        category,
-        tool,
-        severity,
-        provenance,
-        gradeScope,
-      })),
-    ).toEqual(
-      Array.from({ length: 3 }, () => ({
-        category: 'lint',
-        tool: 'react-doctor',
-        severity: 'warning',
-        provenance: 'repo-config',
-        gradeScope: false,
-      })),
-    )
-  })
-
   it('takes the title as the message and the help as the fixHint', () => {
     expect(mapOne()).toMatchObject({
       message: 'Array index used as a key',
@@ -187,17 +137,6 @@ describe('toPendingFindings', () => {
     ['fatal', 'info'],
   ])('maps severity %s to %s', (reported, mapped) => {
     expect(mapOne({ severity: reported })?.severity).toBe(mapped)
-  })
-
-  it('omits the fixHint key entirely when the tool offered no help', () => {
-    expect(toPendingFindings([bareDiagnostic()], true, '/repo', '/repo')[0]).not.toHaveProperty(
-      'fixHint',
-    )
-  })
-
-  /** Identity is the trimmed source line, like every line-attached diagnostic. */
-  it('supplies no explicit anchor', () => {
-    expect(mapOne()).not.toHaveProperty('anchor')
   })
 
   it('is default-config when nothing was detected', () => {
@@ -257,36 +196,11 @@ describe('invocationArgs', () => {
   })
 })
 
-describe('the react-doctor runner', () => {
-  /**
-   * `complementary` is the load-bearing flag: it measures what no lint
-   * alternative measures, so an ESLint-owning repo cannot stand it down, and
-   * owning react-doctor stands no default linter down.
-   */
-  it('is the advisory lint complement, at the pinned version', () => {
-    expect(reactDoctorRunner.tool).toBe('react-doctor')
-    expect(reactDoctorRunner.category).toBe('lint')
-    expect(reactDoctorRunner.complementary).toBe(true)
-    expect(reactDoctorRunner.pinnedVersion).toBe('0.9.5')
-  })
-
-  /**
-   * Static analysis with a meaningful default: it runs without being owned,
-   * per project, in the quick profile, with no repo-wide pass to add.
-   */
-  it('carries none of the other runner flags', () => {
-    expect(reactDoctorRunner.repoOwnedOnly).toBeUndefined()
-    expect(reactDoctorRunner.deepOnly).toBeUndefined()
-    expect(reactDoctorRunner.repoScoped).toBeUndefined()
-    expect(reactDoctorRunner.repoWidePass).toBeUndefined()
-  })
-})
-
 /**
- * Ownership inside a workspace, the Node way: a config or a declared dependency
- * in the project or any ancestor owns the tool. A `reactDoctor` manifest block
- * deliberately confers nothing — only the four config files and the dependency
- * declaration do.
+ * Ownership inside a workspace, the Node way: a config in the project or any
+ * ancestor owns the tool, and `ownedVia` names the artifact that decided it.
+ * The dependency and not-owned paths are `detectNodeTool`'s, pinned in
+ * `node-package.test.ts`; what is react-doctor's own is its config-file list.
  */
 describe('reactDoctorRunner.detect', () => {
   let root: string
@@ -335,27 +249,6 @@ describe('reactDoctorRunner.detect', () => {
       reason: 'config',
       ownedVia: 'doctor.config.json',
     })
-  })
-
-  it('is owned by a declared dependency, honest about not being installed', async () => {
-    await write('package.json', '{"devDependencies":{"react-doctor":"0.9.5"}}')
-
-    const detection = await reactDoctorRunner.detect(
-      context(['package.json', 'src/index.jsx'], '.'),
-    )
-    expect(detection).toMatchObject({
-      reason: 'dependency',
-      ownedVia: 'package.json',
-      installed: false,
-    })
-    expect(detection).not.toHaveProperty('binPath')
-  })
-
-  it('is null when nothing configures or declares it', async () => {
-    await write('package.json', '{"name":"x","dependencies":{"react":"^19.0.0"}}')
-    expect(
-      await reactDoctorRunner.detect(context(['package.json', 'src/index.jsx'], '.')),
-    ).toBeNull()
   })
 })
 

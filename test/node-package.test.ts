@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { NodeToolSpec } from '../src/adapters/jsts/node-package.ts'
 import {
@@ -45,34 +44,10 @@ describe('isLibraryPackage', () => {
     // Malformed and non-object manifests degrade to "not a library".
     ['{ not json', false],
     ['[]', false],
+    // No package.json at all.
+    [undefined, false],
   ])('classifies %s as library=%s', async (body, expected) => {
     expect(await withManifest(body, isLibraryPackage)).toBe(expected)
-  })
-
-  it('is false when there is no package.json at all', async () => {
-    expect(await withManifest(undefined, isLibraryPackage)).toBe(false)
-  })
-
-  /**
-   * Every checked-in fixture is an application, so turning this predicate into
-   * a behaviour change must leave every golden report byte-identical. Read as
-   * plain trees — no git, no scan.
-   */
-  it.each([
-    'js-basic',
-    'js-multi-tool',
-    'js-owned',
-    'js-react',
-    'js-weak-tests',
-    'mixed-basic',
-    'py-basic',
-    'py-venv',
-    'py-weak-tests',
-    'sec-basic',
-    'ts-owned',
-  ])('classifies the %s fixture as an application', async (name) => {
-    const root = fileURLToPath(new URL(`./fixtures/${name}/`, import.meta.url))
-    expect(await isLibraryPackage(root)).toBe(false)
   })
 })
 

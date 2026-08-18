@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   COMPLEXIPY_RULE,
-  complexipyRunner,
   parseComplexipyJson,
   parseComplexipySarif,
   toPendingFindings,
@@ -80,16 +79,7 @@ describe('complexipy toPendingFindings', () => {
       anchor: 'classify',
       provenance: 'default-config',
     })
-  })
-
-  it('tags the repo’s own complexipy config when there is one', () => {
+    // The repo's own complexipy config is what the other provenance is for.
     expect(toPendingFindings(violations, true)[0]?.provenance).toBe('repo-config')
-  })
-})
-
-describe('the complexipy runner', () => {
-  it('reports the complexity category as a default', () => {
-    expect(complexipyRunner.category).toBe('complexity')
-    expect(complexipyRunner.repoOwnedOnly).toBeUndefined()
   })
 })

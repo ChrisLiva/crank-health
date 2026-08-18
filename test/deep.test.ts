@@ -2,11 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  DEEP_TIMEOUT_MS,
-  DEFAULT_TIMEOUT_MS,
-  QUICK_MODE_DEEP_REASON,
-} from '../src/core/orchestrator.ts'
+import { QUICK_MODE_DEEP_REASON } from '../src/core/orchestrator.ts'
 import type {
   LanguageAdapter,
   RunContext,
@@ -23,8 +19,8 @@ import { createHistoryRepo } from './support/history.ts'
 /**
  * The deep profile's plumbing (spec §5), with a stand-in for the mutation tool
  * so that what is under test is the pipeline rather than StrykerJS: which
- * runners a profile admits, what budget they get, what they are told about the
- * diff, and how a mutation score becomes the test-quality grade.
+ * runners a profile admits, what they are told about the diff, and how a
+ * mutation score becomes the test-quality grade.
  *
  * The real tool end-to-end is `deep-e2e.test.ts`.
  */
@@ -67,33 +63,22 @@ describe('the two profiles', () => {
     expect(tree.scan.runs).toEqual([])
   })
 
-  it('records the categories a quick scan deferred, and only those', async () => {
-    const quick = await scanTree({
-      repoRoot: fixture.root,
-      scratch,
-      adapters: [adapter(fakeRunner({}))],
-      only: ['test-quality'],
-    })
-    const deepScan = await scanTree({
-      repoRoot: fixture.root,
-      scratch,
-      adapters: [adapter(fakeRunner({}))],
-      only: ['test-quality'],
-      deep: true,
-    })
+  it('calls an unrequested category excluded rather than deferred', async () => {
+    const mutation = fakeRunner({})
     const unrequested = await scanTree({
       repoRoot: fixture.root,
       scratch,
-      adapters: [adapter(fakeRunner({}))],
+      adapters: [adapter(mutation)],
       only: ['lint'],
     })
 
-    expect(quick.scan.deferredCategories).toEqual(['test-quality'])
-    // A deep scan defers nothing: the deep runners actually ran.
-    expect(deepScan.scan.deferredCategories).toEqual([])
     // `--only lint` dropped the runner as unrequested — an exclusion, not a
     // deferral, and telling the reader to run `--deep` would not bring it back.
-    expect(unrequested.scan.deferredCategories).toEqual([])
+    expect(unrequested.categories['test-quality']).toEqual({
+      status: 'not-assessed',
+      reason: 'not selected by --only',
+    })
+    expect(mutation.calls).toEqual([])
   })
 
   it('grades test quality from the mutation score in a deep scan', async () => {
@@ -154,47 +139,6 @@ describe('the two profiles', () => {
       reason: 'no mutation tool installed',
     })
   })
-
-  it('gives a deep tool the deep budget and a quick tool the quick one', async () => {
-    const deepTool = fakeRunner({})
-    const quickTool = fakeRunner({}, { deepOnly: false, category: 'lint' })
-    await scanTree({
-      repoRoot: fixture.root,
-      scratch,
-      adapters: [adapter(deepTool, 'js-ts', [quickTool])],
-      only: ['test-quality', 'lint'],
-      deep: true,
-    })
-
-    expect(deepTool.calls[0]?.timeoutMs).toBe(DEEP_TIMEOUT_MS)
-    expect(quickTool.calls[0]?.timeoutMs).toBe(DEFAULT_TIMEOUT_MS)
-    expect(DEEP_TIMEOUT_MS).toBeGreaterThan(DEFAULT_TIMEOUT_MS)
-  })
-
-  it('tells the runners which files a PR touched, and nothing in a whole-repo scan', async () => {
-    const scoped = fakeRunner({})
-    const whole = fakeRunner({})
-
-    await scanTree({
-      repoRoot: fixture.root,
-      scratch,
-      adapters: [adapter(scoped)],
-      only: ['test-quality'],
-      deep: true,
-      changedFiles: ['src/clean.js'],
-    })
-    await scanTree({
-      repoRoot: fixture.root,
-      scratch,
-      adapters: [adapter(whole)],
-      only: ['test-quality'],
-      deep: true,
-    })
-
-    expect(scoped.calls[0]?.changedFiles).toEqual(['src/clean.js'])
-    expect(scoped.calls[0]?.deep).toBe(true)
-    expect(whole.calls[0]?.changedFiles).toBeUndefined()
-  })
 })
 
 describe('a deep PR run', () => {
@@ -247,10 +191,7 @@ interface FakeRunner extends ToolRunner {
 }
 
 /** A deep runner that reports whatever the test needs it to report. */
-function fakeRunner(
-  result: Partial<ToolResult> & { readonly metrics?: ToolMetrics },
-  overrides: Partial<ToolRunner> = {},
-): FakeRunner {
+function fakeRunner(result: Partial<ToolResult> & { readonly metrics?: ToolMetrics }): FakeRunner {
   const calls: RunContext[] = []
   return {
     tool: 'fake-mutation',
@@ -263,14 +204,9 @@ function fakeRunner(
       calls.push(ctx)
       return { state: 'ok', findings: [], rawFiles: [], ...result }
     },
-    ...overrides,
   }
 }
 
-function adapter(
-  runner: ToolRunner,
-  language: 'js-ts' | 'python' = 'js-ts',
-  extra: readonly ToolRunner[] = [],
-): LanguageAdapter {
-  return { language, detect: async () => true, runners: [runner, ...extra] }
+function adapter(runner: ToolRunner, language: 'js-ts' | 'python' = 'js-ts'): LanguageAdapter {
+  return { language, detect: async () => true, runners: [runner] }
 }

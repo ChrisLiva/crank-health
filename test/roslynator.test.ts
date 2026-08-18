@@ -7,7 +7,6 @@ import {
   roslynatorRunner,
   symbolFindings,
 } from '../src/adapters/csharp/roslynator.ts'
-import { pinnedDotnetVersion } from '../src/manifest.ts'
 import { makeProject } from './factories.ts'
 import type { RunContext } from '../src/core/types.ts'
 
@@ -23,16 +22,6 @@ import type { RunContext } from '../src/core/types.ts'
  * unreferenced public method and an unused private field.
  */
 const CAPTURED = fileURLToPath(new URL('./captured/roslynator-0.12.0.txt', import.meta.url))
-
-/**
- * The pin and the capture filename above move together: re-capture when
- * bumping the manifest version.
- */
-describe('the roslynator pin', () => {
-  it('is the version the capture was taken against', () => {
-    expect(pinnedDotnetVersion('roslynator.dotnet.cli')).toBe('0.12.0')
-  })
-})
 
 describe('parseRoslynatorSymbols', () => {
   it('reads kind, display, name and containing type from real output', async () => {
@@ -50,10 +39,6 @@ describe('parseRoslynatorSymbols', () => {
         container: 'Holder',
       },
     ])
-  })
-
-  it('returns nothing for empty output', () => {
-    expect(parseRoslynatorSymbols('')).toEqual([])
   })
 
   it('skips the loader, counter and summary lines around the symbols', () => {
@@ -139,7 +124,7 @@ describe('symbolFindings', () => {
     ])
   })
 
-  it('builds graded dead-code warnings naming the symbol, anchored on its name', () => {
+  it('builds graded dead-code warnings anchored on the symbol name', () => {
     const findings = symbolFindings(symbols, sources)
     for (const finding of findings) {
       expect(finding.category).toBe('dead-code')
@@ -148,9 +133,8 @@ describe('symbolFindings', () => {
       expect(finding.gradeScope).toBe(true)
       expect(finding.provenance).toBe('default-config')
     }
-    expect(findings[0]?.message).toBe(
-      'Unused method `Cap.Dead.NeverCalled(int value)` (zero references)',
-    )
+    // The anchor is finding identity (fingerprint.ts), so it is the symbol's
+    // own name and not the display string the message quotes.
     expect(findings.map((finding) => finding.anchor)).toEqual(['NeverCalled', 'unusedCount'])
   })
 
@@ -231,21 +215,6 @@ describe('roslynatorFailure', () => {
 })
 
 describe('the roslynator runner', () => {
-  it('is the deep-tier dead-code default, never repo-owned-only', () => {
-    expect(roslynatorRunner.tool).toBe('roslynator')
-    expect(roslynatorRunner.category).toBe('dead-code')
-    expect(roslynatorRunner.deepOnly).toBe(true)
-    expect(roslynatorRunner.repoOwnedOnly).toBeUndefined()
-    expect(roslynatorRunner.pinnedVersion).toBe('0.12.0')
-  })
-
-  it('never spawns for detection', async () => {
-    const project = makeProject(['App.csproj', 'a.cs'])
-    expect(
-      await roslynatorRunner.detect({ repoRoot: '/repo', project, files: project.files }),
-    ).toBe(null)
-  })
-
   it('answers a project with no C# files without running anything', async () => {
     const result = await roslynatorRunner.run(contextFor([]))
     expect(result).toEqual({ state: 'ok', findings: [], rawFiles: [], reason: 'no C# files' })

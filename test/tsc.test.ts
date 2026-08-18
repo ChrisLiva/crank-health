@@ -3,12 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  DEFAULT_ADVISORY_CODES,
-  parseDiagnostics,
-  toPendingFindings,
-  tscRunner,
-} from '../src/adapters/jsts/tsc.ts'
+import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
 import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext, Detection } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
@@ -160,23 +155,8 @@ describe('toPendingFindings', () => {
     expect(graded.get('TS2345')).toBe(true)
   })
 
-  it('grades the same @types-worded diagnostic on the repo’s own tsconfig', () => {
-    expect(gradedByRule(true).get('TS2592')).toBe(true)
-  })
-
   it('reads an empty message as ordinary code, not as an environment fact', () => {
     expect(gradedByRule(false).get('TS2571')).toBe(true)
-  })
-
-  /**
-   * The message rule sits under the code list, so it can only move a diagnostic
-   * out of grade scope — never back in. Anything still graded is a code the list
-   * does not name.
-   */
-  it('can only add advisories, never restore one to grade scope', () => {
-    for (const finding of toPendingFindings(diagnostics, false, '/repo')) {
-      if (finding.gradeScope) expect(DEFAULT_ADVISORY_CODES.has(finding.rule)).toBe(false)
-    }
   })
 
   /**

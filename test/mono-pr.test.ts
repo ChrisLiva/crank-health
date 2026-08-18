@@ -117,17 +117,6 @@ describe('a PR against a workspace', () => {
     expect(lint('packages/dropped')).toBe('F → project removed by this change')
   })
 
-  it('renders both states in report.md and agent.md rather than as fixes', () => {
-    expect(result.markdown).toContain(
-      '| packages/added | added by this change | 1 | 0 | lint not assessed → F |',
-    )
-    expect(result.markdown).toContain('| packages/dropped | removed by this change | 0 | 1 |')
-    expect(result.agentMarkdown).toContain(
-      '1 project (`packages/dropped`) was removed by this change: findings in it count as ' +
-        'resolved because the code is gone, not because it was fixed.',
-    )
-  })
-
   /**
    * The gate's material (spec §4: `--fail-under` applies to an added project).
    * `report.projects` carries the added project's own grade and the delta says
@@ -136,7 +125,6 @@ describe('a PR against a workspace', () => {
   it('exposes the added project’s failing grade to the gate', () => {
     const added = result.report.projects.find((project) => project.path === 'packages/added')
     expect(added?.categories.lint).toEqual({ status: 'graded', grade: 'F' })
-    expect(movement('packages/added')?.categories).toHaveLength(8)
     expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'F' })
   })
 

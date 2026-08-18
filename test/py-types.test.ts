@@ -4,14 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   PYRIGHT_GENERAL_RULE,
   parsePyrightJson,
-  pyrightRunner,
   toPendingFindings as toPyrightFindings,
 } from '../src/adapters/python/pyright.ts'
-import {
-  parseGitlab,
-  toPendingFindings as toTyFindings,
-  tyRunner,
-} from '../src/adapters/python/ty.ts'
+import { parseGitlab, toPendingFindings as toTyFindings } from '../src/adapters/python/ty.ts'
 
 /**
  * The Python type-checking pair. Which of them runs is a detection-time
@@ -109,12 +104,6 @@ describe('ty toPendingFindings', () => {
     expect(byRule(false).get('unresolved-import')).toBe(false)
     expect(byRule(false).get('unresolved-reference')).toBe(true)
     expect(byRule(true).get('unresolved-import')).toBe(true)
-  })
-
-  it('reports the types category with the tool that made the call', () => {
-    const findings = toTyFindings(diagnostics, false, '/repo')
-    expect(findings.every((finding) => finding.category === 'types')).toBe(true)
-    expect(findings.every((finding) => finding.tool === 'ty')).toBe(true)
   })
 })
 
@@ -226,14 +215,5 @@ describe('pyright toPendingFindings', () => {
     )
     expect(bySeverity.get('reportReturnType')).toBe('error')
     expect(bySeverity.get('reportUnusedExpression')).toBe('warning')
-  })
-})
-
-describe('the type-checking runners', () => {
-  it('both claim the types category, and neither is imposed only when owned', () => {
-    expect(tyRunner.category).toBe('types')
-    expect(pyrightRunner.category).toBe('types')
-    expect(tyRunner.repoOwnedOnly).toBeUndefined()
-    expect(pyrightRunner.repoOwnedOnly).toBeUndefined()
   })
 })

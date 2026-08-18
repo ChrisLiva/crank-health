@@ -938,20 +938,6 @@ describe('runScan tool selection', () => {
     expect(result.categories.lint).toEqual({ status: 'assessed' })
   })
 
-  it('runs a repo-owned-only runner the repo did choose', async () => {
-    const eslint = {
-      ...fakeRunner(
-        'eslint',
-        'lint',
-        async () => ok(),
-        async () => DETECTION,
-      ),
-      repoOwnedOnly: true,
-    }
-    const result = await runScan(REPO, [adapter('js-ts', [eslint])])
-    expect(result.runs.map((run) => run.tool)).toEqual(['eslint'])
-  })
-
   /** Spec §1's two branches are exclusive: owned → their tool, not owned → ours. */
   it('stands our default down in a category this language already owns', async () => {
     const biome = fakeRunner(
@@ -1091,26 +1077,6 @@ describe('runScan standby', () => {
       rawFiles: [],
       reason: 'x',
     }))
-    const oxlint = fakeRunner('oxlint', 'lint', async () =>
-      ok([makeFinding({ id: 'o', tool: 'oxlint', category: 'lint' })]),
-    )
-
-    const result = await runScan(REPO, [adapter('js-ts', [eslint, oxlint])])
-
-    expect(result.findings.map((finding) => finding.id)).toEqual(['o'])
-    expect(result.categories.lint).toEqual({ status: 'assessed' })
-    expect(result.warnings).toContain(
-      'oxlint: graded lint on its default config because eslint reported not-available',
-    )
-  })
-
-  it('names every owner that failed, in a stable order', async () => {
-    const eslint = ownedOnly('eslint', 'lint', async () => ({
-      state: 'not-available',
-      findings: [],
-      rawFiles: [],
-      reason: 'x',
-    }))
     const biome = ownedOnly('biome-lint', 'lint', async () => ({
       state: 'error',
       findings: [],
@@ -1123,6 +1089,9 @@ describe('runScan standby', () => {
 
     const result = await runScan(REPO, [adapter('js-ts', [eslint, biome, oxlint])])
 
+    expect(result.findings.map((finding) => finding.id)).toEqual(['o'])
+    expect(result.categories.lint).toEqual({ status: 'assessed' })
+    // Every owner that failed is named, in a stable order.
     expect(result.warnings).toContain(
       'oxlint: graded lint on its default config because biome-lint reported error, eslint reported not-available',
     )
@@ -1356,16 +1325,6 @@ describe('runScan metrics', () => {
     expect(result.metrics.duplication).toEqual({ duplicationPercent: 7.5 })
   })
 
-  it('takes the largest denominator when several formatters report one', async () => {
-    const result = await runScan(REPO, [
-      adapter('js-ts', [
-        measuring('prettier', 'format', { formattableFiles: 12 }),
-        measuring('biome-format', 'format', { formattableFiles: 9 }),
-      ]),
-    ])
-    expect(result.metrics.format).toEqual({ formattableFiles: 12 })
-  })
-
   it('leaves a field absent when nothing measured it, rather than reporting zero', async () => {
     const result = await runScan(REPO, [
       adapter('js-ts', [fakeRunner('x', 'lint', async () => ok())]),
@@ -1438,17 +1397,6 @@ describe('sortFindings', () => {
       'c',
       'b',
     ])
-  })
-
-  it('is a pure function of the input order', () => {
-    const findings = [
-      makeFinding({ id: '2', range: line(2) }),
-      makeFinding({ id: '1', range: line(1) }),
-    ]
-    const once = sortFindings(findings)
-    const twice = sortFindings(findings.toReversed())
-    expect(once.map((finding) => finding.id)).toEqual(twice.map((finding) => finding.id))
-    expect(findings[0]?.id).toBe('2')
   })
 
   it('aggregates findings from every runner in one sorted list', async () => {

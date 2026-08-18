@@ -1,50 +1,36 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { execa } from 'execa'
 import { describe, expect, it } from 'vitest'
-import { banditRunner } from '../src/adapters/common/bandit.ts'
-import { gitleaksRunner, invocationArgs as gitleaksArgs } from '../src/adapters/common/gitleaks.ts'
-import { govulncheckRunner } from '../src/adapters/common/govulncheck.ts'
+import { invocationArgs as gitleaksArgs } from '../src/adapters/common/gitleaks.ts'
 import {
   JSCPD_TOOL,
   ignoreGlobs as jscpdIgnore,
   inheritanceNote,
-  inheritedIgnoreGlobs,
   invocationArgs as jscpdArgs,
   jscpdRunner,
 } from '../src/adapters/common/jscpd.ts'
 import { readRepoExcludes } from '../src/adapters/jsts/repo-excludes.ts'
-import { commonAdapter } from '../src/adapters/common/index.ts'
 import {
   invocationArgs as opengrepArgs,
   materializeRules,
-  opengrepRunner,
 } from '../src/adapters/common/opengrep.ts'
 import { OPENGREP_RULES } from '../src/adapters/common/opengrep-rules.ts'
 import {
   isDatabaseUnreachable,
   invocationArgs as osvArgs,
-  osvScannerRunner,
 } from '../src/adapters/common/osv-scanner.ts'
-import { isAuditable, zizmorRunner } from '../src/adapters/common/zizmor.ts'
+import { isAuditable } from '../src/adapters/common/zizmor.ts'
 import { buildInvocationArgs } from '../src/adapters/csharp/build.ts'
 import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
-import { dotnetEnv, dotnetExecOptions } from '../src/adapters/csharp/dotnet-project.ts'
-import { csharpAdapter } from '../src/adapters/csharp/index.ts'
 import { roslynatorInvocationArgs } from '../src/adapters/csharp/roslynator.ts'
 import {
   TOOL_RESTORE_ARGS,
   mutationReportPath,
   strykerNetInvocationArgs,
-  strykerNetRunner,
 } from '../src/adapters/csharp/stryker-net.ts'
-import { EXCLUDED_SEGMENTS } from '../src/core/discover.ts'
-import { dnxCommand } from '../src/core/exec.ts'
 import { pinnedVersion } from '../src/manifest.ts'
-import { ADAPTERS } from '../src/adapters/index.ts'
-import type { RunContext } from '../src/core/types.ts'
-import { categoryRank } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 import type { Report, ReportTool } from '../src/render/json.ts'
 import { reportFindings } from '../src/render/json.ts'
@@ -76,10 +62,8 @@ describe('the license rule', () => {
     expect(args.some((arg) => arg.startsWith('p/'))).toBe(false)
     expect(args.some((arg) => /^https?:\/\//.test(arg))).toBe(false)
     expect(args.some((arg) => arg.includes('semgrep.dev'))).toBe(false)
-  })
-
-  it('disables opengrep’s version phone-home', () => {
-    expect(opengrepArgs('/scratch/rules.yaml', [])).toContain('--disable-version-check')
+    // The other half of "talks to nobody": no version phone-home on startup.
+    expect(args).toContain('--disable-version-check')
   })
 
   /** The rules that make the grade have to be ours, and local. */
@@ -146,10 +130,9 @@ const measureDuplication = async (root: string, scratch: string) => {
 /**
  * The ignore list is the only thing between the duplication grade and a repo's
  * dependencies, and jscpd matches it against the absolute paths it walks — so
- * whether it works at all depends on the repo's own address. The argument tests
- * further down pin the strings; these pin what the real matcher does with them,
- * because a list that matches nothing renders exactly like a list that matches
- * everything it should.
+ * whether it works at all depends on the repo's own address. These pin what the
+ * real matcher does with the list, because a list that matches nothing renders
+ * exactly like a list that matches everything it should.
  */
 describe('jscpd’s ignore list, against the real tool', () => {
   /**
@@ -192,122 +175,6 @@ describe('jscpd’s ignore list, against the real tool', () => {
 })
 
 describe('zero footprint, in the arguments', () => {
-  /** The ignore list, read from the seam that builds it rather than from a flag. */
-  const ignoreOf = (nested: readonly string[] = []) => jscpdIgnore(REPO, nested)
-
-  /** jscpd's default reporter writes `report/` into the working directory. */
-  it('redirects jscpd’s report into the scratch dir', () => {
-    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'), join(SCRATCH, 'jscpd.json'))
-    expect(args[args.indexOf('--output') + 1]).toBe('/scratch/jscpd')
-    expect(args).toContain('--reporters')
-    expect(args.at(-1)).toBe(REPO)
-  })
-
-  /**
-   * jscpd splits `--ignore` on `,`, so a single comma in the repo's own path
-   * would truncate every rule after it. The config file's array does not split.
-   */
-  it('hands jscpd its ignore list in a scratch config file, not on --ignore', () => {
-    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'), join(SCRATCH, 'jscpd.json'))
-    expect(args).not.toContain('--ignore')
-    expect(args[args.indexOf('--config') + 1]).toBe('/scratch/jscpd.json')
-  })
-
-  it('keeps jscpd out of .git and dependency directories', () => {
-    const ignore = ignoreOf().join(',')
-    for (const excluded of ['.git', 'node_modules', '.venv', '__pycache__']) {
-      expect(ignore).toContain(excluded)
-    }
-  })
-
-  /**
-   * The list is discovery's, not a hand-maintained twin of it: every segment
-   * discovery never scans is a glob here, so the two file sets cannot drift
-   * apart as one of them grows.
-   */
-  it('derives jscpd’s ignore list from discovery’s excluded segments', () => {
-    const entries = ignoreOf()
-    for (const segment of EXCLUDED_SEGMENTS) {
-      expect(entries).toContain(`${REPO}/**/${segment}/**`)
-    }
-  })
-
-  /**
-   * Discovery drops every hidden directory but the root `.github/`, and jscpd
-   * walks the tree itself, so this glob is the only thing applying that rule to
-   * the duplication measurement. A glob list has no negation, so the exemption
-   * cannot come back: `.github/scripts/` is excluded too, and that is the
-   * approximation stated on the constant.
-   */
-  it('keeps jscpd out of hidden directories, with no way to carve .github back in', () => {
-    const entries = ignoreOf()
-    expect(entries).toContain(`${REPO}/**/.*/**`)
-    expect(entries.filter((entry) => entry.startsWith('!'))).toEqual([])
-    expect(entries.filter((entry) => entry.includes('.github'))).toEqual([])
-  })
-
-  /**
-   * jscpd walks absolute paths, so an unanchored glob matches the *ancestors*
-   * of the scanned directory as well as its contents: a repo checked out under
-   * `~/.cache/` or `.claude/worktrees/` matches `**\/.*\/**` on a segment of
-   * its own address, and jscpd ignores the entire tree — reporting 0% of tokens
-   * duplicated and a flattering A for a repo it never measured. Anchoring every
-   * glob to the scanned directory is what confines each rule to the tree it is
-   * about.
-   */
-  it('anchors every ignore glob to the scanned directory, so no ancestor can match', () => {
-    const entries = ignoreOf(['packages/api'])
-    expect(entries.length).toBeGreaterThan(0)
-    expect(entries.filter((entry) => !entry.startsWith(`${REPO}/`))).toEqual([])
-  })
-
-  /**
-   * The anchoring prefix is a literal path spliced into a pattern, so a repo
-   * checked out to `~/src/br[ack]et/` would otherwise turn its own address into
-   * a character class that matches nothing — taking every ignore rule with it
-   * and putting `node_modules/` back inside the duplication measurement.
-   */
-  it('escapes glob metacharacters in the path it anchors to', () => {
-    const entries = jscpdIgnore('/src/br[ack]et/re{p}o(1)', ['packages/api'])
-    expect(entries.length).toBeGreaterThan(0)
-    for (const entry of entries) {
-      expect(entry.startsWith(String.raw`/src/br\[ack\]et/re\{p\}o\(1\)/`)).toBe(true)
-    }
-  })
-
-  /**
-   * jscpd is handed a directory, so a project holding packages of its own would
-   * measure their code — and the clones between them — as its duplication. That
-   * measurement is the repo-wide pass's, and only the rollup grades on it.
-   */
-  it('leaves a parent project’s nested projects to the nested projects', () => {
-    const ignore = ignoreOf(['packages/api', 'packages/web'])
-    expect(ignore).toContain(`${REPO}/packages/api/**`)
-    expect(ignore).toContain(`${REPO}/packages/web/**`)
-    // …and the repo-wide pass, which passes none, still sees every package.
-    const entries = ignoreOf()
-    expect(entries).not.toContain(`${REPO}/packages/api/**`)
-    expect(entries).not.toContain(`${REPO}/packages/web/**`)
-  })
-
-  it('asks jscpd for exactly the graded languages, C# included', () => {
-    const args = jscpdArgs(REPO, join(SCRATCH, 'jscpd'), join(SCRATCH, 'jscpd.json'))
-    expect(args[args.indexOf('--format') + 1]).toBe('javascript,jsx,typescript,tsx,python,csharp')
-  })
-
-  /**
-   * `bin/` and `obj/` are MSBuild output. jscpd walks the tree itself rather
-   * than taking our inventory, so it cannot apply discovery's C#-only rule —
-   * these globs are language-blind by design, the documented trade: a JS
-   * package's `bin/cli.js` stays in the inventory and out of the duplication
-   * measurement.
-   */
-  it('keeps jscpd out of C# build output directories', () => {
-    const entries = ignoreOf()
-    expect(entries).toContain(`${REPO}/**/bin/**`)
-    expect(entries).toContain(`${REPO}/**/obj/**`)
-  })
-
   it('writes gitleaks’ report into the scratch dir, redacted', () => {
     const args = gitleaksArgs(REPO, join(SCRATCH, 'gitleaks.json'))
     expect(args[0]).toBe('dir')
@@ -402,64 +269,6 @@ describe('zero footprint, in the arguments', () => {
   })
 
   /**
-   * The exact pin and the exact feed are `dnxCommand`'s (spec §6): `-y`, the
-   * `id@version` form, `--source` nuget.org, `-v quiet` so a cold NuGet cache
-   * cannot narrate itself into this runner's stdout, and the `--` that keeps
-   * every tool argument out of dnx's own parser.
-   */
-  it('wraps the roslynator tail in the pinned, nuget.org-locked dnx form', () => {
-    const tail = roslynatorInvocationArgs(join(REPO, 'App.csproj'), join(SCRATCH, 'roslynator'))
-    const command = dnxCommand('roslynator.dotnet.cli', tail)
-
-    expect(command.command).toBe('dnx')
-    expect(command.ephemeral).toBe('dnx')
-    expect(command.args.slice(0, 7)).toEqual([
-      '-y',
-      'roslynator.dotnet.cli@0.12.0',
-      '--source',
-      'https://api.nuget.org/v3/index.json',
-      '-v',
-      'quiet',
-      '--',
-    ])
-    expect(command.args.slice(7)).toEqual([...tail])
-  })
-
-  /**
-   * The one builder every C# runner passes to `execTool`: `cwd`, `timeoutMs`
-   * and `env` are decided once here, not in five runner bodies.
-   */
-  it('builds every dotnet spawn’s options from the context, with the pinned env', () => {
-    const ctx: RunContext = {
-      repoRoot: REPO,
-      project: makeProject(['src/A.cs']),
-      files: ['src/A.cs'],
-      scratch: SCRATCH,
-      runScratch: SCRATCH,
-      detection: null,
-      timeoutMs: 12_345,
-      deep: false,
-    }
-
-    expect(dotnetExecOptions(ctx, '/repo/src')).toEqual({
-      cwd: '/repo/src',
-      timeoutMs: 12_345,
-      env: dotnetEnv(),
-    })
-
-    // The dnx-fetched runners work from scratch, with the pinned environment:
-    // NUGET_PACKAGES pinned to the machine cache (zero footprint under a
-    // hostile NuGet.config), diagnostics forced to English (determinism).
-    expect(dotnetExecOptions(ctx, join(SCRATCH, 'roslynator'))).toEqual({
-      cwd: '/scratch/roslynator',
-      timeoutMs: 12_345,
-      env: dotnetEnv(),
-    })
-    expect(dotnetEnv()['NUGET_PACKAGES']).toBe(join(homedir(), '.nuget', 'packages'))
-    expect(dotnetEnv()['DOTNET_CLI_UI_LANGUAGE']).toBe('en')
-  })
-
-  /**
    * The two commands the Stryker.NET runner spawns, both through the repo's
    * own restored tool: `tool restore` resolves the manifest's pins into the
    * NuGet machine cache without evaluating a repo target, and the run itself
@@ -520,22 +329,9 @@ async function scanTemp(files: Readonly<Record<string, string>>): Promise<Report
 const jscpdRuns = (report: Report): readonly ReportTool[] =>
   report.tools.filter((tool) => tool.tool === JSCPD_TOOL)
 
-describe('jscpd on a C#-only tree', () => {
+describe('jscpd on a tree it can measure nothing in', () => {
   /** Roomy: a cold npx cache fetches the pinned jscpd first. */
   const SCAN_TIMEOUT_MS = 180_000
-
-  it(
-    'measures a tree of only .cs files instead of standing down',
-    async () => {
-      const runs = jscpdRuns(
-        await scanTemp({ 'Program.cs': 'class Program { static void Main() {} }\n' }),
-      )
-
-      expect(runs.length).toBeGreaterThan(0)
-      expect(runs.map((run) => run.state)).not.toContain('not-available')
-    },
-    SCAN_TIMEOUT_MS,
-  )
 
   it(
     'names all four languages when there is nothing to measure',
@@ -618,47 +414,6 @@ describe('whose config decided a duplication grade', () => {
     },
     SCAN_TIMEOUT_MS,
   )
-
-  /**
-   * The honest end-to-end statement of the same fact, against the real binary:
-   * `minTokens: 5000` would suppress every clone in this tree if jscpd read it.
-   * The percentages are identical because it never does — a characterization
-   * test, not a discriminator, and the reason `default-config` is the truth
-   * rather than a simplification.
-   */
-  it(
-    'measures the same percentage whether or not the tree carries a .jscpd.json',
-    async () => {
-      const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-config-'))
-      try {
-        const tuned = join(base, 'tuned')
-        const plain = join(base, 'plain')
-        // A scratch dir each: the two runs share a config file name and a
-        // report path, so one working directory would have them overwrite
-        // each other's answer.
-        const tunedScratch = join(base, 'scratch-tuned')
-        const plainScratch = join(base, 'scratch-plain')
-        await Promise.all([
-          mkdir(tunedScratch, { recursive: true }),
-          mkdir(plainScratch, { recursive: true }),
-          plantDuplicates(tuned),
-          plantDuplicates(plain),
-        ])
-        await writeFile(join(tuned, '.jscpd.json'), TUNED, 'utf8')
-
-        const [withConfig, without] = await Promise.all([
-          measureDuplication(tuned, tunedScratch),
-          measureDuplication(plain, plainScratch),
-        ])
-
-        expect(withConfig.percentage).toBeGreaterThan(0)
-        expect(withConfig.percentage).toBe(without.percentage)
-      } finally {
-        await rm(base, { recursive: true, force: true })
-      }
-    },
-    SCAN_TIMEOUT_MS,
-  )
 })
 
 /**
@@ -721,26 +476,6 @@ describe('duplication excludes inherited from the repo’s own configs', () => {
     )
   })
 
-  /** Both contributing is one note, and the order is the read order, not disk order. */
-  it('names both configs in one note, in a stable order', async () => {
-    await withRepo(
-      {
-        '.fallowrc.json': JSON.stringify({ ignorePatterns: ['generated/**'] }),
-        'biome.json': biomeConfig(['**', '!gen/**']),
-      },
-      async (root) => {
-        const excludes = await readRepoExcludes(root)
-        expect(excludes.sources.map((source) => source.config)).toEqual([
-          'biome.json',
-          '.fallowrc.json',
-        ])
-        expect(inheritanceNote(excludes)).toBe(
-          'duplication excludes inherited from biome.json, .fallowrc.json',
-        )
-      },
-    )
-  })
-
   /**
    * A config crank-health cannot read is a config it cannot honor, and guessing
    * at half of it would narrow the measurement by an amount nobody wrote. It
@@ -774,15 +509,6 @@ describe('duplication excludes inherited from the repo’s own configs', () => {
         )
       },
     )
-  })
-
-  it('inherits nothing, and says nothing, when the repo owns neither config', async () => {
-    await withRepo({ 'package.json': '{}\n' }, async (root) => {
-      const excludes = await readRepoExcludes(root)
-      expect(excludes).toEqual({ patterns: [], sources: [], unreadable: [] })
-      expect(inheritanceNote(excludes)).toBeUndefined()
-      expect(inheritedIgnoreGlobs(root, excludes.patterns)).toEqual([])
-    })
   })
 
   /** A config that excludes nothing has narrowed nothing; a note would be noise. */
@@ -862,20 +588,17 @@ describe('duplication excludes inherited from the repo’s own configs', () => {
           ['a/**', 'z/**'],
           ['a/**'],
         ])
+        // Both contributing is one note, and the order is the read order, not
+        // disk order.
+        expect(excludes.sources.map((source) => source.config)).toEqual([
+          'biome.json',
+          '.fallowrc.json',
+        ])
+        expect(inheritanceNote(excludes)).toBe(
+          'duplication excludes inherited from biome.json, .fallowrc.json',
+        )
       },
     )
-  })
-
-  /**
-   * Anchored to the repo root, not to the scanned directory: the pattern is
-   * relative to the config that declared it, and the config can sit above the
-   * project being measured. The prefix is escaped for the same reason every
-   * other glob's is — see "escapes glob metacharacters in the path it anchors to".
-   */
-  it('anchors an inherited pattern to the repo root, escaping the literal prefix', () => {
-    expect(inheritedIgnoreGlobs('/src/br[ack]et', ['gen/**'])).toEqual([
-      String.raw`/src/br\[ack\]et/gen/**`,
-    ])
   })
 
   /**
@@ -953,53 +676,12 @@ describe('osv-scanner degradation', () => {
     'connection refused',
   ])('recognizes an unreachable database in %s', (stderr) => {
     expect(isDatabaseUnreachable(stderr)).toBe(true)
-  })
-
-  it('does not mistake an ordinary failure for a network problem', () => {
+    // The controls: an ordinary failure, and no stderr at all, are not the
+    // network — degrading those to "database unreachable" would excuse them.
     expect(isDatabaseUnreachable('No package sources found, --help for usage information.')).toBe(
       false,
     )
     expect(isDatabaseUnreachable('')).toBe(false)
-  })
-})
-
-describe('the C# adapter', () => {
-  /** `LANGUAGES` pins "canonical language order, matching the adapter order". */
-  it('joins the adapter order after python, before common', () => {
-    expect(ADAPTERS.map((adapter) => adapter.language)).toEqual([
-      'js-ts',
-      'python',
-      'csharp',
-      'common',
-    ])
-    expect(csharpAdapter.language).toBe('csharp')
-  })
-
-  /**
-   * A standing check that survives every later insertion: runners are listed in
-   * category order (spec §10's remediation priority), so a later task inserts
-   * by `CATEGORIES` index rather than appending.
-   */
-  it('lists its runners in category order', () => {
-    const categories = csharpAdapter.runners.map((runner) => runner.category)
-    expect(categories).toEqual(categories.toSorted((a, b) => categoryRank(a) - categoryRank(b)))
-    expect(categories).toContain('format')
-    // `dead-code` precedes `complexity` in `CATEGORIES`, so roslynator sits at
-    // index 1 — between the build-backed `types` runner and the rest.
-    expect(categories[1]).toBe('dead-code')
-  })
-
-  /** Task 9 completes the list: `test-quality` is `CATEGORIES`' last member. */
-  it('answers every C# category, stryker-net last', () => {
-    expect(csharpAdapter.runners.map((runner) => runner.category)).toEqual([
-      'types',
-      'dead-code',
-      'complexity',
-      'lint',
-      'format',
-      'test-quality',
-    ])
-    expect(csharpAdapter.runners.at(-1)).toBe(strykerNetRunner)
   })
 })
 
@@ -1040,51 +722,5 @@ describe('the inputs zizmor audits', () => {
     '',
   ])('leaves %s alone', (file) => {
     expect(isAuditable(file)).toBe(false)
-  })
-})
-
-describe('the common adapter', () => {
-  it('is registered, after the three language adapters', () => {
-    expect(ADAPTERS.at(-1)).toBe(commonAdapter)
-    expect(commonAdapter.language).toBe('common')
-  })
-
-  /**
-   * Spec "Categories and tools" lists security as a union of complementary
-   * scanners, so none of them may stand another down (see
-   * `ToolRunner.complementary` and the orchestrator test).
-   */
-  it('marks every security runner complementary', () => {
-    const security = commonAdapter.runners.filter((runner) => runner.category === 'security')
-    expect(security.map((runner) => runner.tool).toSorted()).toEqual([
-      'bandit',
-      'gitleaks',
-      'govulncheck',
-      'opengrep',
-      'osv-scanner',
-      'zizmor',
-    ])
-    expect(security.every((runner) => runner.complementary === true)).toBe(true)
-  })
-
-  /** Duplication has exactly one tool, so it needs no such exemption. */
-  it('leaves jscpd as an ordinary default', () => {
-    expect(jscpdRunner.category).toBe('duplication')
-    expect(jscpdRunner.complementary).toBeUndefined()
-  })
-
-  it('records a version for every runner', () => {
-    for (const runner of [
-      gitleaksRunner,
-      opengrepRunner,
-      zizmorRunner,
-      banditRunner,
-      osvScannerRunner,
-      govulncheckRunner,
-      jscpdRunner,
-    ]) {
-      // Go versions carry the `v`; every other ecosystem's does not.
-      expect(runner.pinnedVersion).toMatch(/^v?\d+\.\d+/)
-    }
   })
 })

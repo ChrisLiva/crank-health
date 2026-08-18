@@ -10,7 +10,7 @@ import { renderTerminal } from '../src/render/terminal.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
-import { GOLDEN_TOOLCHAIN, TOOLCHAIN_BINARIES, onPath } from './support/system-tools.ts'
+import { GOLDEN_TOOLCHAIN, onPath } from './support/system-tools.ts'
 import { GO_ABSENT_REASON } from '../src/adapters/common/govulncheck.ts'
 import { reportFindings } from '../src/render/json.ts'
 
@@ -207,7 +207,10 @@ describe('quick scan of the mono-js fixture', () => {
    * Acceptance criterion 1's last half: two packages, two grades. Each fails
    * lint on its own linter's verdict and over its own denominator — the same
    * one error grades F in the smaller package and D in the larger — and only
-   * `api` has a formatting failure. A blended repo grade could say none of that.
+   * `api` has a formatting failure. `web` still grades A for complexity, which
+   * is the advisory half of that category: fta scores whole files and fallow
+   * gates on ceilings that are not the cognitive one, so both report a file the
+   * grade does not count.
    */
   it('grades each package on its own findings', () => {
     expect(categories('packages/api')).toMatchObject({
@@ -217,35 +220,8 @@ describe('quick scan of the mono-js fixture', () => {
     expect(categories('packages/web')).toMatchObject({
       lint: { status: 'graded', grade: 'D' },
       format: { status: 'graded', grade: 'A' },
+      complexity: { status: 'graded', grade: 'A' },
     })
-  })
-
-  /**
-   * The advisory half of the complexity category, and the reason `web` still
-   * grades A: fta scores whole files and fallow gates on ceilings that are not
-   * the cognitive one, so both can report a file the grade does not count.
-   */
-  it('keeps the file-level complexity findings out of the grade', () => {
-    expect(categories('packages/web')?.complexity).toEqual({ status: 'graded', grade: 'A' })
-    expect(
-      reportFindings(scan.report)
-        .filter((finding) => finding.category === 'complexity')
-        .map(shape),
-    ).toEqual(MONO_JS_TOKENS_ADVISORY.map((planted) => ({ ...planted })))
-  })
-
-  /**
-   * fta is handed a directory, so it reports inside it — `src/tokens.js` for a
-   * run in `packages/web`. Nothing else would notice if that offset were lost:
-   * fta reports no metrics, and a path no project claims is dropped, so the
-   * finding would silently disappear rather than come back wrong.
-   */
-  it('brings fta’s paths back to the repo’s terms', () => {
-    const fta = reportFindings(scan.report).filter((finding) => finding.tool === 'fta')
-    expect(fta.map((finding) => [finding.file, finding.project])).toEqual([
-      ['packages/web/src/tokens.js', 'packages/web'],
-    ])
-    expect(record('fta', 'packages/web')?.raw).toEqual(['raw/packages/web/fta.json'])
   })
 
   /**
@@ -347,18 +323,10 @@ describe('quick scan of the mono-js fixture', () => {
   })
 
   /**
-   * …and it says so once, in the report's own warnings channel, so a reader who
-   * wonders why the tree looks smaller than it is has the answer beside the
-   * grades rather than having to diff a file list.
-   */
-  it('says in the report that the hidden directory went unanalyzed', () => {
-    expect(scan.report.warnings).toContain(MONO_JS_SCAN_SCOPE)
-  })
-
-  /**
-   * The same sentence in all three artifacts, each through the channel it
-   * already had for a run's own warnings: nothing composes this prose twice, so
-   * the three can never drift into saying different things about one scan.
+   * …and it says so once, in the report's own warnings channel, then in all
+   * three artifacts, each through the channel it already had for a run's own
+   * warnings: nothing composes this prose twice, so the four can never drift
+   * into saying different things about one scan.
    */
   it('renders the same sentence in the terminal, report.md and agent.md', () => {
     const terminal = renderTerminal(
@@ -367,6 +335,7 @@ describe('quick scan of the mono-js fixture', () => {
       { color: false },
     )
 
+    expect(scan.report.warnings).toContain(MONO_JS_SCAN_SCOPE)
     expect(terminal).toContain(`  warning: ${MONO_JS_SCAN_SCOPE}`)
     expect(scan.markdown).toContain(`- ${MONO_JS_SCAN_SCOPE}`)
     expect(scan.agentMarkdown).toContain(`> How this run was graded: ${MONO_JS_SCAN_SCOPE}`)
@@ -425,21 +394,6 @@ describe('quick scan of the mono-js fixture', () => {
     ])
   })
 
-  /**
-   * And no package is told about it. Which reason each package's security state
-   * carries is a fact about this machine — the repo-spanning scanners are
-   * release binaries it may not have — but bandit's sentence is not among them
-   * either way, because bandit was never asked about a package.
-   */
-  it('keeps bandit’s sentence out of every package’s security reason', () => {
-    for (const project of scan.report.projects) {
-      expect(project.categories.security).toMatchObject({ status: 'not-assessed' })
-      expect(project.categories.security).not.toMatchObject({
-        reason: expect.stringContaining('bandit') as unknown as string,
-      })
-    }
-  })
-
   function categories(path: string) {
     return scan.report.projects.find((project) => project.path === path)?.categories
   }
@@ -482,7 +436,7 @@ describe('a workspace whose toolchain is installed only at the root', () => {
     await rm(out, { recursive: true, force: true })
   })
 
-  it('runs the root-installed binary in every package that inherited it', () => {
+  it('runs the root-installed binary in every package that inherited it', async () => {
     for (const project of ['packages/api', 'packages/web']) {
       expect(
         scan.report.tools.find((tool) => tool.tool === 'prettier' && tool.project === project),
@@ -492,9 +446,7 @@ describe('a workspace whose toolchain is installed only at the root', () => {
         detection: { reason: 'dependency', ownedVia: 'package.json', installed: true },
       })
     }
-  })
-
-  it('leaves the target repo clean, hoisted install and all', async () => {
+    // …and running the repo's own install leaves the tree it came from clean.
     expect(await fixture.status()).toBe('')
   })
 })
@@ -662,16 +614,6 @@ describe('quick scan of the mono-mixed fixture', () => {
     if (!(await onPath('go'))) {
       expect(row).toMatchObject({ state: 'not-available', reason: GO_ABSENT_REASON })
     }
-  })
-
-  /**
-   * A machine with `go` is a different toolchain, in the same sense as one with
-   * gitleaks installed: govulncheck runs there and does not run here, so the
-   * goldens — which record the machine that has neither — must not be compared.
-   */
-  it('is not the golden toolchain on a machine that has go', async () => {
-    expect(TOOLCHAIN_BINARIES).toContain('go')
-    if (await onPath('go')) expect(GOLDEN_TOOLCHAIN).toBe(false)
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {

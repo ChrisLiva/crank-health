@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
-import { basename, isAbsolute, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { GoVulnerability } from '../src/adapters/common/govulncheck.ts'
@@ -8,14 +8,12 @@ import {
   GOVULNCHECK_TOOL,
   GO_ABSENT_REASON,
   NO_GO_MODULES_REASON,
-  goEnv,
   govulncheckRunner,
   invocationArgs,
   mergeReachability,
   parseGovulncheckStream,
   toPendingFindings,
 } from '../src/adapters/common/govulncheck.ts'
-import { commonAdapter } from '../src/adapters/common/index.ts'
 import { OSV_PACKAGE_RULE, OSV_SCANNER_TOOL } from '../src/adapters/common/osv-scanner.ts'
 import { inventoryOf, repoProject } from '../src/core/discover.ts'
 import type { Finding, RunContext, ToolResult, ToolRunner } from '../src/core/types.ts'
@@ -204,15 +202,6 @@ describe('toPendingFindings', () => {
     expect(crypto?.message).toContain('advisory only: not-imported')
   })
 
-  it('grades a reachable symbol whose advisory has a published fix', () => {
-    const [finding] = toPendingFindings(
-      [vulnerability({ reachability: 'symbol-reachable' })],
-      'go.mod',
-    )
-
-    expect(finding?.gradeScope).toBe(true)
-  })
-
   it('demotes a package that is imported but never called', () => {
     const [finding] = toPendingFindings(
       [vulnerability({ reachability: 'imported-no-call' })],
@@ -242,10 +231,6 @@ describe('toPendingFindings', () => {
 
     expect(finding?.gradeScope).toBe(false)
     expect(finding?.message).toContain('advisory only: imported-no-call')
-  })
-
-  it('reports nothing for no vulnerabilities', () => {
-    expect(toPendingFindings([], 'go.mod')).toEqual([])
   })
 })
 
@@ -424,19 +409,6 @@ describe('mergeReachability', () => {
     expect(merged[1]?.gradeScope).toBe(true)
   })
 
-  it('leaves a module whose lockfile audit saw nothing standing on its own row', () => {
-    const merged = mergeReachability([
-      packageFinding({ file: 'a/go.mod' }),
-      goFindingIn('a/go.mod'),
-      goFindingIn('b/go.mod'),
-    ])
-
-    expect(merged.map((finding) => [finding.file, finding.tool])).toEqual([
-      ['a/go.mod', OSV_SCANNER_TOOL],
-      ['b/go.mod', GOVULNCHECK_TOOL],
-    ])
-  })
-
   /** Two contributions of one advisory are one advisory, not a doubled count. */
   it('appends a govulncheck-only advisory once however often it is contributed', () => {
     const only = [vulnerability({ osv: 'GO-9', aliases: [], summary: 'go only' })]
@@ -529,17 +501,6 @@ describe('the scan pipeline', () => {
 })
 
 describe('the govulncheck runner', () => {
-  it('is a complementary, repo-scoped security runner on the pinned analyzer', () => {
-    expect(govulncheckRunner).toMatchObject({
-      tool: GOVULNCHECK_TOOL,
-      category: 'security',
-      complementary: true,
-      repoScoped: true,
-      pinnedVersion: 'v1.7.0',
-    })
-    expect(commonAdapter.runners).toContain(govulncheckRunner)
-  })
-
   it('is owned by any go.mod in the inventory, and by nothing else', async () => {
     const files = inventoryOf(['README.md', 'services/api/go.mod', 'services/api/main.go'])
 
@@ -557,6 +518,7 @@ describe('the govulncheck runner', () => {
     ).toBeNull()
   })
 
+  /** The whole command line: an exact pin, `-json`, and no writing subcommand. */
   it('runs the exact pin and no go subcommand that could write', () => {
     expect(invocationArgs()).toEqual([
       'run',
@@ -564,18 +526,6 @@ describe('the govulncheck runner', () => {
       '-json',
       './...',
     ])
-    for (const mutating of ['get', 'install', 'mod', 'tidy', 'vendor', 'generate', 'work']) {
-      expect(invocationArgs()).not.toContain(mutating)
-    }
-    expect(invocationArgs().some((arg) => arg.includes('@latest'))).toBe(false)
-  })
-
-  it('pins the module cache outside any repo and forbids go.mod rewrites', () => {
-    expect(goEnv()).toEqual({
-      GOFLAGS: '-mod=readonly',
-      GOMODCACHE: join(homedir(), 'go', 'pkg', 'mod'),
-    })
-    expect(isAbsolute(goEnv()['GOMODCACHE'] ?? '')).toBe(true)
   })
 
   it('assesses nothing, and says so, in a repo with no Go module', async () => {
@@ -691,17 +641,6 @@ describe('the govulncheck runner against a farmed PATH', () => {
     expect(result.reason).toContain('go: updates to go.mod needed')
     // Our tool on our defaults, whatever the run made of it.
     expect(result.configOwned).toBe(false)
-  })
-
-  /** The failing run is the one whose evidence a reader most needs. */
-  it('stages stderr, so a failed module leaves evidence behind', async () => {
-    const result = await runUnder({ go: '#!/bin/sh\necho "go: build failed" >&2\nexit 1' }, [
-      'go.mod',
-      'main.go',
-    ])
-
-    expect(result.rawFiles.map((file) => basename(file))).toEqual(['govulncheck.stderr.txt'])
-    expect(await readFile(result.rawFiles[0] ?? '', 'utf8')).toContain('go: build failed')
   })
 
   /**

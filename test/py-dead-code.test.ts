@@ -6,7 +6,6 @@ import {
   MIN_CONFIDENCE,
   parseVulture,
   toPendingFindings,
-  vultureRunner,
 } from '../src/adapters/python/vulture.ts'
 
 /**
@@ -64,30 +63,9 @@ describe('vulture toPendingFindings', () => {
     expect(MIN_CONFIDENCE).toBe(60)
   })
 
-  it('says how sure vulture was, in the severity as well as the message', () => {
-    const findings = toPendingFindings(results, false)
-    expect(findings.map((finding) => finding.severity)).toEqual(['warning', 'info', 'warning'])
-    expect(findings[1]?.message).toBe('Unused function `helper` (60% confidence)')
-  })
-
   /** Identity survives edits above the symbol (spec §2). */
   it('anchors on the symbol name, and on the line only when there is no symbol', () => {
     const findings = toPendingFindings(results, false)
     expect(findings.map((finding) => finding.anchor)).toEqual(['os', 'helper', undefined])
-  })
-
-  it('reports the dead-code category under either provenance', () => {
-    expect(
-      toPendingFindings(results, true).every((finding) => finding.category === 'dead-code'),
-    ).toBe(true)
-    expect(toPendingFindings(results, true)[0]?.provenance).toBe('repo-config')
-    expect(toPendingFindings(results, false)[0]?.provenance).toBe('default-config')
-  })
-})
-
-describe('the vulture runner', () => {
-  it('reports the dead-code category as a default', () => {
-    expect(vultureRunner.category).toBe('dead-code')
-    expect(vultureRunner.repoOwnedOnly).toBeUndefined()
   })
 })

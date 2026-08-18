@@ -2,139 +2,18 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  defaultTypeChecker,
-  detectPythonTool,
-  findVenv,
-  normalizeDistribution,
-  requirementNames,
-  requirementsFiles,
-  tomlDependencies,
-  tomlSections,
-} from '../src/adapters/python/py-project.ts'
+import { detectPythonTool, findVenv } from '../src/adapters/python/py-project.ts'
 import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext } from '../src/core/types.ts'
 
 /**
  * Python ownership detection (spec §1) and the venv rule the two type checkers
- * split on. The TOML reader here is deliberately minimal — see `py-project.ts`
- * — so these tests are where its limits are pinned down: what it must get right,
- * and what it is documented not to.
+ * split on. The TOML and requirements readers behind detection are deliberately
+ * minimal — see `py-project.ts` — so the declaration layouts they have to get
+ * right are exercised here, through the detection they exist to answer.
  */
 
-describe('tomlSections', () => {
-  it('reads plain, nested and array-of-table headers', () => {
-    const sections = tomlSections(`
-[project]
-name = "x"
-
-[tool.ruff.lint]
-select = ["F"]
-
-[[tool.mypy.overrides]]
-module = "y"
-`)
-    expect([...sections].toSorted()).toEqual(['project', 'tool.mypy.overrides', 'tool.ruff.lint'])
-  })
-
-  it('ignores headers inside a multi-line string, which are prose', () => {
-    const sections = tomlSections(`
-[project]
-readme = """
-Configure it with [tool.ruff] in your own project.
-"""
-`)
-    expect([...sections]).toEqual(['project'])
-  })
-
-  it('ignores comments', () => {
-    expect([...tomlSections('# [tool.ruff]\n[project]\n')]).toEqual(['project'])
-  })
-})
-
-describe('tomlDependencies', () => {
-  it('reads PEP 621 dependencies, extras and PEP 735 groups', () => {
-    const names = tomlDependencies(`
-[project]
-dependencies = ["requests>=2", "Django ~= 5.0"]
-
-[project.optional-dependencies]
-dev = ["ruff==0.16.1", "pytest"]
-
-[dependency-groups]
-lint = ["vulture"]
-`)
-    expect([...names].toSorted()).toEqual(['django', 'pytest', 'requests', 'ruff', 'vulture'])
-  })
-
-  it('reads a multi-line dependency array', () => {
-    const names = tomlDependencies(`
-[project]
-dependencies = [
-  "complexipy>=6",
-  "ty",
-]
-version = "1.0"
-`)
-    expect([...names].toSorted()).toEqual(['complexipy', 'ty'])
-    // The array closed, so a later assignment is not swept up as a dependency.
-    expect(names.has('1-0')).toBe(false)
-  })
-
-  it('reads poetry-style dependency tables, where the key is the distribution', () => {
-    const names = tomlDependencies(`
-[tool.poetry.dependencies]
-python = "^3.12"
-ruff = "^0.16"
-
-[tool.poetry.group.dev.dependencies]
-pyright = "^1.1"
-`)
-    expect([...names].toSorted()).toEqual(['pyright', 'python', 'ruff'])
-  })
-
-  it('does not mistake an ordinary array for a dependency list', () => {
-    expect([...tomlDependencies('[tool.ruff.lint]\nselect = ["E4", "F"]\n')]).toEqual([])
-  })
-})
-
-describe('requirementNames', () => {
-  it('reads names and drops versions, markers, comments and options', () => {
-    const names = requirementNames(`
-# tooling
-ruff==0.16.1
-vulture >= 2.16  # dead code
-requests[security]>=2.0; python_version >= "3.11"
--r other.txt
---index-url https://example.invalid/simple
-`)
-    expect([...names].toSorted()).toEqual(['requests', 'ruff', 'vulture'])
-  })
-})
-
-describe('normalizeDistribution', () => {
-  it('applies PEP 503 normalization so every spelling of a name matches', () => {
-    expect(normalizeDistribution('Ruff')).toBe('ruff')
-    expect(normalizeDistribution('typing_extensions')).toBe('typing-extensions')
-    expect(normalizeDistribution('zope.interface >= 5')).toBe('zope-interface')
-  })
-})
-
-describe('requirementsFiles', () => {
-  it('finds root requirements files and a requirements directory, nothing deeper', () => {
-    expect(
-      requirementsFiles([
-        'requirements.txt',
-        'requirements-dev.txt',
-        'requirements/base.txt',
-        'docs/requirements.txt',
-        'requirements.in',
-      ]),
-    ).toEqual(['requirements.txt', 'requirements-dev.txt', 'requirements/base.txt'])
-  })
-})
-
-describe('findVenv and defaultTypeChecker', () => {
+describe('findVenv', () => {
   let root: string
 
   beforeEach(async () => {
@@ -145,11 +24,6 @@ describe('findVenv and defaultTypeChecker', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('finds nothing in a project without one, which is ty’s case', async () => {
-    expect(await findVenv(root)).toBeUndefined()
-    expect(defaultTypeChecker(undefined)).toBe('ty')
-  })
-
   /**
    * The point of finding a virtualenv is handing a real interpreter to pyright,
    * so a directory without one is not a virtualenv as far as detection cares.
@@ -158,18 +32,6 @@ describe('findVenv and defaultTypeChecker', () => {
     await mkdir(join(root, '.venv'), { recursive: true })
     await writeFile(join(root, '.venv', 'pyvenv.cfg'), 'home = /usr\n')
     expect(await findVenv(root)).toBeUndefined()
-  })
-
-  it('finds one that has an interpreter, and hands pyright the decision', async () => {
-    await mkdir(join(root, '.venv', 'bin'), { recursive: true })
-    await writeFile(join(root, '.venv', 'bin', 'python'), '', { mode: 0o755 })
-
-    const venv = await findVenv(root)
-    expect(venv).toEqual({
-      directory: '.venv',
-      interpreter: join(root, '.venv', 'bin', 'python'),
-    })
-    expect(defaultTypeChecker(venv)).toBe('pyright')
   })
 
   it('prefers .venv over venv, so the choice never depends on directory order', async () => {
@@ -200,6 +62,20 @@ describe('detectPythonTool', () => {
     sections: ['tool.ruff'],
   }
 
+  /** mypy's spec: the tool whose section is written as an array of tables. */
+  const mypySpec = {
+    configFiles: ['mypy.ini'],
+    distribution: 'mypy',
+    sections: ['tool.mypy'],
+  }
+
+  /** cosmic-ray's spec: a distribution whose name has a separator in it. */
+  const cosmicRaySpec = {
+    configFiles: ['cosmic-ray.toml'],
+    distribution: 'cosmic-ray',
+    sections: ['tool.cosmic-ray'],
+  }
+
   function context(files: string[]): DetectContext {
     return repoDetectContext(root, {
       all: files,
@@ -207,9 +83,34 @@ describe('detectPythonTool', () => {
     })
   }
 
+  /** Writes a file, creating the directories above it. */
+  async function write(file: string, body: string): Promise<void> {
+    await mkdir(dirname(join(root, file)), { recursive: true })
+    await writeFile(join(root, file), body)
+  }
+
   it('is null for a repo that never mentions the tool', async () => {
-    await writeFile(join(root, 'pyproject.toml'), '[project]\nname = "x"\n')
-    expect(await detectPythonTool(context(['pyproject.toml', 'a.py']), ruffSpec)).toBeNull()
+    // Two ways this manifest could be misread into an answer: the readme names
+    // `[tool.ruff]`, but a header inside a multi-line string is prose and not a
+    // section; and the project is itself named `mypy`, which is not a
+    // dependency because the array above it closed.
+    await writeFile(
+      join(root, 'pyproject.toml'),
+      [
+        '[project]',
+        'dependencies = [',
+        '  "requests>=2",',
+        ']',
+        'name = "mypy"',
+        'readme = """',
+        'Configure it with [tool.ruff] in your own project.',
+        '"""',
+        '',
+      ].join('\n'),
+    )
+    const ctx = context(['pyproject.toml', 'a.py'])
+    expect(await detectPythonTool(ctx, ruffSpec)).toBeNull()
+    expect(await detectPythonTool(ctx, mypySpec)).toBeNull()
   })
 
   it('treats a config file as ownership', async () => {
@@ -221,21 +122,130 @@ describe('detectPythonTool', () => {
     })
   })
 
-  /** A `[tool.ruff.lint]` section owns ruff just as `[tool.ruff]` does. */
+  /**
+   * A `[tool.ruff.lint]` section owns ruff just as `[tool.ruff]` does, and an
+   * array-of-table header — `[[tool.mypy.overrides]]` — owns mypy the same way.
+   * The `select` array is not a dependency list, so neither reason is
+   * `config+dependency`.
+   */
   it('treats a pyproject subsection as ownership, and names the manifest as the artifact', async () => {
-    await writeFile(join(root, 'pyproject.toml'), '[tool.ruff.lint]\nselect = ["ALL"]\n')
-    expect(await detectPythonTool(context(['pyproject.toml']), ruffSpec)).toMatchObject({
+    await writeFile(
+      join(root, 'pyproject.toml'),
+      [
+        '[project]',
+        'name = "x"',
+        '',
+        '[tool.ruff.lint]',
+        'select = ["ALL"]',
+        '',
+        '[[tool.mypy.overrides]]',
+        'module = "y"',
+        '',
+      ].join('\n'),
+    )
+    const ctx = context(['pyproject.toml'])
+    expect(await detectPythonTool(ctx, ruffSpec)).toMatchObject({
+      reason: 'config',
+      configFiles: ['pyproject.toml'],
+    })
+    expect(await detectPythonTool(ctx, mypySpec)).toMatchObject({
       reason: 'config',
       configFiles: ['pyproject.toml'],
     })
   })
 
-  it('treats a declared dependency as ownership, wherever it is declared', async () => {
-    await writeFile(join(root, 'requirements-dev.txt'), 'ruff==0.16.1\n')
-    expect(await detectPythonTool(context(['requirements-dev.txt']), ruffSpec)).toMatchObject({
-      reason: 'dependency',
-      configFiles: [],
-    })
+  /**
+   * Every layout a dependency is declared in: PEP 621 arrays, extras and PEP
+   * 735 groups, poetry's tables where the key is the distribution, and the
+   * requirements files spec §1 names — with versions, extras, markers, comments
+   * and pip options around the name, and in any PEP 503 spelling of it.
+   */
+  it.each([
+    [
+      'a PEP 621 dependencies array',
+      { 'pyproject.toml': '[project]\ndependencies = ["requests>=2", "Django ~= 5.0", "ruff"]\n' },
+      'pyproject.toml',
+      ruffSpec,
+    ],
+    [
+      'a PEP 621 extra',
+      { 'pyproject.toml': '[project.optional-dependencies]\ndev = ["ruff==0.16.1", "pytest"]\n' },
+      'pyproject.toml',
+      ruffSpec,
+    ],
+    [
+      'a PEP 735 dependency group',
+      { 'pyproject.toml': '[dependency-groups]\nlint = ["vulture", "ruff"]\n' },
+      'pyproject.toml',
+      ruffSpec,
+    ],
+    [
+      'a multi-line dependency array, which closes before the next assignment',
+      {
+        'pyproject.toml':
+          '[project]\ndependencies = [\n  "complexipy>=6",\n  "ruff",\n]\nversion = "1.0"\n',
+      },
+      'pyproject.toml',
+      ruffSpec,
+    ],
+    [
+      'a poetry dependency table, where the key is the distribution',
+      {
+        'pyproject.toml':
+          '[tool.poetry.group.dev.dependencies]\npyright = "^1.1"\nruff = "^0.16"\n',
+      },
+      'pyproject.toml',
+      ruffSpec,
+    ],
+    [
+      'a requirements file, among versions, markers, comments and pip options',
+      {
+        'requirements-dev.txt': [
+          '# tooling',
+          'ruff==0.16.1',
+          'vulture >= 2.16  # dead code',
+          'requests[security]>=2.0; python_version >= "3.11"',
+          '-r other.txt',
+          '--index-url https://example.invalid/simple',
+          '',
+        ].join('\n'),
+      },
+      'requirements-dev.txt',
+      ruffSpec,
+    ],
+    ['the root requirements.txt', { 'requirements.txt': 'ruff\n' }, 'requirements.txt', ruffSpec],
+    [
+      'a file in the requirements directory',
+      { 'requirements/lint.txt': 'ruff\n' },
+      'requirements/lint.txt',
+      ruffSpec,
+    ],
+    [
+      'another spelling of the distribution name entirely',
+      { 'requirements.txt': 'Cosmic_Ray >= 8.4\n' },
+      'requirements.txt',
+      cosmicRaySpec,
+    ],
+  ])(
+    'treats a declared dependency as ownership, wherever it is declared: %s',
+    async (_layout, files, ownedVia, spec) => {
+      await Promise.all(Object.entries(files).map(([file, body]) => write(file, body)))
+
+      expect(await detectPythonTool(context(Object.keys(files)), spec)).toMatchObject({
+        reason: 'dependency',
+        configFiles: [],
+        ownedVia,
+      })
+    },
+  )
+
+  /** Only the root's own requirements files count — nothing deeper, and only `.txt`. */
+  it('is not owned by a requirements file the project does not carry', async () => {
+    await write('docs/requirements.txt', 'ruff==0.16.1\n')
+    await write('requirements.in', 'ruff==0.16.1\n')
+    expect(
+      await detectPythonTool(context(['docs/requirements.txt', 'requirements.in']), ruffSpec),
+    ).toBeNull()
   })
 
   it('reports config+dependency when the repo does both', async () => {

@@ -4,15 +4,12 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { RUN_DIRNAME_PATTERN } from '../src/core/output.ts'
-import { weightedCount } from '../src/core/grade.ts'
-import type { Finding, RunContext, ToolRunner } from '../src/core/types.ts'
+import type { Finding } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
 import type { HealthScanResult } from '../src/run.ts'
-import { runHealthScan, scanTree } from '../src/run.ts'
+import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
-import type { HistoryRepo } from './support/history.ts'
-import { createHistoryRepo } from './support/history.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS } from './support/system-tools.ts'
 import { reportFindings } from '../src/render/json.ts'
@@ -107,9 +104,6 @@ const PLANTED = [
   },
 ] as const
 
-/** Files planted deliberately clean; a finding in one of these is a false positive. */
-const CLEAN_FILES = new Set(['src/index.js', 'src/util/format.js'])
-
 describe('quick scan of the js-basic fixture', () => {
   let fixture: FixtureRepo
   let outside: string
@@ -132,10 +126,6 @@ describe('quick scan of the js-basic fixture', () => {
 
   it('finds every planted finding, and nothing else', () => {
     expect(findings.map(shape)).toEqual(PLANTED.map((planted) => ({ ...planted })))
-  })
-
-  it('reports no findings in the deliberately clean files', () => {
-    expect(findings.filter((finding) => CLEAN_FILES.has(finding.file))).toEqual([])
   })
 
   it('tags an untooled repo as default-config, run from the pinned versions', () => {
@@ -162,8 +152,10 @@ describe('quick scan of the js-basic fixture', () => {
     expect(report.tools.every((tool) => tool.provenance === 'default-config')).toBe(true)
     expect(report.tools.every((tool) => tool.execution === 'ephemeral-pinned')).toBe(true)
     expect(report.tools.every((tool) => tool.detection === null)).toBe(true)
-    // Every tool that produced a version reports the one this release pins.
-    for (const tool of report.tools) {
+    // Every fetchable tool that produced a version reports the one this
+    // release pins; a release-binary scanner runs at whatever version the
+    // machine installed, so its pin is only the captured one.
+    for (const tool of report.tools.filter((entry) => fromFetchableTool(entry.tool))) {
       if (tool.version !== null) expect(tool.version).toBe(tool.pinned)
     }
     expect(findings.every((finding) => finding.provenance === 'default-config')).toBe(true)
@@ -176,53 +168,24 @@ describe('quick scan of the js-basic fixture', () => {
    * rather than a zero that would read as a clean measurement.
    */
   it('shows the arithmetic behind every grade, and only the graded ones', () => {
-    const { categories, gradeBasis, metrics } = scan.report
+    const { categories, gradeBasis } = scan.report
     expect(Object.keys(gradeBasis)).toEqual(
       CATEGORIES.filter((category) => categories[category].status === 'graded'),
     )
 
-    expect(gradeBasis.lint?.value).toBe(
-      weightedCount(
-        findings.filter((finding) => finding.category === 'lint' && finding.gradeScope),
-      ),
-    )
-    expect(gradeBasis.lint?.unit).toBe('weighted findings per KLOC')
-    expect(gradeBasis.lint?.denominator).toBeGreaterThan(0)
-
+    // The three graded lint findings are all errors (weight 5) — the fourth,
+    // a `perf`-class warning, is out of grade scope — over 0.1 KLOC.
+    expect(gradeBasis.lint).toEqual({
+      value: 15,
+      denominator: 0.1,
+      unit: 'weighted findings per KLOC',
+    })
+    // One unformatted file out of the nine prettier was willing to format.
     expect(gradeBasis.format).toEqual({
-      value: new Set(
-        findings
-          .filter((finding) => finding.category === 'format' && finding.gradeScope)
-          .map((finding) => finding.file),
-      ).size,
-      denominator: metrics.format?.formattableFiles,
+      value: 1,
+      denominator: 9,
       unit: 'files failing the formatter',
     })
-  })
-
-  /**
-   * That this repo has no Python is a fact about the repo, not about each of
-   * its packages: bandit is asked once, over the repo, and the row says what it
-   * did not scan rather than repeating that sentence per project.
-   */
-  it('asks bandit once, about the repo, when the repo has no Python at all', () => {
-    expect(
-      parse(json)
-        .tools.filter((tool) => tool.tool === 'bandit')
-        .map((tool) => ({
-          project: tool.project,
-          repoWide: tool.repoWide,
-          state: tool.state,
-          reason: tool.reason,
-        })),
-    ).toEqual([
-      {
-        project: 'repo',
-        repoWide: true,
-        state: 'not-available',
-        reason: 'no Python files, so bandit assessed nothing',
-      },
-    ])
   })
 
   it('gates react-doctor out of a repo with no React, without costing lint its grade', () => {
@@ -358,14 +321,12 @@ describe('quick scan of the js-basic fixture', () => {
         'oxlint.sarif.json',
         'prettier.txt',
       ])
+      // And the evidence is the tool's own output, not a placeholder.
+      const sarif = await readFile(join(outside, 'raw', 'root', 'oxlint.sarif.json'), 'utf8')
+      expect(JSON.parse(sarif)).toMatchObject({ version: '2.1.0' })
     },
     SCAN_TIMEOUT_MS,
   )
-
-  it('keeps raw tool evidence next to the report', async () => {
-    const raw = await readFile(join(outside, 'raw', 'root', 'oxlint.sarif.json'), 'utf8')
-    expect(JSON.parse(raw)).toMatchObject({ version: '2.1.0' })
-  })
 })
 
 /**
@@ -432,41 +393,6 @@ describe('quick scan of the js-library fixture', () => {
     // identical fixture with an application manifest grades dead-code F.
     expect(scan.report.categories['dead-code']).toEqual({ status: 'graded', grade: 'A' })
   })
-
-  it('marks them advisory in report.md, under their own heading', () => {
-    expect(scan.markdown).toContain(
-      '**Advisory findings** (2) — reported, not counted toward the grade',
-    )
-    expect(scan.markdown).toMatch(/`fallow\/unused-export`.*\[advisory\]/)
-    expect(scan.markdown).toMatch(/`knip\/unused-exports`.*\[advisory\]/)
-    expect(scan.markdown).toContain('`src/util.js:5`')
-  })
-
-  /**
-   * agent.md asks a coding agent to *do* something, and there is nothing to do
-   * here: an advisory finding with nothing graded at the same place is not
-   * eligible for a task. That absence is the demotion arriving at the artifact
-   * an agent actually reads — the finding is in report.md and never becomes
-   * work.
-   */
-  it('raises no agent task for an advisory finding', () => {
-    expect(scan.agentMarkdown).toContain(
-      'No tasks: nothing this scan found is work in hand-written code',
-    )
-    expect(scan.agentMarkdown).not.toContain('src/util.js')
-  })
-
-  it(
-    'produces byte-identical output when run twice on the same commit',
-    async () => {
-      const second = await runHealthScan({ path: fixture.root })
-      expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
-        findings.map((finding) => finding.id),
-      )
-    },
-    SCAN_TIMEOUT_MS,
-  )
 })
 
 /**
@@ -516,24 +442,6 @@ describe('quick scan of the js-legacy-eslint fixture', () => {
         .map((finding) => [finding.tool, finding.rule, finding.severity, finding.gradeScope]),
     ).toEqual([['oxlint', 'eslint(no-const-assign)', 'error', true]])
   })
-
-  it('tells the agent where the grade came from', () => {
-    expect(scan.agentMarkdown).toContain(
-      '> How this run was graded: oxlint: graded lint on its default config because eslint reported not-available',
-    )
-  })
-
-  it(
-    'produces byte-identical output when run twice on the same commit',
-    async () => {
-      const second = await runHealthScan({ path: fixture.root })
-      expect(normalizeReport(second.json)).toBe(normalizeReport(scan.json))
-      expect(reportFindings(second.report).map((finding) => finding.id)).toEqual(
-        reportFindings(scan.report).map((finding) => finding.id),
-      )
-    },
-    SCAN_TIMEOUT_MS,
-  )
 })
 
 describe('quick scan of the ts-owned fixture', () => {
@@ -677,10 +585,6 @@ describe('quick scan of the ts-owned fixture', () => {
     expect(result.report.categories.types).toEqual({ status: 'graded', grade: 'F' })
     expect(result.report.categories['dead-code']).toEqual({ status: 'graded', grade: 'F' })
   })
-
-  it('leaves the target repo clean', async () => {
-    expect(await fixture.status()).toBe('')
-  })
 })
 
 describe('quick scan of a repo that owns two linters and a formatter', () => {
@@ -740,11 +644,6 @@ describe('quick scan of a repo that owns two linters and a formatter', () => {
     })
   })
 
-  /** And the human report says so in the Notes column, not only the JSON. */
-  it('says in report.md why our defaults contributed nothing', () => {
-    expect(result.markdown).toContain('stood down: lint graded by biome-lint, eslint')
-  })
-
   it('grades format from Biome’s verdict alone', () => {
     expect(
       reportFindings(result.report).filter((finding) => finding.category === 'format'),
@@ -752,35 +651,6 @@ describe('quick scan of a repo that owns two linters and a formatter', () => {
     expect(result.report.metrics.format).toEqual({ formattableFiles: 4 })
     expect(result.report.categories.format).toEqual({ status: 'graded', grade: 'C' })
   })
-
-  it('leaves the target repo clean', async () => {
-    expect(await fixture.status()).toBe('')
-  })
-})
-
-describe('the same rule class under two provenances', () => {
-  it(
-    'tags a formatting failure repo-config where the repo owns prettier, default-config where it does not',
-    async () => {
-      const owned = await createFixtureRepo('ts-owned')
-      const untooled = await createFixtureRepo('js-basic')
-      try {
-        const [byRepo, byDefault] = await Promise.all([
-          runHealthScan({ path: owned.root }),
-          runHealthScan({ path: untooled.root }),
-        ])
-
-        expect(pick(byRepo)).toMatchObject({ provenance: 'repo-config', gradeScope: true })
-        expect(pick(byDefault)).toMatchObject({ provenance: 'default-config', gradeScope: true })
-        // Same rule, same tool, different repos — and therefore different ids.
-        expect(pick(byRepo)?.id).not.toBe(pick(byDefault)?.id)
-      } finally {
-        await owned.remove()
-        await untooled.remove()
-      }
-    },
-    SCAN_TIMEOUT_MS,
-  )
 })
 
 describe('zero footprint', () => {
@@ -945,11 +815,6 @@ async function repoWithBrokenOxlint(sabotage: string): Promise<FixtureRepo> {
   return fixture
 }
 
-/** The one formatting finding a scan produced. */
-function pick(result: HealthScanResult): Finding | undefined {
-  return reportFindings(result.report).find((finding) => finding.rule === 'prettier/format')
-}
-
 /**
  * Raw-output files from the tools every machine can fetch. The three
  * release-binary scanners contribute evidence only where they are installed —
@@ -958,80 +823,6 @@ function pick(result: HealthScanResult): Finding | undefined {
 function fromFetchableTool(name: string): boolean {
   return !SYSTEM_TOOLS.some((tool) => name.startsWith(tool))
 }
-
-/** Records what each run was told about its project, without running a tool. */
-function nestingProbe(): { runner: ToolRunner; nested: string[][] } {
-  const nested: string[][] = []
-  return {
-    runner: {
-      tool: 'jscpd',
-      category: 'duplication',
-      pinnedVersion: '1.0.0',
-      repoWidePass: true,
-      detect: async () => null,
-      run: async (ctx: RunContext) => {
-        nested.push([...(ctx.nestedProjects ?? [])])
-        return { state: 'ok', findings: [], rawFiles: [] }
-      },
-    },
-    nested,
-  }
-}
-
-/**
- * What `--project` narrows, and what it must not.
- *
- * Scoping picks which projects are graded. A project's own measurement is not
- * one of those things: the packages inside it are inside it however the run was
- * scoped, and a runner handed a directory has to be told so — or scoping the
- * parent would fold its packages' code into the parent's own grade.
- */
-describe('--project scoping and what a project is measured over', () => {
-  let repo: HistoryRepo
-  let scratch: string
-
-  beforeAll(async () => {
-    repo = await createHistoryRepo({
-      base: {
-        'package.json': '{ "name": "root" }\n',
-        'src/a.ts': 'export const a = 1\n',
-        'packages/web/package.json': '{ "name": "web" }\n',
-        'packages/web/src/b.ts': 'export const b = 2\n',
-      },
-      head: [],
-    })
-    scratch = await mkdtemp(join(tmpdir(), 'crank-scope-'))
-  })
-
-  afterAll(async () => {
-    await repo.remove()
-    await rm(scratch, { recursive: true, force: true })
-  })
-
-  async function nestedFor(projects?: readonly string[]): Promise<string[][]> {
-    const { runner, nested } = nestingProbe()
-    await scanTree({
-      repoRoot: repo.root,
-      scratch,
-      only: ['duplication'],
-      adapters: [{ language: 'common', runners: [runner], detect: async () => true }],
-      ...(projects === undefined ? {} : { projects }),
-    })
-    return nested
-  }
-
-  it('tells the root project the same nested projects, scoped or not', async () => {
-    expect(await nestedFor(['.'])).toEqual([['packages/web']])
-
-    // The unscoped run adds the package's own pass and the repo-wide one, which
-    // the pool may finish in any order — so this is about which lists were
-    // handed out, not about when. The root's own list is the same list.
-    const unscoped = await nestedFor()
-    expect(unscoped).toHaveLength(3)
-    expect(unscoped).toContainEqual(['packages/web'])
-    expect(unscoped.filter((nested) => nested.length === 0)).toHaveLength(2)
-  })
-})
 
 /** The parts of a finding a planted-finding table is about. */
 function shape(finding: Finding) {

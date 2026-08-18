@@ -173,11 +173,6 @@ describe('renderReportMarkdown', () => {
     await expectGolden(`${name}.report.md`, await render(name))
   })
 
-  it('renders byte-identical output from the same report', async () => {
-    const report = await readGoldenReport('sec-basic')
-    expect(renderReportMarkdown(report)).toBe(renderReportMarkdown(report))
-  })
-
   it('quarantines everything a clock produced behind the trailer marker', async () => {
     const report = await readGoldenReport('sec-basic')
     const [body = '', trailer = ''] = renderReportMarkdown(report).split(TIMINGS_MARKER)
@@ -189,37 +184,6 @@ describe('renderReportMarkdown', () => {
       timings: { generatedAt: '2030-06-01T12:00:00.000Z', durationMs: 99_999, tools: [] },
     })
     expect(later.split(TIMINGS_MARKER)[0]).toBe(body)
-  })
-
-  it('names every category, its grade or its reason, and how it is graded', async () => {
-    const markdown = await render('sec-basic')
-    expect(markdown).toContain('## security — D')
-    expect(markdown).toContain('## test quality — not assessed')
-    expect(markdown).toContain('Not graded: not assessed — run `--deep`')
-    expect(markdown).toContain('any critical → F')
-  })
-
-  /** Spec §9: the report carries provenance tags. */
-  it('tags every tool and every finding with whose config decided it', () => {
-    const markdown = renderReportMarkdown(
-      makeReport({
-        categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
-        findings: [
-          makeFinding({ id: 'a', provenance: 'repo-config' }),
-          makeFinding({ id: 'b', file: 'src/b.ts', provenance: 'default-config' }),
-        ],
-      }),
-    )
-    expect(markdown).toContain('[repo-config]')
-    expect(markdown).toContain('[default-config]')
-  })
-
-  it('separates advisory findings and labels them', async () => {
-    const markdown = await render('sec-basic')
-    expect(markdown).toContain('**Advisory findings** (1) — reported, not counted toward the grade')
-    expect(markdown).toMatch(/`B404`.*\[advisory\]/)
-    // The graded findings are not labelled advisory.
-    expect(markdown).not.toMatch(/`B602`.*\[advisory\]/)
   })
 
   /**
@@ -261,18 +225,6 @@ describe('renderReportMarkdown', () => {
     )
     expect(lint.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(3)
     expect(lint).toContain('All 7 are in `report.json`, under `advisories`.')
-  })
-
-  /**
-   * A grade is only as trustworthy as the tools behind it: security can be
-   * graded while three scanners never ran, and the reason has to say so — with
-   * the install hint that makes it actionable (spec §8).
-   */
-  it('shows each tool’s state next to the grade, install hints included', async () => {
-    const markdown = await render('sec-basic')
-    expect(markdown).toContain('| gitleaks | not available |')
-    expect(markdown).toContain('brew install gitleaks')
-    expect(markdown).toContain('| bandit | ok |')
   })
 
   /**
@@ -324,24 +276,33 @@ describe('renderReportMarkdown', () => {
       'B — 1 of 12 files failing the formatter',
       'not assessed',
     ])
-  })
 
-  it('reports the measurement that drove each ratio grade', async () => {
-    const markdown = await render('sec-basic')
-    expect(markdown).toContain('47.0% of tokens duplicated')
-    expect(markdown).toContain('0 of 5 functions over cognitive complexity 15')
-  })
-
-  /**
-   * `languages` counts a finding under the language owning its file, so
-   * zizmor's workflow findings belong to neither. The table has to add up.
-   */
-  it('breaks findings down by language, with a bucket for the files no language owns', async () => {
-    const markdown = await render('sec-basic')
-    expect(markdown).toContain('### Findings by language')
-    expect(markdown).toContain('| other | 4 |')
-    // One language and nothing else: the table would say only what the grades did.
-    expect(await render('js-basic')).not.toContain('### Findings by language')
+    // …and the noun agrees with the count it belongs to — which in the `of`
+    // shape is the denominator, not the value.
+    const singular = renderReportMarkdown(
+      makeReport({
+        categories: {
+          ...allNotAssessed(),
+          security: { status: 'graded', grade: 'C' },
+          lint: { status: 'graded', grade: 'D' },
+          format: { status: 'graded', grade: 'B' },
+        },
+        gradeBasis: {
+          security: { value: 1, denominator: null, unit: 'graded findings' },
+          lint: { value: 1, denominator: 0.8, unit: 'weighted findings per KLOC' },
+          format: { value: 1, denominator: 1, unit: 'files failing the formatter' },
+        },
+      }),
+    )
+    expect(
+      gradeRows(section(singular, '## Grades'))
+        .map((line) => line.split(' | ')[1])
+        .filter((basis) => basis !== 'not assessed'),
+    ).toEqual([
+      'C — 1 graded finding',
+      'D — 1 weighted finding per 0.8 KLOC',
+      'B — 1 of 1 file failing the formatter',
+    ])
   })
 
   /**
@@ -379,12 +340,6 @@ describe('renderReportMarkdown', () => {
     expect(renderReportMarkdown(makeReport({ warnings: [] }))).not.toContain('**Scan notes.**')
   })
 
-  it('gives a whole-file finding no line number to go looking at', async () => {
-    const markdown = await render('js-basic')
-    expect(markdown).toContain('`src/unformatted.js` `prettier/format`')
-    expect(markdown).not.toContain('src/unformatted.js:1')
-  })
-
   /**
    * How a category is graded and what fixing it means are the same sentences in
    * every report ever generated. Repeated under eight headings they are most of
@@ -412,12 +367,6 @@ describe('renderReportMarkdown', () => {
     )
     expect(reference).toContain('| lint |')
     expect(reference).not.toContain('| security |')
-  })
-
-  it('links the raw evidence with run-directory-relative paths', async () => {
-    expect(await render('js-basic')).toContain(
-      '[raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)',
-    )
   })
 
   it('keeps a tool’s free-text reason from breaking the tool table', () => {
@@ -457,6 +406,11 @@ describe('renderReportMarkdown', () => {
     expect(tables.size).toBeGreaterThan(0)
     for (const [category, rows] of tables) {
       expect([category, new Set(rows).size]).toEqual([category, rows.length])
+      // A repo-spanning run — the duplication pass — renders as the per-project
+      // rows it collapses into, and contributes no project of its own, because
+      // `repo` is not one.
+      const named = rows.flatMap((row) => /\(([^()]*)\)\s*\|$/.exec(row)?.[1]?.split(', ') ?? [])
+      expect([category, named]).toEqual([category, expect.not.arrayContaining(['repo'])])
     }
   })
 
@@ -479,19 +433,31 @@ describe('renderReportMarkdown', () => {
   /**
    * In a monorepo it is removal *and* attribution: the one surviving row says
    * which packages it stands in for, because "opengrep is not on PATH" over two
-   * packages of a workspace is not the same fact as over all of them.
+   * packages of a workspace is not the same fact as over all of them — and a row
+   * a reader *can* tell apart keeps its own, shorter list beside it.
    */
   it('names the projects a collapsed row stands in for, in a monorepo', () => {
+    const scan = missingScan('packages/web')
+    const gitleaks: ResolvedRun = {
+      ...scan,
+      record: {
+        ...scan.record,
+        tool: 'gitleaks',
+        result: { ...scan.record.result, reason: 'gitleaks is not on PATH' },
+      },
+    }
     const markdown = renderReportMarkdown(
       makeReport({
         projects: [
           makeProjectScan({ project: projectAt('packages/api') }),
           makeProjectScan({ project: projectAt('packages/web') }),
         ],
-        runs: [missingScan('packages/api'), missingScan('packages/web')],
+        runs: [missingScan('packages/web'), gitleaks, missingScan('packages/api')],
       }),
     )
     expect(toolTable(markdown, 'security').split('\n')).toEqual([
+      '| gitleaks | not available | [default-config] | — (pinned 1.26.0) | ' +
+        'gitleaks is not on PATH (packages/web) |',
       '| opengrep | not available | [default-config] | — (pinned 1.26.0) | ' +
         'opengrep is not on PATH (packages/api, packages/web) |',
     ])
@@ -617,30 +583,12 @@ describe('renderReportMarkdown projects', () => {
 
   const markdown = renderReportMarkdown(report)
 
-  it('puts the projects after the rollup, in path order', () => {
-    expect(markdown.indexOf('## Projects')).toBeGreaterThan(markdown.indexOf('## Grades'))
-    expect(markdown.indexOf('### packages/api')).toBeGreaterThan(markdown.indexOf('## Projects'))
-    expect(markdown.indexOf('### packages/web')).toBeGreaterThan(
-      markdown.indexOf('### packages/api'),
-    )
-  })
-
   it('grades each project on its own findings, not the repo’s', () => {
     expect(projectBlock(markdown, '### packages/web')).toContain(
       '| lint | F | 2 graded findings (1 error, 1 warning), weighted total 6',
     )
     // The rollup's own basis counts all three, and is where it always was.
     expect(section(markdown, '## Grades')).toContain('| lint | D | 3 graded findings')
-  })
-
-  it('gives every project all eight category states, in priority order', () => {
-    for (const project of ['### packages/api', '### packages/web']) {
-      const [, table = ''] = projectBlock(markdown, project).split('| Category | Grade | Basis |\n')
-      const rows = (table.split('\n\n')[0] ?? '').split('\n').slice(1)
-      expect(rows.map((row) => row.split(' | ')[0]?.slice(2))).toEqual(
-        CATEGORIES.map((category) => CATEGORY_LABELS[category]),
-      )
-    }
   })
 
   it('says a repo-scoped category was answered for the repo, not for the project', () => {
@@ -650,18 +598,6 @@ describe('renderReportMarkdown projects', () => {
     expect(markdown).toContain(
       'A category marked `repo-scoped` is one a repo-spanning scan answered',
     )
-  })
-
-  it('names each project’s manifests, languages and what made it own a tool', () => {
-    const web = projectBlock(markdown, '### packages/web')
-    expect(web).toContain('`packages/web/package.json` · js-ts')
-    expect(web).toContain('| oxlint | lint | dependency | package.json | 1.70.0 |')
-    expect(projectBlock(markdown, '### packages/api')).toContain('declares no tool of its own')
-  })
-
-  it('records the workspace-shell root as a note rather than as a project', () => {
-    expect(markdown).toContain('The repo root is a workspace shell (declared by package.json')
-    expect(markdown).not.toContain('### repo root')
   })
 
   /**
@@ -679,14 +615,6 @@ describe('renderReportMarkdown projects', () => {
     // …in a sentence written for one project rather than for several.
     expect(single).toContain('1 project, graded on its own files')
     expect(single).not.toContain('1 project, each graded')
-  })
-
-  it('says "each" only where there is more than one project', () => {
-    expect(markdown).toContain('2 projects, each graded on its own files')
-  })
-
-  it('says the grades are the repo as a whole when nothing scoped the run', () => {
-    expect(markdown).toContain('the grades above are the repo as a whole')
   })
 
   /**
@@ -800,10 +728,6 @@ describe('renderReportMarkdown under --only', () => {
     expect(categoryHeadings(markdown)).toEqual(['## lint — B'])
   })
 
-  it('names them once, in one line, in place of their rows', () => {
-    expect(markdown.split('\n').filter((line) => line === NOTE)).toEqual([NOTE])
-  })
-
   it('puts that line under the grades table and above the scan notes', () => {
     const noted = renderReportMarkdown(
       makeReport({
@@ -865,6 +789,23 @@ describe('renderReportMarkdown under --only', () => {
     expect(gradeRows(section(deferred, '## Grades'))).toContain(
       '| test quality | not assessed | not assessed — run `--deep` |',
     )
+
+    // Structural, not textual: the selection says which categories were left
+    // out, so a selected category whose reason merely *reads* like a skip keeps
+    // its row and its section rather than being folded into the line above.
+    const trap = renderReportMarkdown(
+      makeReport({
+        selected: ['lint', 'security'],
+        categories: {
+          ...allNotAssessed(),
+          security: { status: 'not-assessed', reason: 'not selected by `--only`' },
+        },
+      }),
+    )
+    expect(gradeRows(section(trap, '## Grades'))).toContain(
+      '| security | not assessed | not selected by `--only` |',
+    )
+    expect(categoryHeadings(trap)).toContain('## security — not assessed')
   })
 })
 

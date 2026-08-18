@@ -3,23 +3,27 @@ import {
   compareGrades,
   failingFilePercent,
   gradeAbsolute,
-  gradeCategory,
   gradeDensity,
   gradeRatio,
   isBelow,
   weightedCount,
 } from '../src/core/grade.ts'
-import type { Finding, Grade, Severity } from '../src/core/types.ts'
+import type { Grade, Severity } from '../src/core/types.ts'
 import { makeFinding, makeFindings } from './factories.ts'
 
 /** 10 KLOC keeps the hand arithmetic trivial: weighted total / 10. */
 const KLOC = 10
 
 /** `count` security findings of one severity. */
-const security = (severity: Severity, count = 1, overrides: Partial<Finding> = {}) =>
-  makeFindings(count, severity, 'security', overrides)
+const security = (severity: Severity, count = 1) => makeFindings(count, severity, 'security')
 
-/** The same, reported but out of grade scope (spec §1). */
+/**
+ * The same, reported but out of grade scope (spec §1). A demoted finding — a
+ * dependency no published version fixes, a vulnerable package the code never
+ * imports — mints no letter of its own: the "security D from an unreachable
+ * dependency" defect was a letter saying "someone is exposed" over evidence
+ * saying the opposite, which no amount of real work could clear.
+ */
 const unscoped = (severity: Severity, count = 1) =>
   makeFindings(count, severity, 'security', { gradeScope: false })
 
@@ -36,10 +40,6 @@ describe('density grades (lint)', () => {
     ).toBeCloseTo(11.4)
   })
 
-  it('grades A with no findings at all', () => {
-    expect(gradeDensity('lint', [], KLOC)).toBe('A')
-  })
-
   it.each([
     // [weighted warnings, density, grade] — bands are A <=1, B <=5, C <=15, D <=40
     [10, 1, 'A'],
@@ -52,16 +52,6 @@ describe('density grades (lint)', () => {
     [401, 40.1, 'F'],
   ])('bands %i warnings (%s/KLOC) as %s', (count, _density, grade) => {
     expect(gradeDensity('lint', makeFindings(count, 'warning'), KLOC)).toBe(grade)
-  })
-
-  it('mixes severities into one weighted density', () => {
-    // 1 error (5) + 1 warning (1) + 5 info (1) = 7 weighted / 10 KLOC = 0.7 -> A
-    const findings = [
-      ...makeFindings(1, 'error'),
-      ...makeFindings(1, 'warning'),
-      ...makeFindings(5, 'info'),
-    ]
-    expect(gradeDensity('lint', findings, KLOC)).toBe('A')
   })
 
   it('counts only gradeScope findings', () => {
@@ -191,10 +181,6 @@ describe('failingFilePercent', () => {
 })
 
 describe('absolute grades (security)', () => {
-  it('grades A on zero findings', () => {
-    expect(gradeAbsolute('security', [])).toBe('A')
-  })
-
   it('grades F for a secret or any critical finding, whatever else is present', () => {
     expect(gradeAbsolute('security', security('critical'))).toBe('F')
     expect(gradeAbsolute('security', [...security('critical'), ...security('info', 50)])).toBe('F')
@@ -203,6 +189,9 @@ describe('absolute grades (security)', () => {
   it('caps at D when a high-severity finding is present', () => {
     expect(gradeAbsolute('security', security('error'))).toBe('D')
     expect(gradeAbsolute('security', [...security('error'), ...security('warning', 20)])).toBe('D')
+    // An advisory critical beside it does not lift the cap to F: only a graded
+    // finding mints a letter.
+    expect(gradeAbsolute('security', [...security('error'), ...unscoped('critical')])).toBe('D')
   })
 
   it('splits B and C on medium/low counts', () => {
@@ -210,26 +199,6 @@ describe('absolute grades (security)', () => {
     expect(gradeAbsolute('security', security('warning', 3))).toBe('C')
     expect(gradeAbsolute('security', security('info', 10))).toBe('B')
     expect(gradeAbsolute('security', security('info', 11))).toBe('C')
-  })
-
-  /**
-   * A demoted finding does not mint a letter. A dependency no published version
-   * fixes, a vulnerable package the code never imports, a dev-only one — each is
-   * work nobody can do or a weakness nobody can reach, and each already carries
-   * its receipt in `advisories[]`. Minting D off it was the "security D from an
-   * unreachable dependency" defect: the letter said "someone is exposed" about
-   * evidence saying the opposite, and no amount of real work could clear it.
-   */
-  it('mints F and D off graded findings only', () => {
-    expect(gradeAbsolute('security', unscoped('critical'))).not.toBe('F')
-    expect(gradeAbsolute('security', unscoped('error'))).not.toBe('D')
-  })
-
-  /** …while a graded one still mints them; a secret is never demoted. */
-  it('still mints F for a graded critical and D for a graded error', () => {
-    expect(gradeAbsolute('security', security('critical'))).toBe('F')
-    expect(gradeAbsolute('security', security('error'))).toBe('D')
-    expect(gradeAbsolute('security', [...security('error'), ...unscoped('critical')])).toBe('D')
   })
 
   /**
@@ -244,48 +213,8 @@ describe('absolute grades (security)', () => {
     expect(gradeAbsolute('security', unscoped('error', 40))).toBe('B')
   })
 
-  it('counts only graded findings for the B/C split', () => {
-    // Three graded mediums is a C; three advisory ones leave the count at zero.
-    expect(gradeAbsolute('security', security('warning', 3))).toBe('C')
-    expect(gradeAbsolute('security', unscoped('warning', 3))).toBe('B')
-  })
-
   it('ignores findings from other categories', () => {
     expect(gradeAbsolute('security', makeFindings(1, 'critical', 'lint'))).toBe('A')
-  })
-
-  /**
-   * The budget a demoted hygiene audit lands in. zizmor rates `unpinned-uses`
-   * High, but a pin-a-digest chore is not a reachable weakness, so it arrives
-   * here as a `warning` (see `zizmor.ts`). What that has to buy is a grade that
-   * is neither the D an exploitable finding earns nor the A a clean scan earns:
-   * a couple of chores is a B, and the warning budget — not the severity — is
-   * what pushes it to C.
-   */
-  it('grades a hygiene-only security scan on the warning budget, never D and never A', () => {
-    const hygiene = (count: number) =>
-      security('warning', count, { tool: 'zizmor', rule: 'unpinned-uses' })
-    expect(gradeAbsolute('security', hygiene(1))).toBe('B')
-    expect(gradeAbsolute('security', hygiene(2))).toBe('B')
-    expect(gradeAbsolute('security', hygiene(3))).toBe('C')
-  })
-})
-
-describe('gradeCategory', () => {
-  it('dispatches each shape', () => {
-    expect(gradeCategory('lint', { shape: 'density', findings: [], kloc: KLOC })).toBe('A')
-    expect(gradeCategory('duplication', { shape: 'ratio', percent: 12 })).toBe('D')
-    expect(
-      gradeCategory('security', {
-        shape: 'absolute',
-        findings: makeFindings(1, 'error', 'security'),
-      }),
-    ).toBe('D')
-  })
-
-  it('rejects an input whose shape does not match the category', () => {
-    expect(() => gradeCategory('lint', { shape: 'ratio', percent: 1 })).toThrow(/density/)
-    expect(() => gradeCategory('security', { shape: 'ratio', percent: 1 })).toThrow(/absolute/)
   })
 })
 

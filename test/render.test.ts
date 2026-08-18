@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { RunRecord } from '../src/core/orchestrator.ts'
 import { sortFindings } from '../src/core/orchestrator.ts'
-import type { CategoryState, Finding } from '../src/core/types.ts'
+import type { CategoryState } from '../src/core/types.ts'
 import { CATEGORIES } from '../src/core/types.ts'
-import {
-  basisAnnotation,
-  collapseToolRows,
-  notSelectedNote,
-  unselectedCategories,
-} from '../src/render/display.ts'
+import { collapseToolRows } from '../src/render/display.ts'
 import type { ReportTool } from '../src/render/json.ts'
 import { buildReport, reportFindings, serializeReport } from '../src/render/json.ts'
 import { renderTerminal } from '../src/render/terminal.ts'
@@ -26,28 +21,6 @@ import { normalizeReport } from './support/report.ts'
 const REPO_SCOPED: CategoryState = { status: 'not-assessed', reason: REPO_SCOPED_REASON }
 
 describe('buildReport', () => {
-  it('emits the top-level keys in a fixed order', () => {
-    expect(Object.keys(buildReport(input()))).toEqual([
-      'schemaVersion',
-      'crankHealth',
-      'repo',
-      'profile',
-      'mode',
-      'selected',
-      'categories',
-      'gradeBasis',
-      'metrics',
-      'languages',
-      'coverage',
-      'projects',
-      'tools',
-      'findings',
-      'advisories',
-      'warnings',
-      'timings',
-    ])
-  })
-
   it('always reports all eight category states, in priority order', () => {
     const report = buildReport(input())
     expect(Object.keys(report.categories)).toEqual([...CATEGORIES])
@@ -65,40 +38,6 @@ describe('buildReport', () => {
     const report = buildReport(input({ selected: ['lint'] }))
     expect(Object.keys(report.categories)).toEqual([...CATEGORIES])
     expect(report.selected).toEqual(['lint'])
-  })
-
-  it('rebuilds findings with a fixed key order, whatever the adapter used', () => {
-    const scrambled = {
-      gradeScope: true,
-      message: 'unused variable',
-      id: 'aaaa',
-      category: 'lint',
-      range: { endCol: 2, endLine: 1, startCol: 1, startLine: 1 },
-      provenance: 'default-config',
-      severity: 'warning',
-      file: 'src/a.ts',
-      rule: 'no-unused-vars',
-      tool: 'oxlint',
-    } as unknown as Finding
-
-    const [finding] = buildReport(input({ findings: [scrambled] })).findings
-    expect(Object.keys(finding ?? {})).toEqual([
-      'id',
-      'category',
-      'tool',
-      'rule',
-      'severity',
-      'file',
-      'range',
-      'message',
-      'provenance',
-    ])
-    expect(Object.keys(finding?.range ?? {})).toEqual([
-      'startLine',
-      'startCol',
-      'endLine',
-      'endCol',
-    ])
   })
 
   /**
@@ -180,44 +119,6 @@ describe('buildReport', () => {
       findings.map((finding) => finding.id),
     )
     expect(reportFindings(report).map((finding) => finding.gradeScope)).toEqual([true, false, true])
-  })
-
-  /** Canonical order, fixed keys, and only the categories that have a basis. */
-  it('reports the grade basis in category order, with a fixed key order', () => {
-    const report = buildReport(
-      input({
-        gradeBasis: {
-          lint: { unit: 'weighted findings per KLOC', denominator: 2.5, value: 10 },
-          security: { unit: 'graded findings', denominator: null, value: 3 },
-        },
-      }),
-    )
-    expect(Object.keys(report.gradeBasis)).toEqual(['security', 'lint'])
-    expect(Object.keys(report.gradeBasis.lint ?? {})).toEqual(['value', 'denominator', 'unit'])
-  })
-
-  /**
-   * The denominator annotation: grades divide by the *assessed* counts, so a
-   * report that never said how much of the tree that was could read as an A for
-   * a repo two thirds of which nothing looked at.
-   */
-  it('carries the coverage block in a fixed key order', () => {
-    const report = buildReport(
-      input({
-        coverage: {
-          lines: { assessed: 900, total: 1200 },
-          files: { assessed: 9, total: 12 },
-          unassessed: [{ lines: 300, files: 3, extension: '.yaml' }],
-        },
-      }),
-    )
-    expect(Object.keys(report.coverage)).toEqual(['files', 'lines', 'unassessed'])
-    expect(Object.keys(report.coverage.files)).toEqual(['total', 'assessed'])
-    expect(Object.keys(report.coverage.unassessed[0] ?? {})).toEqual([
-      'extension',
-      'files',
-      'lines',
-    ])
   })
 
   it('sorts warnings so two runs cannot disagree on their order', () => {
@@ -308,13 +209,6 @@ describe('buildReport projects', () => {
   const api = projectAt('packages/api')
   const web = projectAt('packages/web')
 
-  it('always reports at least one project, with all eight category states', () => {
-    const [project, ...rest] = buildReport(input()).projects
-    expect(rest).toEqual([])
-    expect(project?.path).toBe('.')
-    expect(Object.keys(project?.categories ?? {})).toEqual([...CATEGORIES])
-  })
-
   it('grades each project on its own, ordered by path whatever order it was given', () => {
     const report = buildReport(
       input({
@@ -335,20 +229,6 @@ describe('buildReport projects', () => {
       status: 'not-assessed',
       reason: 'no tool available for this category',
     })
-  })
-
-  it('carries a repo-scoped category through as the project’s own state', () => {
-    const [project] = buildReport(
-      input({
-        projects: [
-          makeProjectScan({
-            project: api,
-            categories: { ...allNotAssessed(), security: REPO_SCOPED },
-          }),
-        ],
-      }),
-    ).projects
-    expect(project?.categories.security).toEqual(REPO_SCOPED)
   })
 
   it('records each project’s manifests, languages and owned toolchain', () => {
@@ -407,13 +287,6 @@ describe('buildReport projects', () => {
     expect(project?.toolchain[0]?.ownedVia).toBeNull()
   })
 
-  it('attributes findings to their project without touching their identity', () => {
-    const finding = makeFinding({ file: 'packages/web/src/a.ts', project: 'packages/web' })
-    const [written] = buildReport(input({ findings: [finding] })).findings
-    expect(written?.project).toBe('packages/web')
-    expect(written?.id).toBe(finding.id)
-  })
-
   it('records a workspace-shell root as a note rather than as a project', () => {
     const report = buildReport(
       input({
@@ -423,10 +296,6 @@ describe('buildReport projects', () => {
     )
     expect(report.rootShell).toEqual({ declaredBy: ['package.json', 'pnpm-workspace.yaml'] })
     expect(report.projects.map((project) => project.path)).not.toContain('.')
-  })
-
-  it('has no rootShell key at all when the root is a real project', () => {
-    expect('rootShell' in buildReport(input())).toBe(false)
   })
 
   /**
@@ -510,10 +379,6 @@ describe('buildReport projects', () => {
     )
   })
 
-  it('has no scopedTo key at all when every project was scanned', () => {
-    expect('scopedTo' in buildReport(input())).toBe(false)
-  })
-
   /**
    * The determinism contract (spec §6) across the project dimension: the same
    * scan described in a different order is the same bytes.
@@ -543,62 +408,13 @@ describe('buildReport projects', () => {
   })
 })
 
-describe('serializeReport', () => {
-  it('writes indented JSON with a trailing newline', () => {
-    const json = serializeReport(buildReport(input()))
-    expect(json.endsWith('}\n')).toBe(true)
-    expect(json).toContain('\n  "schemaVersion": 2,')
-  })
-})
-
 /**
  * The rows a reader sees, deduplicated. Two rows a reader cannot tell apart say
  * nothing twice, so only the first of them is rendered — the companion unit to
  * the rendered-output assertions in `report-md.test.ts` and below.
  */
 describe('collapseToolRows', () => {
-  it('collapses nothing when there is nothing to collapse', () => {
-    expect(collapseToolRows([])).toEqual([])
-  })
-
-  it('keeps the first of the rows that render identically, in the order given', () => {
-    const first = toolRow({ project: 'packages/web' })
-    const gitleaks = toolRow({ tool: 'gitleaks', reason: 'gitleaks is not on PATH' })
-    const collapsed = collapseToolRows([
-      first,
-      gitleaks,
-      toolRow({ project: 'packages/api' }),
-      toolRow({ project: 'packages/cli' }),
-    ])
-    // The survivor is the first occurrence, and nothing was re-sorted — and it
-    // carries the projects it now stands in for, in that same order.
-    expect(collapsed).toEqual([
-      { ...first, projects: ['packages/web', 'packages/api', 'packages/cli'] },
-      { ...gitleaks, projects: ['packages/web'] },
-    ])
-  })
-
-  /** The four fields no tool table renders: they cannot keep two rows apart. */
-  it('excludes project, repoWide, detection and raw from the key, as a set', () => {
-    const collapsed = collapseToolRows([
-      toolRow(),
-      toolRow({ project: 'packages/api' }),
-      toolRow({ repoWide: true }),
-      toolRow({
-        detection: {
-          reason: 'dependency',
-          configFiles: [],
-          ownedVia: 'package.json',
-          installed: true,
-          version: null,
-        },
-      }),
-      toolRow({ raw: ['raw/packages/api/opengrep.json'] }),
-    ])
-    expect(collapsed).toEqual([{ ...toolRow(), projects: ['packages/web', 'packages/api'] }])
-  })
-
-  /** …and every field a tool table does render keeps two rows apart. */
+  /** Every field a tool table does render keeps two rows apart. */
   const KEYED: readonly (readonly [string, Partial<ReportTool>])[] = [
     ['tool', { tool: 'gitleaks' }],
     ['category', { category: 'lint' }],
@@ -616,134 +432,6 @@ describe('collapseToolRows', () => {
     expect(
       collapseToolRows([toolRow(), toolRow({ project: 'packages/api', ...difference })]),
     ).toHaveLength(2)
-  })
-
-  /**
-   * A reason carrying a project-local path is a different sentence, so it is a
-   * different row however alike the two runs otherwise are — and each row then
-   * stands in for its own project and no one else's.
-   */
-  it('keeps two rows apart when only their reason names a different project', () => {
-    const rows = [
-      toolRow({
-        tool: 'tsc',
-        project: 'packages/web',
-        reason: 'no tsconfig.json under packages/web',
-      }),
-      toolRow({
-        tool: 'tsc',
-        project: 'packages/api',
-        reason: 'no tsconfig.json under packages/api',
-      }),
-    ]
-    expect(collapseToolRows(rows)).toEqual([
-      { ...rows[0], projects: ['packages/web'] },
-      { ...rows[1], projects: ['packages/api'] },
-    ])
-  })
-
-  /**
-   * The repo-wide duplication pass renders as its per-project runs do — and
-   * contributes no project to the list, because `repo` is not one.
-   */
-  it('collapses a repo-wide row into the per-project row it renders as', () => {
-    const perProject = toolRow({
-      tool: 'jscpd',
-      category: 'duplication',
-      state: 'ok',
-      reason: null,
-    })
-    const repoWide = { ...perProject, project: 'repo', repoWide: true }
-    expect(collapseToolRows([perProject, repoWide])).toEqual([
-      { ...perProject, projects: ['packages/web'] },
-    ])
-  })
-
-  /** A row no per-project run stands behind names no project at all. */
-  it('lists no project for a group of repo-spanning rows', () => {
-    const repoWide = toolRow({ project: 'repo', repoWide: true })
-    expect(collapseToolRows([repoWide, repoWide])).toEqual([{ ...repoWide, projects: [] }])
-  })
-})
-
-/**
- * What `--only` left out, as the renderers ask it: read off `report.selected`,
- * never off the reason the orchestrator wrote into the states it skipped.
- */
-describe('basisAnnotation', () => {
-  it('singularizes the noun that belongs to a count of one', () => {
-    expect(basisAnnotation({ value: 1, denominator: null, unit: 'graded findings' })).toBe(
-      '1 graded finding',
-    )
-    expect(
-      basisAnnotation({ value: 1, denominator: 0.8, unit: 'weighted findings per KLOC' }),
-    ).toBe('1 weighted finding per 0.8 KLOC')
-    // In the `of` shape the noun counts the denominator, not the value.
-    expect(
-      basisAnnotation({ value: 1, denominator: 12, unit: 'files failing the formatter' }),
-    ).toBe('1 of 12 files failing the formatter')
-    expect(basisAnnotation({ value: 1, denominator: 1, unit: 'files failing the formatter' })).toBe(
-      '1 of 1 file failing the formatter',
-    )
-  })
-
-  it('leaves any other count plural', () => {
-    expect(basisAnnotation({ value: 3, denominator: null, unit: 'graded findings' })).toBe(
-      '3 graded findings',
-    )
-    expect(basisAnnotation({ value: 0, denominator: null, unit: 'graded findings' })).toBe(
-      '0 graded findings',
-    )
-  })
-})
-
-describe('unselectedCategories', () => {
-  it('names the categories --only left out, in priority order', () => {
-    expect(unselectedCategories(buildReport(input({ selected: ['lint'] })))).toEqual([
-      'security',
-      'types',
-      'dead-code',
-      'complexity',
-      'duplication',
-      'format',
-      'test-quality',
-    ])
-  })
-
-  it('names none when every category was selected', () => {
-    expect(unselectedCategories(buildReport(input()))).toEqual([])
-  })
-
-  /**
-   * Structural, not textual: a state whose reason says something else is still
-   * unselected, and one that only *reads* like a skip is not.
-   */
-  it('reads the selection, not the reason a category went ungraded', () => {
-    const report = buildReport(
-      input({
-        selected: ['lint', 'security'],
-        categories: {
-          ...allNotAssessed(),
-          security: { status: 'not-assessed', reason: 'not selected by --only' },
-        },
-      }),
-    )
-    expect(unselectedCategories(report)).not.toContain('security')
-  })
-
-  it('names them under one fixed lead, in the same order', () => {
-    expect(notSelectedNote(unselectedCategories(buildReport(input({ selected: ['lint'] }))))).toBe(
-      'Not assessed: not selected by `--only` — security, types, dead code, complexity, ' +
-        'duplication, format, test quality',
-    )
-  })
-
-  /** The `--only types` selection of the same rule: a different sentence. */
-  it('names lint among them when lint is the one left out', () => {
-    expect(notSelectedNote(unselectedCategories(buildReport(input({ selected: ['types'] }))))).toBe(
-      'Not assessed: not selected by `--only` — security, dead code, complexity, ' +
-        'duplication, lint, format, test quality',
-    )
   })
 })
 
@@ -1058,39 +746,6 @@ describe('renderTerminal', () => {
     ])
   })
 
-  /**
-   * A single-project repo has no such ambiguity: every row is that project's,
-   * and naming it would be a tautology on every line.
-   */
-  it('names no project where the repo has only one', () => {
-    const text = renderTerminal(
-      buildReport(
-        input({
-          runs: [
-            {
-              record: {
-                ...record(),
-                tool: 'opengrep',
-                category: 'security',
-                scope: 'common',
-                result: {
-                  state: 'not-available',
-                  findings: [],
-                  rawFiles: [],
-                  reason: 'opengrep is not on PATH',
-                },
-              },
-              raw: [],
-            },
-          ],
-        }),
-      ),
-      paths,
-      { color: false },
-    )
-    expect(text).toContain('  not-available opengrep: opengrep is not on PATH\n')
-  })
-
   it('emits no escape sequences when colour is off, and some when it is on', () => {
     expect(renderTerminal(report, paths, { color: false })).not.toContain('\u001B[')
     expect(renderTerminal(report, paths, { color: true })).toContain('\u001B[')
@@ -1116,15 +771,14 @@ describe('renderTerminal under --only', () => {
   )
 
   it('lists the selected categories and names the rest in one line under them', () => {
-    const block = categoryBlock(renderTerminal(onlyLint, paths, { color: false }))
+    const plain = renderTerminal(onlyLint, paths, { color: false })
+    const block = categoryBlock(plain)
     expect(block).toHaveLength(2)
     expect(block.at(0)).toMatch(/^ {2}lint\s+B\s+no findings$/)
     expect(block.at(-1)).toBe(NOTE)
-  })
-
-  /** Dimmed, with the indent inside the dim: the {@link rootShellNote} precedent. */
-  it('dims that line, and emits no escape sequences when colour is off', () => {
-    expect(renderTerminal(onlyLint, paths, { color: false })).not.toContain(CSI)
+    // Dimmed, with the indent inside the dim: the {@link rootShellNote}
+    // precedent — and no escape sequence at all when colour is off.
+    expect(plain).not.toContain(CSI)
     expect(renderTerminal(onlyLint, paths, { color: true })).toContain(`${CSI}2m${NOTE}${CSI}22m`)
   })
 

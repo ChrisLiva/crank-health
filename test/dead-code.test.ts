@@ -111,10 +111,6 @@ describe('toDeadCodeFindings', () => {
       expect(ruled(toDeadCodeFindings(report, true, true), EXPORT)?.gradeScope).toBe(true)
     })
 
-    it('grades the export finding on an application, as before', () => {
-      expect(ruled(toDeadCodeFindings(report, false, false), EXPORT)?.gradeScope).toBe(true)
-    })
-
     /** Being a library says nothing about whether a *file* is reachable. */
     it('still gates unused files on whether fallow found an entry point', () => {
       expect(ruled(toDeadCodeFindings(report, false, true), 'fallow/unused-file')).toMatchObject({
@@ -207,7 +203,7 @@ describe('knip toPendingFindings', () => {
     const findings = toPendingFindings(everything, false, 2, false).filter(
       (finding) => finding.rule === 'knip/unused-file',
     )
-    expect(findings.every((finding) => finding.gradeScope)).toBe(false)
+    expect(findings.map((finding) => finding.gradeScope)).toEqual([false, false])
     expect(findings[0]?.message).toContain('advisory')
   })
 
@@ -256,11 +252,6 @@ describe('knip toPendingFindings', () => {
       expect(findings.every((finding) => finding.gradeScope)).toBe(true)
     })
 
-    it('grades export findings on an application, as before', () => {
-      const findings = toPendingFindings(libraryIssues, false, 4, false)
-      expect(findings.every((finding) => finding.gradeScope)).toBe(true)
-    })
-
     /** Only the export kinds move; files and dependencies read as they always do. */
     it('leaves unused files and dependencies exactly as an application sees them', () => {
       const findings = toPendingFindings(issues, false, 4, true)
@@ -279,7 +270,7 @@ describe('knip toPendingFindings', () => {
         2,
         true,
       ).filter((f) => f.rule === 'knip/unused-file')
-      expect(allUnused.every((finding) => finding.gradeScope)).toBe(false)
+      expect(allUnused.map((finding) => finding.gradeScope)).toEqual([false, false])
       expect(allUnused[0]?.message).toContain('advisory')
     })
   })

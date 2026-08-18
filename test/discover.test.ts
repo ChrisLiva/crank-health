@@ -8,8 +8,6 @@ import {
   discoverFiles,
   discoverProjects,
   inventoryOf as coreInventoryOf,
-  isExcluded,
-  isHiddenScope,
   languageOf,
   nearestProjectMap,
   partitionProjects,
@@ -50,10 +48,14 @@ describe('discoverFiles', () => {
     // ignored by the repo's own .gitignore -> out of scope
     await plant(repo, 'ignored.txt', 'nope\n')
     await plant(repo, 'build/out.js', 'nope\n')
-    // NOT gitignored, but dependencies are never scanned (spec §7)
+    // NOT gitignored, but dependencies and caches are never scanned (spec §7)
     await plant(repo, 'node_modules/foo/index.js', 'module.exports = 1\n')
     await plant(repo, '.venv/lib/site.py', 'import os\n')
     await plant(repo, 'packages/web/node_modules/dep/dep.ts', 'export const d = 1\n')
+    await plant(repo, 'a/__pycache__/x.py', 'x = 1\n')
+    // …while a name that merely contains one of those words is source
+    await plant(repo, 'src/node_modules_helper.ts', 'export const h = 1\n')
+    await plant(repo, 'src/venvy.py', 'x = 1\n')
     // tracked in the index but removed from disk -> must not be reported
     await rm(join(repo, 'src/deleted.ts'))
 
@@ -81,7 +83,11 @@ describe('discoverFiles', () => {
     expect(inventory.all).not.toContain('node_modules/foo/index.js')
     expect(inventory.all).not.toContain('.venv/lib/site.py')
     expect(inventory.all).not.toContain('packages/web/node_modules/dep/dep.ts')
+    expect(inventory.all).not.toContain('a/__pycache__/x.py')
     expect(inventory.all.some((file) => file.startsWith('.git/'))).toBe(false)
+    // The rule is a path segment, not a substring: these are ordinary source.
+    expect(inventory.all).toContain('src/node_modules_helper.ts')
+    expect(inventory.all).toContain('src/venvy.py')
   })
 
   it('drops index entries whose file is gone from disk', () => {
@@ -93,24 +99,14 @@ describe('discoverFiles', () => {
     expect(inventory.all).toEqual(inventory.all.toSorted())
   })
 
-  it('is deterministic across runs', async () => {
-    expect((await discoverFiles(repo)).files.all).toEqual(inventory.all)
-  })
-
-  /**
-   * Discovery hands back what it found and what it left out in one value, so a
-   * caller cannot take the inventory and lose the reason it is short.
-   */
-  it('returns the inventory beside the scan-scope warnings', async () => {
-    const scan = await discoverFiles(repo)
-
-    expect(scan.files.all).toEqual(inventory.all)
-    expect(scan.warnings).toEqual([])
-  })
-
   it('classifies files by language', () => {
-    expect(inventory.byLanguage['js-ts']).toEqual(['scripts/tool.mjs', 'src/app.js', 'src/new.tsx'])
-    expect(inventory.byLanguage.python).toEqual(['src/mod.py'])
+    expect(inventory.byLanguage['js-ts']).toEqual([
+      'scripts/tool.mjs',
+      'src/app.js',
+      'src/new.tsx',
+      'src/node_modules_helper.ts',
+    ])
+    expect(inventory.byLanguage.python).toEqual(['src/mod.py', 'src/venvy.py'])
   })
 
   it('counts physical lines for the KLOC denominator', async () => {
@@ -176,14 +172,18 @@ describe('discoverFiles and hidden directories', () => {
     // Dot-directories: tooling scope, not source.
     await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
     await plant(repo, 'packages/web/.next/x.js', 'const n = 1\n')
+    await plant(repo, 'a/.b/c/d.ts', 'export const d = 1\n')
     await plant(repo, '.github/.cache/x.js', 'const c = 1\n')
+    await plant(repo, 'packages/web/.github/.cache/x.js', 'const c = 1\n')
     await plant(repo, 'packages/web/.next/.github/workflows/x.yml', 'on: push\n')
     await plant(repo, '.hidden/.github/workflows/x.yml', 'on: push\n')
     // The `.github` exemption, at the root and below it.
     await plant(repo, 'packages/web/.github/workflows/x.yml', 'on: push\n')
+    await plant(repo, 'packages/web/.github/scripts/build.js', 'const b = 1\n')
     await plant(repo, '.github/workflows/ci.yml', 'on: push\n')
     await plant(repo, '.github/scripts/build.js', 'const b = 1\n')
     await plant(repo, 'src/app.js', 'const a = 1\n')
+    await plant(repo, 'README.md', '# repo\n')
 
     inventory = (await discoverFiles(repo)).files
   })
@@ -195,6 +195,8 @@ describe('discoverFiles and hidden directories', () => {
   it('drops files under a hidden directory', () => {
     expect(inventory.all).not.toContain('.crank/hooks/hook.ts')
     expect(inventory.all).not.toContain('packages/web/.next/x.js')
+    // A hidden segment anywhere in the path is enough, however deep the file.
+    expect(inventory.all).not.toContain('a/.b/c/d.ts')
   })
 
   it('keeps dot-files wherever they sit', () => {
@@ -203,23 +205,20 @@ describe('discoverFiles and hidden directories', () => {
     expect(inventory.all).toContain('.env.example')
     expect(inventory.all).toContain('src/.hidden-named-file.ts')
     expect(inventory.all).toContain('packages/web/.eslintrc.cjs')
+    // A path with no directory segment at all has no hidden one either.
+    expect(inventory.all).toContain('README.md')
+    expect(inventory.all).toContain('src/app.js')
   })
 
   it('exempts .github at any depth, and only that one segment', () => {
     expect(inventory.all).toContain('.github/workflows/ci.yml')
     expect(inventory.all).toContain('.github/scripts/build.js')
     expect(inventory.all).toContain('packages/web/.github/workflows/x.yml')
+    expect(inventory.all).toContain('packages/web/.github/scripts/build.js')
     expect(inventory.all).not.toContain('.github/.cache/x.js')
+    expect(inventory.all).not.toContain('packages/web/.github/.cache/x.js')
+    // A `.github` below some *other* hidden directory is under that one.
     expect(inventory.all).not.toContain('packages/web/.next/.github/workflows/x.yml')
-  })
-
-  /**
-   * The workflow audit reads the inventory it is handed, so the only thing
-   * discovery decides is whether a root workflow file is still in that list.
-   */
-  it('leaves every workflow file in the list a workflow audit filters', () => {
-    expect(inventory.all).toContain('.github/workflows/ci.yml')
-    expect(inventory.all).toContain('packages/web/.github/workflows/x.yml')
     expect(inventory.all).not.toContain('.hidden/.github/workflows/x.yml')
   })
 })
@@ -272,39 +271,6 @@ describe('the scan-scope warning', () => {
     }
   })
 
-  it('says it in the singular when one file went', async () => {
-    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-one-'))
-    try {
-      await git(repo, 'init', '--quiet')
-      await plant(repo, '.crank/hooks/hook.ts', 'export const hook = 1\n')
-      await plant(repo, 'src/app.js', 'const a = 1\n')
-
-      const { warnings } = await discoverFiles(repo)
-
-      expect(warnings).toEqual([
-        'scan scope: 1 file under a hidden directory was not analyzed by language tools; ' +
-          'repo-scoped scanners (gitleaks, osv-scanner) scan the full tree',
-      ])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
-
-  /** Nothing dropped is nothing to say — not an empty-ish sentence about zero files. */
-  it('says nothing at all when no path was dropped', async () => {
-    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-scope-none-'))
-    try {
-      await git(repo, 'init', '--quiet')
-      await plant(repo, 'src/app.js', 'const a = 1\n')
-
-      const { warnings } = await discoverFiles(repo)
-
-      expect(warnings).toEqual([])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
-
   /**
    * The sentence goes into `report.json`, which is byte-compared across
    * machines, so it may carry no path from the machine it ran on.
@@ -320,30 +286,6 @@ describe('the scan-scope warning', () => {
 
       expect(warning).not.toContain(repo)
       expect(warning.includes('/tmp') || warning.includes('/var')).toBe(false)
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
-})
-
-/**
- * The inventory is the one input `RepoContext.files` and every runner's
- * `ctx.files` derives from, so what it drops is dropped for all of them.
- */
-describe('discoverFiles and the inventory every runner sees', () => {
-  it('leaves nothing under a hidden directory in the list', async () => {
-    const repo = await mkdtemp(join(tmpdir(), 'crank-discover-hidden-only-'))
-    try {
-      await git(repo, 'init', '--quiet')
-      await plant(repo, '.crank/secrets.env', 'TOKEN=\n')
-      await plant(repo, '.crank/pkg/package-lock.json', '{}\n')
-      await plant(repo, '.crank/mod.py', 'x = 1\n')
-      await plant(repo, '.hidden/.github/workflows/x.yml', 'on: push\n')
-      await plant(repo, 'src/app.js', 'const a = 1\n')
-
-      const inventory = (await discoverFiles(repo)).files
-
-      expect(inventory.all).toEqual(['src/app.js'])
     } finally {
       await rm(repo, { recursive: true, force: true })
     }
@@ -417,12 +359,6 @@ describe('languageOf', () => {
   )
 })
 
-describe('inventoryOf', () => {
-  it('slices C# files into byLanguage, case-insensitively and in input order', () => {
-    expect(coreInventoryOf(['a.cs', 'B.CS', 'c.py']).byLanguage.csharp).toEqual(['a.cs', 'B.CS'])
-  })
-})
-
 /** The inventory shape discovery produces, from a hand-written file list. */
 function inventoryOf(files: readonly string[]): FileInventory {
   return coreInventoryOf([...files].toSorted())
@@ -462,23 +398,6 @@ describe('partitionProjects', () => {
       'packages/api/api/main.py',
     ])
     expect(projectAt(projects, 'packages/api').manifests).toEqual(['packages/api/pyproject.toml'])
-  })
-
-  it('puts every source file in exactly one project', () => {
-    const files = inventoryOf([
-      'package.json',
-      'src/root.ts',
-      'packages/web/package.json',
-      'packages/web/src/app.tsx',
-      'packages/web/nested/package.json',
-      'packages/web/nested/deep.ts',
-    ])
-    const assigned = partitionProjects(files).flatMap(
-      (project) => project.files.byLanguage['js-ts'],
-    )
-
-    expect(assigned.toSorted()).toEqual(files.byLanguage['js-ts'])
-    expect(new Set(assigned).size).toBe(assigned.length)
   })
 
   it('gives a nested package its own files and leaves them out of the parent', () => {
@@ -580,16 +499,6 @@ describe('partitionProjects', () => {
     expect(projectAt(projects, '.').languages).toEqual(['csharp'])
   })
 
-  it('makes one project owning both languages from a package.json beside a .csproj', () => {
-    const projects = partitionProjects(
-      inventoryOf(['pkg/package.json', 'pkg/App.csproj', 'pkg/a.ts', 'pkg/a.cs']),
-    )
-
-    expect(paths(projects)).toEqual(['pkg'])
-    expect(projectAt(projects, 'pkg').manifests).toEqual(['pkg/App.csproj', 'pkg/package.json'])
-    expect(projectAt(projects, 'pkg').languages).toEqual(['js-ts', 'csharp'])
-  })
-
   it('is one root project for a repo with no manifest at all', () => {
     const projects = partitionProjects(inventoryOf(['src/a.js', 'src/b.py']))
 
@@ -684,20 +593,6 @@ describe('discoverProjects', () => {
     }
   })
 
-  it('records a lone root solution file without making it a project', async () => {
-    const slnRoot = await mkdtemp(join(tmpdir(), 'crank-projects-sln-lone-'))
-    try {
-      const files = inventoryOf(['App.sln', 'pkg/package.json', 'pkg/index.js'])
-
-      const discovery = await discoverProjects(slnRoot, files)
-
-      expect(discovery.rootShell?.declaredBy).toEqual(['App.sln'])
-      expect(paths(discovery.projects)).toEqual(['pkg'])
-    } finally {
-      await rm(slnRoot, { recursive: true, force: true })
-    }
-  })
-
   it('records a .slnx solution file whatever its case', async () => {
     const slnRoot = await mkdtemp(join(tmpdir(), 'crank-projects-slnx-'))
     try {
@@ -767,13 +662,6 @@ describe('discoverProjects', () => {
 
     expect(paths((await discoverProjects(root, declaredElsewhere)).projects)).toEqual(['tools/cli'])
   })
-
-  it('reports the same projects the pure partition does', async () => {
-    const discovered = paths((await discoverProjects(root, shellFiles)).projects)
-
-    expect(discovered).toEqual(['packages/a'])
-    expect(discovered).toEqual(paths(partitionProjects(shellFiles)))
-  })
 })
 
 /**
@@ -812,57 +700,5 @@ describe('nearestProjectMap', () => {
     expect(projectOf('packages/web/src/a.ts')).toBe('packages/web')
     expect(projectOf('.github/workflows/ci.yml')).toBeUndefined()
     expect(projectOf('README.md')).toBeUndefined()
-  })
-})
-
-describe('isExcluded', () => {
-  it.each([
-    'node_modules/x.js',
-    'a/b/node_modules/x.js',
-    '.venv/x.py',
-    'a/__pycache__/x.py',
-    '.git/config',
-  ])('excludes %s', (file) => {
-    expect(isExcluded(file)).toBe(true)
-  })
-
-  it.each(['src/node_modules_helper.ts', 'src/venvy.py', 'src/app.js'])('keeps %s', (file) => {
-    expect(isExcluded(file)).toBe(false)
-  })
-})
-
-describe('isHiddenScope', () => {
-  it.each([
-    '.crank/hooks/hook.ts',
-    'packages/web/.next/x.js',
-    // The `.github` exemption is that one segment's alone, at any depth.
-    '.github/.cache/x.js',
-    'packages/web/.github/.cache/x.js',
-    // A `.github` below some *other* hidden directory is under that one.
-    '.hidden/.github/workflows/x.yml',
-    'packages/web/.next/.github/workflows/x.yml',
-    'a/.b/c/d.ts',
-  ])('excludes %s', (file) => {
-    expect(isHiddenScope(file)).toBe(true)
-  })
-
-  it.each([
-    // Dot-*files* are the repo's own config, wherever they sit.
-    '.gitignore',
-    '.prettierrc',
-    '.env.example',
-    'src/.hidden-named-file.ts',
-    'packages/web/.eslintrc.cjs',
-    '.github/workflows/ci.yml',
-    '.github/scripts/build.js',
-    // A package's own `.github` is authored the same way the root's is.
-    'packages/web/.github/workflows/x.yml',
-    'packages/web/.github/scripts/build.js',
-    'src/app.js',
-    // A path with no directory segment at all has no hidden one either.
-    'README.md',
-    '',
-  ])('keeps %s', (file) => {
-    expect(isHiddenScope(file)).toBe(false)
   })
 })

@@ -15,13 +15,15 @@ function at(startLine: number, extra: Partial<PendingFinding> = {}): PendingFind
 }
 
 describe('fingerprint', () => {
-  it('is stable across calls', () => {
-    const id = fingerprint('lint', 'oxlint', 'no-debugger', 'src/a.ts', 'debugger')
-    expect(fingerprint('lint', 'oxlint', 'no-debugger', 'src/a.ts', 'debugger')).toBe(id)
-  })
-
-  it('is a short lowercase hex digest', () => {
-    expect(fingerprint('lint', 'oxlint', 'r', 'a.ts', 'x')).toMatch(/^[0-9a-f]{16}$/)
+  /**
+   * The literal is the promise: a finding keeps the same id across releases, so
+   * a PR delta compares against a base scanned by an older crank-health without
+   * reporting the whole backlog as new. Changing it is a breaking change.
+   */
+  it('is the same digest this and every earlier version computed', () => {
+    expect(fingerprint('lint', 'oxlint', 'no-debugger', 'src/a.ts', 'debugger')).toBe(
+      'c80a38384886b617',
+    )
   })
 
   it('changes when any identity component changes', () => {
@@ -56,12 +58,6 @@ describe('fingerprint', () => {
       fingerprint('lint', 't', 'r', 'a.ts', nfc),
     )
   })
-
-  it('accepts an empty anchor', () => {
-    expect(fingerprint('lint', 't', 'r', 'a.ts', '   ')).toBe(
-      fingerprint('lint', 't', 'r', 'a.ts', ''),
-    )
-  })
 })
 
 /** Single-file source map for the anchor lookups below. */
@@ -79,15 +75,6 @@ describe('computeAnchors', () => {
     const before = computeAnchors([at(2)], source('a\ndebugger\nb\n'))
     const after = computeAnchors([at(5)], source('x\ny\nz\na\ndebugger\nb\n'))
     expect(after[0]?.id).toBe(before[0]?.id)
-  })
-
-  it('keeps identity when only the range widens', () => {
-    const wide = computeAnchors(
-      [at(2, { range: { startLine: 2, startCol: 3, endLine: 9, endCol: 40 } })],
-      source('a\ndebugger\nb\n'),
-    )
-    const narrow = computeAnchors([at(2)], source('a\ndebugger\nb\n'))
-    expect(wide[0]?.id).toBe(narrow[0]?.id)
   })
 
   it('disambiguates identical anchors in the same file by occurrence', () => {
@@ -144,11 +131,6 @@ describe('computeAnchors', () => {
     expect(blank[0]?.id).toBe(empty)
     expect(missing[0]?.id).toBe(empty)
     expect(beyondEnd[0]?.id).toBe(empty)
-  })
-
-  it('returns findings in input order', () => {
-    const findings = computeAnchors([at(3), at(1), at(2)], source('one\ntwo\nthree\n'))
-    expect(findings.map((finding) => finding.range.startLine)).toEqual([3, 1, 2])
   })
 })
 

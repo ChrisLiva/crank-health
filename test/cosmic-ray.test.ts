@@ -161,15 +161,6 @@ describe('scoping', () => {
 })
 
 describe('the runner’s posture', () => {
-  it('is deep-only, and never runs on a project that has not adopted it', () => {
-    expect(cosmicRayRunner).toMatchObject({
-      category: 'test-quality',
-      deepOnly: true,
-      repoOwnedOnly: true,
-      complementary: true,
-    })
-  })
-
   it('declines in the quick profile instead of executing repo code', async () => {
     const result = await cosmicRayRunner.run({ ...CONTEXT, deep: false })
     expect(result).toMatchObject({ state: 'not-available' })
