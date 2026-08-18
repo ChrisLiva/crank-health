@@ -414,8 +414,8 @@ export function mergeReachability(findings: readonly Finding[]): Finding[] {
  * unfixed for every module after the first.
  *
  * The `v` prefix is Go's own and osv-scanner drops it, so `v1.0.0` and `1.0.0`
- * are the same pin. A space separates the halves: a repo-relative posix path
- * cannot contain one, so the two fields cannot run together.
+ * are the same pin. A NUL separates the halves: neither a path nor a package
+ * name can contain one, so the two fields cannot run together.
  */
 function packageKey(finding: Finding): string | undefined {
   const pkg = finding.package

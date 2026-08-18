@@ -267,7 +267,7 @@ export function toPendingFindings(
       const isFormat = subcommand === 'format' && diagnostic.category === 'format'
       const rule = isFormat ? BIOME_FORMAT_RULE : diagnostic.category
       // One formatting verdict per file, however many hunks differ.
-      const key = `${rule} ${diagnostic.file}`
+      const key = `${rule}\u0000${diagnostic.file}`
       if (isFormat && seen.has(key)) return []
       seen.add(key)
 
