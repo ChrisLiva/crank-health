@@ -568,7 +568,77 @@ describe('parseOsvReport', () => {
     expect(finding?.message).toBe('leftpad@1.0.0 (npm): 1 advisory; no fixed version available')
     expect(finding?.packageAdvisories?.[0]?.fixedIn).toBeUndefined()
   })
+
+  /**
+   * The demotion is per advisory, not per package. A package carrying a critical
+   * CVE with a released fix *and* an unfixable low one is work somebody can do
+   * this afternoon — upgrading clears the critical — so it stays graded, and the
+   * message says exactly how far the upgrade gets rather than claiming there is
+   * nothing to upgrade to.
+   */
+  it('keeps a package graded when one of its advisories has a fix, and says what it clears', () => {
+    const [finding] = toOsvFindings(parseOsvReport(mixedFixability()), false)
+
+    expect(finding?.gradeScope).toBe(true)
+    expect(finding?.message).toBe(
+      'mixedpkg@1.0.0 (npm): 2 advisories; fix: upgrade to ≥2.0.0 ' +
+        '(clears 1 of 2; the rest have no published fix)',
+    )
+    expect(finding?.fixHint).toContain('Upgrade mixedpkg to ≥2.0.0')
+    // The receipts are untouched: each advisory still says for itself.
+    expect(finding?.packageAdvisories?.map((advisory) => advisory.fixedIn)).toEqual([
+      '2.0.0',
+      undefined,
+    ])
+  })
 })
+
+/** One package with a fixable advisory and an unfixable one — the mixed case. */
+function mixedFixability(): unknown {
+  return {
+    results: [
+      {
+        source: { path: 'package-lock.json' },
+        packages: [
+          {
+            package: { name: 'mixedpkg', version: '1.0.0', ecosystem: 'npm' },
+            groups: [
+              { ids: ['GHSA-aaaa-0001'], aliases: [], max_severity: '9.8' },
+              { ids: ['GHSA-aaaa-0002'], aliases: [], max_severity: '3.1' },
+            ],
+            vulnerabilities: [
+              {
+                id: 'GHSA-aaaa-0001',
+                summary: 'critical, and fixed',
+                affected: [
+                  {
+                    package: { name: 'mixedpkg', ecosystem: 'npm' },
+                    ranges: [
+                      {
+                        type: 'SEMVER',
+                        events: [{ introduced: '0' }, { fixed: '2.0.0' }],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'GHSA-aaaa-0002',
+                summary: 'low, and unfixed',
+                affected: [
+                  {
+                    package: { name: 'mixedpkg', ecosystem: 'npm' },
+                    ranges: [{ type: 'SEMVER', events: [{ introduced: '0' }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+}
 
 /** An advisory whose `affected` range never closes: nothing to upgrade to. */
 function unfixable(): unknown {

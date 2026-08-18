@@ -458,6 +458,14 @@ export function toPendingFindings(
     .toSorted(byLocation)
 }
 
+/**
+ * The separator inside a group key, written as an escape rather than as the
+ * byte itself: a raw NUL in a source file makes it binary to `grep`, `file` and
+ * every editor that reads it. NUL because no field it joins can contain one — a
+ * path, an ecosystem, a package name and a version are all text.
+ */
+const KEY_SEPARATOR = '\u0000'
+
 /** One vulnerable package's advisory groups, keyed so two packages never merge. */
 function groupByPackage(
   vulnerabilities: readonly OsvVulnerability[],
@@ -469,7 +477,7 @@ function groupByPackage(
       vulnerability.ecosystem,
       vulnerability.packageName,
       vulnerability.packageVersion,
-    ].join(' ')
+    ].join(KEY_SEPARATOR)
     const group = groups.get(key)
     if (group === undefined) groups.set(key, [vulnerability])
     else group.push(vulnerability)
@@ -517,7 +525,7 @@ export interface PackageSummary {
   readonly anchor: string
   readonly message: string
   readonly fixHint: string
-  /** False when no published version clears every advisory; see below. */
+  /** False only when no advisory against the package has a fix; see below. */
   readonly gradeScope: boolean
 }
 
@@ -536,17 +544,24 @@ export function summarizePackage(
   advisories: readonly PackageAdvisory[],
 ): PackageSummary {
   const anchor = `${pkg.name}@${pkg.version}`
-  const fixedIn = highestFix(advisories)
+  const fixable = advisories.filter((advisory) => advisory.fixedIn !== undefined)
+  const fixedIn = highestFix(fixable)
+  const partial = fixable.length > 0 && fixable.length < advisories.length
   return {
     anchor,
     message:
       `${anchor} (${pkg.ecosystem}): ` +
       `${advisories.length} ${advisories.length === 1 ? 'advisory' : 'advisories'}; ` +
-      `${fixedIn === undefined ? 'no fixed version available' : `fix: upgrade to ≥${fixedIn}`}`,
+      `${fixedIn === undefined ? 'no fixed version available' : `fix: upgrade to ≥${fixedIn}`}` +
+      (partial
+        ? ` (clears ${fixable.length} of ${advisories.length}; the rest have no published fix)`
+        : ''),
     fixHint:
       fixedIn === undefined
         ? `No fixed version is published for ${pkg.name} — replace it, or vendor a patched fork; see ${advisoryUrl(advisories)}`
-        : `Upgrade ${pkg.name} to ≥${fixedIn}; see ${advisoryUrl(advisories)}`,
+        : `Upgrade ${pkg.name} to ≥${fixedIn}` +
+          (partial ? `, which clears ${fixable.length} of ${advisories.length} advisories` : '') +
+          `; see ${advisoryUrl(advisories)}`,
     gradeScope: fixedIn !== undefined,
   }
 }
@@ -562,14 +577,20 @@ function advisoryOf(vulnerability: OsvVulnerability): PackageAdvisory {
 }
 
 /**
- * The version that clears the whole package, or `undefined` when any one of its
- * advisories has no fix: upgrading to the highest published fix still leaves the
- * unfixable one, and a message promising otherwise would be wrong.
+ * The highest published fix among the advisories that have one, or `undefined`
+ * when none does — the version to upgrade to, and how far it gets.
+ *
+ * It is *not* "the version that clears the package": one unfixable advisory
+ * used to make the whole package unfixable, which demoted a critical CVE with a
+ * released fix out of the security grade on the strength of an unrelated low one
+ * beside it, under a message reading `no fixed version available` that was
+ * false. Demotion is per advisory (see {@link summarizePackage}), and the
+ * partial case says so in the sentence rather than by omission.
  */
 function highestFix(advisories: readonly PackageAdvisory[]): string | undefined {
   let highest: string | undefined
   for (const advisory of advisories) {
-    if (advisory.fixedIn === undefined) return undefined
+    if (advisory.fixedIn === undefined) continue
     if (highest === undefined || compareVersions(advisory.fixedIn, highest) > 0) {
       highest = advisory.fixedIn
     }
