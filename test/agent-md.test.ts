@@ -14,6 +14,7 @@ import {
   makeProject,
   makeProjectScan,
   makeReport,
+  noMetrics,
   projectAt,
 } from './factories.ts'
 import { expectGolden, normalizeMarkdown, readGoldenReport } from './support/report.ts'
@@ -294,13 +295,65 @@ describe('what counts as a task', () => {
     ])
   })
 
+  /**
+   * The category is an A: jscpd measured the tree and found nothing worth a
+   * letter, so the clone it still reports is a default config's opinion nobody
+   * asked for — the noise this rule exists to keep out of the list.
+   */
   it('leaves an advisory finding nothing else answers for out of the list', () => {
-    const report = makeReport({
-      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
-      findings: [clone('src/a.ts')],
-    })
+    const report = duplicationGraded('A', [clone('src/a.ts')])
     expect(report.advisories).toHaveLength(1)
     expect(buildAgentTasks(report)).toEqual([])
+  })
+
+  /**
+   * The letter is the other way an advisory row is work. Duplication grades on
+   * jscpd's token percentage, so *every* duplication finding is advisory — a D
+   * or an F with no graded finding under it would otherwise be a grade with
+   * nothing in the list to move it, which is the one thing `agent.md` must never
+   * print.
+   */
+  it.each(['D', 'F'] as const)('makes a task of the clones a duplication %s rests on', (grade) => {
+    const report = duplicationGraded(grade, [clone('src/a.ts')])
+
+    expect(report.findings).toEqual([])
+    expect(buildAgentTasks(report).map((task) => [task.category, task.gradeImpact])).toEqual([
+      ['duplication', `duplication · ${grade} → A`],
+    ])
+  })
+
+  /**
+   * The discriminator for the rule above: what makes those clones work is a
+   * measurement nobody's graded finding is under. A category graded worse than A
+   * *because of graded findings* says nothing about its advisory rows — the
+   * dependency case, where the plan wants the advisory ones suppressed however
+   * bad the letter is.
+   */
+  it('leaves an advisory dependency out of a security grade its graded findings made', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), security: { status: 'graded', grade: 'D' } },
+      findings: [
+        makeFinding({ id: 's', category: 'security', tool: 'bandit', rule: 'B602', file: 'a.py' }),
+        devScopedDependency(),
+      ],
+    })
+
+    expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['security'])
+    expect(buildAgentTasks(report)[0]?.findings.map((finding) => finding.rule)).toEqual(['B602'])
+  })
+
+  /** Same, with nothing graded at all: security counts findings, not a metric. */
+  it('leaves an advisory dependency out where the whole security grade is advisory', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), security: { status: 'graded', grade: 'B' } },
+      findings: [devScopedDependency()],
+    })
+    expect(buildAgentTasks(report)).toEqual([])
+  })
+
+  /** And a letter with nothing but generated code under it is still nobody's task. */
+  it('leaves the clones a duplication F rests on out when they are generated', () => {
+    expect(buildAgentTasks(duplicationGraded('F', [clone('src/api.gen.ts')]))).toEqual([])
   })
 
   /**
@@ -309,7 +362,7 @@ describe('what counts as a task', () => {
    */
   it('keeps an advisory finding a graded one answers for at the same place', () => {
     const report = makeReport({
-      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      categories: allGraded(),
       findings: [clone('src/a.ts'), makeFinding({ id: 'l', file: 'src/a.ts' })],
     })
     expect(report.advisories[0]?.related).toEqual(['l'])
@@ -322,7 +375,7 @@ describe('what counts as a task', () => {
   /** The clone alone stays out, so the cross-link is what carried it. */
   it('leaves the same advisory finding out when nothing is graded at that place', () => {
     const report = makeReport({
-      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      categories: allGraded(),
       findings: [clone('src/a.ts'), makeFinding({ id: 'l', file: 'src/b.ts' })],
     })
     expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['lint'])
@@ -331,13 +384,11 @@ describe('what counts as a task', () => {
   /**
    * Two advisory findings at one place answer only for each other, and neither
    * is a graded finding somebody has to open the file for — so the cross-link
-   * carries nothing and the pair stays out. This is the shape sec-basic has: a
-   * clone and a complexity finding on the same function, both advisory, linked
-   * to each other by `related` and to nothing that counted toward a grade.
+   * carries nothing and, with both categories at A, the pair stays out.
    */
   it('leaves two advisory findings that answer only for each other out of the list', () => {
     const report = makeReport({
-      categories: { ...allGraded(), duplication: { status: 'graded', grade: 'F' } },
+      categories: allGraded(),
       findings: [clone('src/a.ts'), advisoryComplexity('src/a.ts')],
     })
     // The links exist; what they link to is the point.
@@ -478,6 +529,43 @@ function advisoryComplexity(file: string): Finding {
     rule: 'fallow/complexity',
     gradeScope: false,
     file,
+  })
+}
+
+/**
+ * A report whose duplication letter is jscpd's, with the clones behind it — the
+ * shape every duplication grade has, since none of its findings is graded and
+ * the percentage is the tool's own.
+ */
+function duplicationGraded(grade: Grade, findings: readonly Finding[]): Report {
+  return makeReport({
+    categories: { ...allGraded(), duplication: { status: 'graded', grade } },
+    metrics: { ...noMetrics(), duplication: { duplicationPercent: grade === 'A' ? 0 : 47 } },
+    findings: [...findings],
+  })
+}
+
+/** A vulnerable dev dependency: advisory, with a released fix to upgrade to. */
+function devScopedDependency(): Finding {
+  return makeFinding({
+    id: 'dev-osv',
+    category: 'security',
+    tool: OSV_SCANNER_TOOL,
+    rule: 'osv/package',
+    severity: 'error',
+    gradeScope: false,
+    file: 'package-lock.json',
+    package: { name: 'vite', version: '4.0.0', ecosystem: 'npm' },
+    packageAdvisories: [
+      {
+        id: 'GHSA-0000-0000-0002',
+        aliases: [],
+        severity: 'error',
+        summary: 'dev server path traversal',
+        fixedIn: '4.5.3',
+        scope: 'dev',
+      },
+    ],
   })
 }
 

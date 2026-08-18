@@ -204,13 +204,15 @@ export function buildAgentTasks(
   const written = handWritten(reportFindings(report), excludes ?? [])
   const movementOf = gradeMovement(report)
   // Report-wide, not delta-wide: `related` ids are the report's own identities,
-  // and in PR mode the graded finding an advisory row answers for may be one
-  // this change did not add.
+  // and in PR mode the graded finding an advisory row answers for is often one
+  // this change did not add — `run-pr.ts` links both scans' findings before the
+  // delta is computed so those ids are there to resolve.
   const graded = new Set(
     reportFindings(report)
       .filter((finding) => finding.gradeScope)
       .map((finding) => finding.id),
   )
+  const measured = measuredCategories(report)
 
   const themes = mergeDuplicates(
     CATEGORIES.flatMap((category) =>
@@ -218,7 +220,7 @@ export function buildAgentTasks(
         category,
         findings.filter((finding) => finding.category === category),
       ),
-    ).filter((theme) => isWork(theme, written, graded)),
+    ).filter((theme) => isWork(theme, written, graded, measured)),
     new Map(findings.map((finding, index) => [finding.id, index])),
   )
 
@@ -338,10 +340,63 @@ function gradeWithout(
  * — link to each other and to nothing anyone has to open that file for, so a
  * non-empty `related` was never the question.
  *
+ * **And the letter itself can make an advisory row work.** Duplication grades on
+ * jscpd's token percentage and complexity on a share of functions, so every one
+ * of their findings is advisory — the number, not the rows, is what earned the
+ * letter. A D or an F there with no graded finding under it would otherwise be a
+ * grade with nothing in this list that could move it, which is the one thing
+ * `agent.md` must never print. {@link measuredCategories} is that set, and it is
+ * deliberately not "any bad letter": a security D is made *of* graded findings,
+ * so its advisory dependency rows are still the noise the plan suppresses.
+ *
  * @param graded ids of every finding in this report that counted toward a grade
+ * @param measured categories whose letter is a measurement no graded finding is
+ * under; see {@link measuredCategories}
  */
-function eligible(finding: Finding, graded: ReadonlySet<string>): boolean {
-  return finding.gradeScope || (finding.related ?? []).some((id) => graded.has(id))
+function eligible(
+  finding: Finding,
+  graded: ReadonlySet<string>,
+  measured: ReadonlySet<Category>,
+): boolean {
+  if (finding.gradeScope || measured.has(finding.category)) return true
+  return (finding.related ?? []).some((id) => graded.has(id))
+}
+
+/**
+ * The categories graded worse than A on a number a tool reported rather than on
+ * findings that counted: `metrics` holds that number (jscpd's duplicated-token
+ * percentage, fallow's functions over the ceiling, Stryker's mutation score),
+ * and no finding of theirs is in `findings[]`.
+ *
+ * Both halves matter. Without the letter, a clean A's advisory rows would come
+ * back as tasks — the noise {@link eligible} exists to keep out. Without "no
+ * graded finding", a category whose letter its own graded rows earned would
+ * drag its advisory ones in behind them.
+ *
+ * The rollup and every project, because `--fail-under` gates both: a package
+ * graded F inside a repo the rollup grades A is CI red with nothing in this file
+ * to do about it.
+ */
+function measuredCategories(report: Report): Set<Category> {
+  const gradedIn = new Set(
+    reportFindings(report)
+      .filter((finding) => finding.gradeScope)
+      .map((finding) => finding.category),
+  )
+  const states = [report.categories, ...report.projects.map((project) => project.categories)]
+  return new Set(
+    CATEGORIES.filter(
+      (category) =>
+        Object.keys(report.metrics[category] ?? {}).length > 0 &&
+        !gradedIn.has(category) &&
+        states.some((state) => gradedWorseThanA(state[category])),
+    ),
+  )
+}
+
+/** Whether one category state is a letter, and a letter below A. */
+function gradedWorseThanA(state: CategoryState | undefined): boolean {
+  return state?.status === 'graded' && state.grade !== 'A'
 }
 
 /**
@@ -358,8 +413,9 @@ function isWork(
   theme: Theme,
   written: (finding: Finding) => boolean,
   graded: ReadonlySet<string>,
+  measured: ReadonlySet<Category>,
 ): boolean {
-  const rows = theme.findings.filter((finding) => eligible(finding, graded))
+  const rows = theme.findings.filter((finding) => eligible(finding, graded, measured))
   if (rows.length === 0) return false
   if (rows.every((finding) => finding.package !== undefined)) return rows.some(hasFix)
   return rows.some((finding) => written(finding))

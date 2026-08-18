@@ -14,7 +14,17 @@ Grades: security not assessed · types not assessed · dead code not assessed ·
 
 ## Tasks
 
-### T1 — Format 1 file
+### T1 — De-duplicate 1 copied block
+
+Grade impact: duplication · D → A
+
+- `dupe-a.cs:4` `jscpd/duplicate-block` — 30 lines (100 tokens) duplicated from dupe-b.cs:4-33 [advisory]
+
+Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
+
+Verify: `npx crank-health --only duplication --fail-under A`
+
+### T2 — Format 1 file
 
 Grade impact: format · C → A
 
