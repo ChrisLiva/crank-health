@@ -13,7 +13,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
-import { goExecEnv } from '../go/go-toolchain.ts'
+import { goExecEnv, withoutFetchNarration } from '../go/go-toolchain.ts'
 import {
   asArray,
   asRecord,
@@ -608,7 +608,7 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
     })
     // A cold module cache narrates its downloads on stderr and a warm one says
     // nothing, so the narration goes before anything reads or stages the stream
-    // — see {@link FETCH_NARRATION}.
+    // — see {@link withoutFetchNarration}.
     const stderr = withoutFetchNarration(execution.stderr)
     // eslint-disable-next-line no-await-in-loop
     rawFiles.push(...(await stage(ctx.scratch, goMod, execution.stdout, stderr)))
@@ -654,43 +654,6 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
  * it never wrote, on exactly the runs that produced nothing.
  */
 const OUR_CONFIG = { configOwned: false } as const
-
-/**
- * `go`'s narration of the fetch it does on a cold module cache, which is not
- * evidence about the repo and must not reach the report.
- *
- * `go` is this runner's *fetcher* — `go run <path>@<version>` resolves and
- * builds the analyzer — and every fetcher in this codebase narrates its first
- * install and then goes quiet. Commit 7251444 ("A cold tool cache must not
- * change the report") fixed exactly this for `uvx` and `dnx`, and it fixed it
- * with each fetcher's own switch rather than by filtering, on the grounds that
- * a pattern which has to keep matching a tool's wording can go quietly dead.
- * `go` has no such switch — `-x`/`-v` add output, nothing removes it — so
- * filtering is the only remedy available, and the trade-off is taken knowingly:
- * if `go` ever rewords these lines the pattern stops matching and a cold run
- * stages a file a warm one does not, which is a determinism wobble rather than
- * a wrong grade or a leaked path.
- *
- * Measured on go 1.26.6 with a fresh `GOMODCACHE`, same command shape: the cold
- * run's stderr opens with five `go: downloading …` lines that the warm run's
- * does not have, and is otherwise byte-identical (stdout is identical too,
- * which is why this only became a problem once stderr was staged). `extracting`
- * and `finding` are the same narration from older toolchains.
- *
- * Silence, not blindness: a *failed* fetch is `go: <module>@<version>: Get "…":
- * dial tcp: … no such host`, which this does not match — verified against the
- * real binary with `GOPROXY` pointed at a dead host, where the filter removes
- * nothing at all and the error still explains the run.
- */
-const FETCH_NARRATION = /^go: (?:downloading|extracting|finding) \S/
-
-/** `stderr` with {@link FETCH_NARRATION} removed; everything else untouched. */
-function withoutFetchNarration(stderr: string): string {
-  return stderr
-    .split('\n')
-    .filter((line) => !FETCH_NARRATION.test(line))
-    .join('\n')
-}
 
 /**
  * One module's evidence, staged: the stream it produced and anything it said on
@@ -751,7 +714,7 @@ function collapsedRun(
       // Stripped of fetch narration first: on a cold cache the literal first
       // line is `go: downloading …`, which would explain a compile error with
       // whatever `go` happened to be downloading at the time — the `firstLine`
-      // hazard `core/exec.ts` documents for dnx. See {@link FETCH_NARRATION}.
+      // hazard `core/exec.ts` documents for dnx. See {@link withoutFetchNarration}.
       `(exit ${execution.exitCode ?? 'on a signal'}): ${firstLine(stderr)}`,
   }
 }

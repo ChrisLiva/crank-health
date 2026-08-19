@@ -359,6 +359,36 @@ describe('a scan whose staticcheck replays captured output', () => {
   })
 
   /**
+   * A cold module cache narrates its downloads on stderr and a warm one says
+   * nothing, so the same failed run must explain itself the same way either
+   * way: `reason` is a `report.json` field, and a narration line reaching it is
+   * both a wrong explanation and a cold/warm difference in the report.
+   */
+  it('explains a silent failure from the error, not the module cache’s narration', async () => {
+    const repo = await goSourceRepo()
+    try {
+      const scan = await scanReplaying(
+        repo,
+        '',
+        'go: downloading honnef.co/go/tools v0.7.0\n' +
+          'go: downloading golang.org/x/tools v0.30.0\n' +
+          'staticcheck: fatal: could not load packages\n',
+      )
+      const reasons = scan.tools
+        .filter((tool) => tool.tool === STATICCHECK_TOOL)
+        .map((tool) => tool.reason)
+
+      expect(reasons).toEqual([
+        'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
+        'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
+        'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
+      ])
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
+  })
+
+  /**
    * A repo that owns a `staticcheck.conf` is held to *its* rules, and the
    * report says so: `configOwned` is what `report.json` reads a run's
    * provenance off, and a run that stayed silent about it would be filed as
@@ -443,12 +473,13 @@ func unusedHelper() int {
 async function scanReplaying(
   repoRoot: string,
   stdout: string,
+  stderr = '',
 ): Promise<{
   readonly tools: Report['tools']
   readonly findings: readonly Finding[]
   readonly rawFiles: readonly string[]
 }> {
-  const farm = await pathFarm({ go: goReplaying(stdout), gofmt: '#!/bin/sh\nexit 0\n' })
+  const farm = await pathFarm({ go: goReplaying(stdout, stderr), gofmt: '#!/bin/sh\nexit 0\n' })
   const out = await mkdtemp(join(tmpdir(), 'crank-staticcheck-out-'))
   const original = process.env['PATH']
   process.env['PATH'] = farm.path
@@ -468,13 +499,16 @@ async function scanReplaying(
 }
 
 /** A fake `go`: a version the gate accepts, then the captured stream on exit 1. */
-function goReplaying(stdout: string): string {
+function goReplaying(stdout: string, stderr = ''): string {
   return [
     '#!/bin/sh',
     'if [ "$1" = version ]; then echo "go version go1.26.6 darwin/arm64"; exit 0; fi',
     "cat <<'STATICCHECK_EOF'",
     stdout.trimEnd(),
     'STATICCHECK_EOF',
+    "cat >&2 <<'STATICCHECK_ERR_EOF'",
+    stderr.trimEnd(),
+    'STATICCHECK_ERR_EOF',
     'exit 1',
   ].join('\n')
 }

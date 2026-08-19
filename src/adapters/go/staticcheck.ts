@@ -20,7 +20,13 @@ import {
   repoRelative,
   scanMemo,
 } from '../support.ts'
-import { detectGoConfig, goExecOptions, projectDirectory, withGoGate } from './go-toolchain.ts'
+import {
+  detectGoConfig,
+  goExecOptions,
+  projectDirectory,
+  withGoGate,
+  withoutFetchNarration,
+} from './go-toolchain.ts'
 
 /**
  * `staticcheck -f json ./...` — one process, three categories.
@@ -204,7 +210,11 @@ async function runStaticcheck(ctx: RunContext): Promise<StaticcheckScan> {
         state: 'error',
         reason:
           `staticcheck exited ${execution.exitCode ?? 'signal'} with nothing to report: ` +
-          firstLine(execution.stderr),
+          // Stripped of fetch narration first: on a cold cache the literal
+          // first line is `go: downloading …`, which would explain the failure
+          // with whatever `go` was fetching at the time — and `reason` is a
+          // `report.json` field, so a cold run would differ from a warm one.
+          firstLine(withoutFetchNarration(execution.stderr)),
       },
     }
   }

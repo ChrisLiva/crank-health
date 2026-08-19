@@ -163,6 +163,48 @@ export function projectDirectory(ctx: RunContext): string {
 }
 
 /**
+ * `go`'s narration of the fetch it does on a cold module cache, which is not
+ * evidence about the repo and must not reach the report.
+ *
+ * `go` is every Go runner's *fetcher* — `go run <path>@<version>` resolves and
+ * builds the analyzer — and every fetcher in this codebase narrates its first
+ * install and then goes quiet. Commit 7251444 ("A cold tool cache must not
+ * change the report") fixed exactly this for `uvx` and `dnx`, and it fixed it
+ * with each fetcher's own switch rather than by filtering, on the grounds that
+ * a pattern which has to keep matching a tool's wording can go quietly dead.
+ * `go` has no such switch — `-x`/`-v` add output, nothing removes it — so
+ * filtering is the only remedy available, and the trade-off is taken knowingly:
+ * if `go` ever rewords these lines the pattern stops matching and a cold run
+ * differs from a warm one, which is a determinism wobble rather than a wrong
+ * grade or a leaked path.
+ *
+ * Measured on go 1.26.6 with a fresh `GOMODCACHE`, same command shape: the cold
+ * run's stderr opens with five `go: downloading …` lines that the warm run's
+ * does not have, and is otherwise byte-identical (stdout is identical too).
+ * `extracting` and `finding` are the same narration from older toolchains.
+ *
+ * Silence, not blindness: a *failed* fetch is `go: <module>@<version>: Get "…":
+ * dial tcp: … no such host`, which this does not match — verified against the
+ * real binary with `GOPROXY` pointed at a dead host, where the filter removes
+ * nothing at all and the error still explains the run.
+ */
+const FETCH_NARRATION = /^go: (?:downloading|extracting|finding) \S/
+
+/**
+ * `stderr` with {@link FETCH_NARRATION} removed; everything else untouched.
+ *
+ * Every reader of a Go run's stderr goes through this — what gets staged and
+ * what gets quoted into a failure `reason` alike — because both are
+ * `report.json`, and a cold cache must not change either.
+ */
+export function withoutFetchNarration(stderr: string): string {
+  return stderr
+    .split('\n')
+    .filter((line) => !FETCH_NARRATION.test(line))
+    .join('\n')
+}
+
+/**
  * Spec §1's ownership test for the Go tools whose ownership is a *config file
  * and nothing else* — staticcheck, golangci-lint and gremlins each read one of
  * a small set of names, and none of them has a dependency declaration to look
