@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0` · crank-health 0.10.0 · quick profile
+`<repo>` @ `c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0` · crank-health 0.11.0 · quick profile
 
 ## Grades
 
