@@ -1,0 +1,22 @@
+{
+	"example.com/vetfail/dirty": {
+		"printf": [
+			{
+				"posn": "/repo/dirty/dirty.go:7:22",
+				"end": "/repo/dirty/dirty.go:7:24",
+				"message": "fmt.Sprintf format %s has arg n of wrong type int"
+			}
+		]
+	}
+}
+{
+	"example.com/vetfail": {
+		"printf": [
+			{
+				"posn": "/repo/main.go:6:14",
+				"end": "/repo/main.go:6:16",
+				"message": "fmt.Printf format %d has arg \"not-an-int\" of wrong type string"
+			}
+		]
+	}
+}

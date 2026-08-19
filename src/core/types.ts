@@ -182,13 +182,13 @@ export type PendingFinding = Omit<Finding, 'id'> & {
 }
 
 /** Languages crank-health has a vocabulary for. */
-export type Language = 'js-ts' | 'python' | 'csharp'
+export type Language = 'js-ts' | 'python' | 'csharp' | 'go'
 
 /**
  * Canonical language order, matching the adapter order in `adapters/index.ts`.
  * Every stable sort and every rendered list of languages uses it.
  */
-export const LANGUAGES: readonly Language[] = ['js-ts', 'python', 'csharp']
+export const LANGUAGES: readonly Language[] = ['js-ts', 'python', 'csharp', 'go']
 
 /** Cross-language runners (jscpd, gitleaks, …) live under this pseudo-language. */
 export type RunnerScope = Language | 'common'

@@ -344,7 +344,7 @@ function redactSecret(testId: string, message: string): string {
  * be copied into the run directory in full. See {@link sanitizeRawResults}.
  */
 export function sanitizeRawJson(stdout: string): string {
-  return sanitizeRawResults(stdout, (issue) =>
+  return sanitizeRawResults(stdout, 'results', (issue) =>
     issue['code'] === undefined ? issue : { ...issue, code: OMITTED },
   )
 }

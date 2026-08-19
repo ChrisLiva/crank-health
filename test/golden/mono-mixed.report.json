@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.10.0",
+  "crankHealth": "0.11.0",
   "repo": {
     "path": "<repo>",
-    "commit": "63a85c9608c26de869f36a70eee7d0f8ca7d78b7"
+    "commit": "1e84ef63f0b7067eb8e22569987523f55a14d47c"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -115,7 +115,7 @@
       "assessed": 4
     },
     "lines": {
-      "total": 66,
+      "total": 75,
       "assessed": 20
     },
     "unassessed": [
@@ -127,7 +127,7 @@
       {
         "extension": ".md",
         "files": 1,
-        "lines": 31
+        "lines": 40
       },
       {
         "extension": ".mod",
@@ -321,9 +321,12 @@
         "installed": false,
         "version": null
       },
-      "state": "not-available",
-      "reason": "Go toolchain absent — Go advisories graded conservatively (reachability unknown)",
-      "raw": []
+      "state": "error",
+      "reason": "govulncheck analyzed nothing in services/go-api (exit 1): govulncheck: no packages matched the provided patterns",
+      "raw": [
+        "raw/repo/govulncheck-services-go-api.json",
+        "raw/repo/govulncheck-services-go-api.stderr.txt"
+      ]
     },
     {
       "tool": "opengrep",

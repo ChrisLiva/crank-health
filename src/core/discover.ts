@@ -40,6 +40,7 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, Language>> = {
   '.py': 'python',
   '.pyi': 'python',
   '.cs': 'csharp',
+  '.go': 'go',
 }
 
 /** How many files we stat/read at once. */
@@ -79,7 +80,8 @@ export async function discoverFiles(repoRoot: string): Promise<FileScan> {
   const kept: string[] = []
   const hidden: string[] = []
   for (const file of new Set(listed)) {
-    if (file.length === 0 || isExcluded(file) || isCsharpBuildOutput(file)) continue
+    if (file.length === 0 || isExcluded(file) || isCsharpBuildOutput(file) || isGoVendored(file))
+      continue
     if (isHiddenScope(file)) hidden.push(file)
     else kept.push(file)
   }
@@ -99,12 +101,14 @@ export const ROOT_PROJECT = '.'
 
 const PACKAGE_JSON = 'package.json'
 const PYPROJECT_TOML = 'pyproject.toml'
+const GO_MOD = 'go.mod'
 const PNPM_WORKSPACE = 'pnpm-workspace.yaml'
 
 /** A manifest makes its directory a project candidate, and declares a language. */
 const MANIFEST_LANGUAGE: Readonly<Record<string, Language>> = {
   [PACKAGE_JSON]: 'js-ts',
   [PYPROJECT_TOML]: 'python',
+  [GO_MOD]: 'go',
 }
 
 /** Manifests recognized by suffix (any stem, case-insensitive), not exact name. */
@@ -166,7 +170,8 @@ export async function discoverProjects(
 
 /**
  * The project partition, from the inventory alone: every directory holding a
- * `package.json` or a `pyproject.toml` is a candidate (the root always is), and
+ * `package.json`, a `pyproject.toml` or a `go.mod` is a candidate (the root
+ * always is), and
  * each file goes to its nearest ancestor candidate — so every source file
  * belongs to exactly one candidate, and a nested package's files are the
  * nested package's, not its parent's.
@@ -301,6 +306,7 @@ export function inventoryOf(files: readonly string[]): FileInventory {
       'js-ts': files.filter((file) => languageOf(file) === 'js-ts'),
       python: files.filter((file) => languageOf(file) === 'python'),
       csharp: files.filter((file) => languageOf(file) === 'csharp'),
+      go: files.filter((file) => languageOf(file) === 'go'),
     },
   }
 }
@@ -378,6 +384,20 @@ function isCsharpBuildOutput(file: string): boolean {
     languageOf(file) === 'csharp' &&
     file.split('/').some((segment) => segment === 'bin' || segment === 'obj')
   )
+}
+
+/**
+ * A Go file under a `vendor/` segment is a copied dependency, never the repo's
+ * own source: `go mod vendor` writes the whole module graph in there, and
+ * grading it would hand a repo its dependencies' lint and complexity.
+ * Go-only on purpose, and deliberately not on {@link EXCLUDED_SEGMENTS} —
+ * that list is language-blind, and `vendor/` is authored source in a PHP or a
+ * JS repo. The directory's own bookkeeping (`vendor/modules.txt`, the vendored
+ * `go.mod` files) stays in the inventory: it is not `.go` source, and the
+ * candidate it makes keeps no source of its own, so it is a workspace shell.
+ */
+function isGoVendored(file: string): boolean {
+  return languageOf(file) === 'go' && file.split('/').some((segment) => segment === 'vendor')
 }
 
 /** The one dot-directory whose contents the repo authors: its CI workflows. */

@@ -194,6 +194,11 @@ describe('a repo configured through the legacy eslintrc format', () => {
 function context(repoRoot: string, files: string[]): DetectContext {
   return repoDetectContext(repoRoot, {
     all: files,
-    byLanguage: { 'js-ts': files.filter((file) => file.endsWith('.js')), python: [], csharp: [] },
+    byLanguage: {
+      'js-ts': files.filter((file) => file.endsWith('.js')),
+      python: [],
+      csharp: [],
+      go: [],
+    },
   })
 }

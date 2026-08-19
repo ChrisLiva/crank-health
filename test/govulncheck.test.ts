@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { GoVulnerability } from '../src/adapters/common/govulncheck.ts'
 import {
   GOVULNCHECK_TOOL,
@@ -520,12 +520,57 @@ describe('the govulncheck runner', () => {
 
   /** The whole command line: an exact pin, `-json`, and no writing subcommand. */
   it('runs the exact pin and no go subcommand that could write', () => {
-    expect(invocationArgs()).toEqual([
+    expect(invocationArgs(undefined)).toEqual([
       'run',
       'golang.org/x/vuln/cmd/govulncheck@v1.7.0',
       '-json',
       './...',
     ])
+  })
+
+  /**
+   * A named database is the only thing that can make this runner's answer a
+   * property of the repo rather than of the day it ran: the public vulnerability
+   * database gains advisories, and a suite that reads it grades the same commit
+   * differently in a month. So the override is part of the command line — and
+   * an absent or blank one leaves it byte-identical to the default, because a
+   * user with nothing to say must not get a malformed `-db`.
+   */
+  it('names the database it was given, and only when it was given one', () => {
+    expect(invocationArgs('file:///x')).toEqual([
+      'run',
+      'golang.org/x/vuln/cmd/govulncheck@v1.7.0',
+      '-json',
+      '-db',
+      'file:///x',
+      './...',
+    ])
+    expect(invocationArgs('  ')).toEqual([
+      'run',
+      'golang.org/x/vuln/cmd/govulncheck@v1.7.0',
+      '-json',
+      './...',
+    ])
+  })
+
+  /**
+   * The suite reads a database that is checked in, not the public one.
+   *
+   * Without this, every other govulncheck assertion is dated: the public
+   * database gains advisories continuously, so the first advisory against
+   * anything a fixture depends on turns a green suite red on a commit nobody
+   * touched. The default lives in `vitest.config.ts` (`test.env`), where a typo
+   * would silently send every run at the public database and no other assertion
+   * would notice — so the environment is read here exactly the way the runner
+   * reads it, and the snapshot behind it is opened to prove it is really there.
+   */
+  it('reads the checked-in vulnerability database rather than the public one', async () => {
+    const database = process.env['CRANK_GOVULNCHECK_DB'] ?? ''
+
+    expect(database).toMatch(/^file:\/\/\S/)
+    expect(JSON.parse(await readFile(new URL(`${database}/index/db.json`), 'utf8'))).toEqual({
+      modified: '2026-01-01T00:00:00Z',
+    })
   })
 
   it('assesses nothing, and says so, in a repo with no Go module', async () => {
@@ -553,6 +598,12 @@ describe('the govulncheck runner against a farmed PATH', () => {
       rm(scratch, { recursive: true, force: true }),
       rm(root, { recursive: true, force: true }),
     ])
+  })
+
+  // The database override is read from the parent process, so a test that
+  // stubs it must hand the suite's own default back to every test after it.
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   /**
@@ -593,6 +644,40 @@ describe('the govulncheck runner against a farmed PATH', () => {
 
     expect(result.state).toBe('not-available')
     expect(result.reason).toBe(GO_ABSENT_REASON)
+    expect(result.findings).toEqual([])
+    expect(result.configOwned).toBe(false)
+  })
+
+  /**
+   * The database override is read here, in the parent process, and put on the
+   * command line — and when govulncheck rejects it the run says so instead of
+   * quietly reading the public database instead.
+   *
+   * A silent fallback is the failure this guards: it would leave the suite
+   * green while grading against a database that grows new advisories every day,
+   * which is exactly the dated report the override exists to prevent. So the
+   * fake `go` only fails when the flag it was told to expect actually arrived —
+   * a run that dropped the override exits 0 and this test goes red on the
+   * state. The reason is govulncheck's own, verbatim: v1.7.0 answers an
+   * unreadable `-db` with `creating client: stat <path>: no such file or
+   * directory` on stderr and exit 1, with stdout empty.
+   */
+  it('reports a database it was told to use and could not read as its own error', async () => {
+    const rejected = 'creating client: stat /nope: no such file or directory'
+    vi.stubEnv('CRANK_GOVULNCHECK_DB', 'file:///nope')
+
+    const result = await runUnder(
+      {
+        go: goSaying(
+          [rejected],
+          ['case " $* " in', '  *" -db file:///nope "*) exit 1 ;;', 'esac', 'exit 0'].join('\n'),
+        ),
+      },
+      ['go.mod', 'main.go'],
+    )
+
+    expect(result.state).toBe('error')
+    expect(result.reason).toContain(rejected)
     expect(result.findings).toEqual([])
     expect(result.configOwned).toBe(false)
   })

@@ -10,6 +10,15 @@ with an empty `declaredBy`.
 | `services/api` | Python   | `services/api/pyproject.toml` |
 | `services/web` | JS       | `services/web/package.json`   |
 
+`services/go-api` is a third service and *not* a third project: it is a
+`go.mod` and nothing else — no Go source, so no file partitions to it and it
+stays a shell. It is here for the one row it earns, govulncheck's, which is
+repo-scoped and owned via `services/go-api/go.mod`. Having no package to
+analyze it is also the only row whose live state is `error` rather than a
+finding — the honest answer for a scan that measured nothing — and the empty
+vulnerability database the suite pins (`test/support/vulndb`) is what keeps
+that row from ever acquiring an advisory as the public database grows.
+
 Planted so that each service fails a category the other does not:
 
 | Category | Project        | Where                             | What                                    |

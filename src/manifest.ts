@@ -68,7 +68,12 @@ export const DOTNET_TOOL_MANIFEST = {
  * The `v` prefix is part of a Go version, so it is part of the pin.
  */
 export const GO_TOOL_MANIFEST = {
+  'github.com/go-gremlins/gremlins/cmd/gremlins': 'v0.6.0',
+  'github.com/golangci/golangci-lint/v2/cmd/golangci-lint': 'v2.12.2',
+  'github.com/securego/gosec/v2/cmd/gosec': 'v2.28.0',
+  'github.com/uudashr/gocognit/cmd/gocognit': 'v1.2.1',
   'golang.org/x/vuln/cmd/govulncheck': 'v1.7.0',
+  'honnef.co/go/tools/cmd/staticcheck': 'v0.7.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**

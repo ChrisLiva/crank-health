@@ -75,7 +75,7 @@ export const JSCPD_RULE = 'jscpd/duplicate-block'
  * lockfile's inevitable self-similarity would then drive the duplication grade
  * of a repo whose *code* is fine.
  */
-const FORMATS = 'javascript,jsx,typescript,tsx,python,csharp'
+const FORMATS = 'javascript,jsx,typescript,tsx,python,csharp,go'
 
 /**
  * Directories excluded regardless of what the repo's `.gitignore` says. jscpd
@@ -99,12 +99,18 @@ const FORMATS = 'javascript,jsx,typescript,tsx,python,csharp'
  * inventory, so it cannot ask what language a file is before descending. That
  * is the accepted trade: a JS package's `bin/cli.js` stays in the inventory but
  * out of the duplication measurement.
+ *
+ * `vendor/` is Go's copied module graph, and records the same trade for the
+ * same reason: discovery drops it with a Go-only file rule, because `vendor/`
+ * is authored source in a PHP or a JS repo, and here it cannot be — so a
+ * `vendor/` of PHP stays in the inventory and out of the measurement.
  */
 const IGNORE_GLOBS: readonly string[] = [
   ...EXCLUDED_SEGMENTS.map((segment) => `**/${segment}/**`),
   '**/.*/**',
   '**/bin/**',
   '**/obj/**',
+  '**/vendor/**',
 ]
 
 /**
@@ -234,7 +240,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       configOwned: false,
       // See `bandit.ts`'s `NOTHING_TO_SCAN`: a repo with no source in it has no
       // duplication percentage, and "0%" would be a grade nobody measured.
-      reason: 'no JavaScript, TypeScript, Python or C# files, so jscpd measured nothing',
+      reason: 'no JavaScript, TypeScript, Python, C# or Go files, so jscpd measured nothing',
     }
   }
 
@@ -384,7 +390,7 @@ export function invocationArgs(scanRoot: string, output: string, config: string)
 
 /** Whether jscpd will look at this path at all — see {@link FORMATS}. */
 function isAnalyzable(file: string): boolean {
-  return /\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts|py|pyi|cs)$/i.test(file)
+  return /\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts|py|pyi|cs|go)$/i.test(file)
 }
 
 /** One clone pair, as jscpd reports it. */

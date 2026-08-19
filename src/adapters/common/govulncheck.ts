@@ -1,4 +1,3 @@
-import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import type { ToolExecution, ToolFailure } from '../../core/exec.ts'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
@@ -14,6 +13,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
+import { goExecEnv, withoutFetchNarration } from '../go/go-toolchain.ts'
 import {
   asArray,
   asRecord,
@@ -502,9 +502,11 @@ export const govulncheckRunner: ToolRunner = {
   // Reachability is nobody else's job, and osv-scanner must never stand this
   // down or be stood down by it; see `ToolRunner.complementary`.
   complementary: true,
-  // Go modules are found by walking the repo, and a repo's modules do not line
-  // up with its `package.json`/`pyproject.toml` projects at all — so this is
-  // asked once, and it visits every go.mod it finds.
+  // "Is anything this repo depends on reachable-vulnerable?" is a question
+  // about the repo, not about one module of it: a caller in one module reaches
+  // a vulnerable symbol pulled in by another, and per-project answers would
+  // report that twice or not at all. So this is asked once, walking the repo,
+  // and it visits every go.mod it finds.
   repoScoped: true,
   timeoutMs: GOVULNCHECK_TIMEOUT_MS,
   detect: detectGovulncheck,
@@ -538,32 +540,28 @@ function detectGovulncheck(ctx: DetectContext): Promise<Detection | null> {
  * rewrite files in the module, and none of them is on this command line. The
  * pin is exact — a bare import path would mean `@latest` and break determinism
  * (spec §6). `./...` is every package in the module at `cwd`.
- */
-export function invocationArgs(): string[] {
-  return ['run', pinnedGoSpec(GOVULNCHECK_PACKAGE), '-json', './...']
-}
-
-/**
- * The environment every `go` spawn carries — the zero-footprint contract (spec
- * §7) for a toolchain that is perfectly willing to write into the module it is
- * pointed at.
  *
- * `GOFLAGS=-mod=readonly` is Go's own default, set explicitly so an ambient
- * `GOFLAGS=-mod=mod` cannot turn a scan into a `go.mod`/`go.sum` rewrite. It is
- * safe for a vendored module too: verified against a `go mod vendor`ed tree,
- * where it produces byte-identical findings.
+ * `db`, when given, becomes `-db <db>`: the vulnerability database to read
+ * instead of the public one. The public database gains advisories continuously,
+ * so a suite that reads it grades the same commit differently in a month; a
+ * pinned snapshot is what makes this runner's answer a property of the repo
+ * (spec §6, the same reason every other tool version is pinned exactly). A
+ * blank or absent value adds nothing rather than a malformed flag — the default
+ * command line, byte for byte.
  *
- * `GOMODCACHE` is pinned to the machine's warm cache — `$HOME/go/pkg/mod`,
- * Go's own default — for the same reason `dotnet-project.ts` pins
- * `NUGET_PACKAGES`: it is the one setting that could otherwise be pointed
- * inside the repo being scanned. The build cache (`GOCACHE`) is derived from
- * the OS cache directory and is never inside a repo.
+ * Reading the environment is the caller's job, not this function's: it stays
+ * pure so the test above can assert the whole command line without a process to
+ * set up.
  */
-export function goEnv(): Record<string, string> {
-  return {
-    GOFLAGS: '-mod=readonly',
-    GOMODCACHE: join(homedir(), 'go', 'pkg', 'mod'),
-  }
+export function invocationArgs(db: string | undefined): string[] {
+  const named = db?.trim()
+  return [
+    'run',
+    pinnedGoSpec(GOVULNCHECK_PACKAGE),
+    '-json',
+    ...(named === undefined || named === '' ? [] : ['-db', named]),
+    './...',
+  ]
 }
 
 /**
@@ -593,19 +591,24 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
   const rawFiles: string[] = []
   const pending: (PendingFinding & { readonly anchor: string })[] = []
   const failures: ToolFailure[] = []
+  // Read once, here rather than inside {@link invocationArgs}, so that builder
+  // stays a pure function of its argument. Unset means the public database,
+  // which is what a user scanning their own repo wants; the suite sets it to a
+  // checked-in snapshot so a new advisory cannot move a golden.
+  const database = process.env['CRANK_GOVULNCHECK_DB']
 
   for (const goMod of modules) {
     // Sequential: each module is a full package-graph load, and the scan's own
     // concurrency pool is what parallelizes work across tools.
     // eslint-disable-next-line no-await-in-loop
-    const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), {
+    const execution = await execTool(systemCommand(GO_BINARY, invocationArgs(database)), {
       cwd: join(ctx.repoRoot, dirname(goMod)),
       timeoutMs: ctx.timeoutMs,
-      env: goEnv(),
+      env: goExecEnv(),
     })
     // A cold module cache narrates its downloads on stderr and a warm one says
     // nothing, so the narration goes before anything reads or stages the stream
-    // — see {@link FETCH_NARRATION}.
+    // — see {@link withoutFetchNarration}.
     const stderr = withoutFetchNarration(execution.stderr)
     // eslint-disable-next-line no-await-in-loop
     rawFiles.push(...(await stage(ctx.scratch, goMod, execution.stdout, stderr)))
@@ -651,43 +654,6 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
  * it never wrote, on exactly the runs that produced nothing.
  */
 const OUR_CONFIG = { configOwned: false } as const
-
-/**
- * `go`'s narration of the fetch it does on a cold module cache, which is not
- * evidence about the repo and must not reach the report.
- *
- * `go` is this runner's *fetcher* — `go run <path>@<version>` resolves and
- * builds the analyzer — and every fetcher in this codebase narrates its first
- * install and then goes quiet. Commit 7251444 ("A cold tool cache must not
- * change the report") fixed exactly this for `uvx` and `dnx`, and it fixed it
- * with each fetcher's own switch rather than by filtering, on the grounds that
- * a pattern which has to keep matching a tool's wording can go quietly dead.
- * `go` has no such switch — `-x`/`-v` add output, nothing removes it — so
- * filtering is the only remedy available, and the trade-off is taken knowingly:
- * if `go` ever rewords these lines the pattern stops matching and a cold run
- * stages a file a warm one does not, which is a determinism wobble rather than
- * a wrong grade or a leaked path.
- *
- * Measured on go 1.26.6 with a fresh `GOMODCACHE`, same command shape: the cold
- * run's stderr opens with five `go: downloading …` lines that the warm run's
- * does not have, and is otherwise byte-identical (stdout is identical too,
- * which is why this only became a problem once stderr was staged). `extracting`
- * and `finding` are the same narration from older toolchains.
- *
- * Silence, not blindness: a *failed* fetch is `go: <module>@<version>: Get "…":
- * dial tcp: … no such host`, which this does not match — verified against the
- * real binary with `GOPROXY` pointed at a dead host, where the filter removes
- * nothing at all and the error still explains the run.
- */
-const FETCH_NARRATION = /^go: (?:downloading|extracting|finding) \S/
-
-/** `stderr` with {@link FETCH_NARRATION} removed; everything else untouched. */
-function withoutFetchNarration(stderr: string): string {
-  return stderr
-    .split('\n')
-    .filter((line) => !FETCH_NARRATION.test(line))
-    .join('\n')
-}
 
 /**
  * One module's evidence, staged: the stream it produced and anything it said on
@@ -748,7 +714,7 @@ function collapsedRun(
       // Stripped of fetch narration first: on a cold cache the literal first
       // line is `go: downloading …`, which would explain a compile error with
       // whatever `go` happened to be downloading at the time — the `firstLine`
-      // hazard `core/exec.ts` documents for dnx. See {@link FETCH_NARRATION}.
+      // hazard `core/exec.ts` documents for dnx. See {@link withoutFetchNarration}.
       `(exit ${execution.exitCode ?? 'on a signal'}): ${firstLine(stderr)}`,
   }
 }

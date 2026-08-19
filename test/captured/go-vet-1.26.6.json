@@ -1,0 +1,35 @@
+{}
+{
+	"example.com/vetprobe": {
+		"printf": [
+			{
+				"posn": "/repo/main.go:6:14",
+				"end": "/repo/main.go:6:16",
+				"message": "fmt.Printf format %d has arg \"not-an-int\" of wrong type string"
+			}
+		]
+	}
+}
+{
+	"example.com/vetprobe/dirty": {
+		"copylocks": [
+			{
+				"posn": "/repo/dirty/dirty.go:14:14",
+				"end": "/repo/dirty/dirty.go:14:24",
+				"message": "Lock passes lock by value: sync.Mutex"
+			},
+			{
+				"posn": "/repo/dirty/dirty.go:15:9",
+				"end": "/repo/dirty/dirty.go:15:11",
+				"message": "return copies lock value: sync.Mutex"
+			}
+		],
+		"printf": [
+			{
+				"posn": "/repo/dirty/dirty.go:10:22",
+				"end": "/repo/dirty/dirty.go:10:24",
+				"message": "fmt.Sprintf format %s has arg n of wrong type int"
+			}
+		]
+	}
+}

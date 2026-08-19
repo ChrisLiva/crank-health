@@ -1,6 +1,6 @@
 # crank-health
 
-Deterministic codebase health grades for JS/TS, Python and C# repos.
+Deterministic codebase health grades for JS/TS, Python, C# and Go repos.
 
 `crank-health` runs a fixed set of best-in-class analyzers against a repo — whole-repo or
 PR-vs-base — and reports one A–F grade per category, per project in a monorepo plus a whole-repo
@@ -39,7 +39,10 @@ Requires Node ≥ 20 and `git`. Python analysis additionally requires [`uv`](htt
 on `PATH`; without it the Python categories degrade with an install hint and the rest of the scan
 is unaffected. C# analysis additionally requires a
 [.NET SDK](https://dotnet.microsoft.com/download) ≥ 10 on `PATH`; without it the C# categories
-degrade with an install hint and the rest of the scan is unaffected.
+degrade with an install hint and the rest of the scan is unaffected. Go analysis additionally
+requires a [Go toolchain](https://go.dev/dl) at Go ≥ 1.25 on `PATH` — it is the fetcher every pinned
+Go analyzer runs through — and without it (or with an older one) the Go categories degrade with an
+install hint and the rest of the scan is unaffected.
 
 ### Options
 
@@ -88,22 +91,27 @@ does: that category was answered for the repo, and the repo's answer is gated in
 
 ## Categories and tools
 
-Eight categories. 26 analyzers run in the quick profile, 6 more in `--deep`.
+Eight categories. 32 analyzers run in the quick profile, 8 more in `--deep`.
 
-| Category                | JS/TS                                            | Python                                                    | C#                                       | Both                                                          |
-| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
-| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) |                                                               |
-| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     | `dotnet format whitespace`               |                                                               |
-| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) | `dotnet build` (CS diagnostics)          |                                                               |
-| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            | `roslynator find-symbol --unused`        |                                                               |
-| Complexity              | fallow health · fta                              | complexipy                                                | `dotnet build` + NetAnalyzers (CA1502)   |                                                               |
-| Duplication             |                                                  |                                                           |                                          | jscpd                                                         |
-| Security                |                                                  | bandit · ruff `S` rules                                   |                                          | gitleaks · opengrep · zizmor · osv-scanner · govulncheck (Go) |
-| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   | Stryker.NET (repo-owned)                 |                                                               |
+| Category                | JS/TS                                            | Python                                                    | C#                                       | Go                                                         | Both                                                          |
+| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
+| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) | staticcheck (S/SA) · `go vet` · golangci-lint (repo-owned) |                                                               |
+| Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     | `dotnet format whitespace`               | gofmt                                                      |                                                               |
+| Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) | `dotnet build` (CS diagnostics)          | staticcheck (compile diagnostics)                          |                                                               |
+| Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            | `roslynator find-symbol --unused`        | staticcheck U1000                                          |                                                               |
+| Complexity              | fallow health · fta                              | complexipy                                                | `dotnet build` + NetAnalyzers (CA1502)   | gocognit                                                   |                                                               |
+| Duplication             |                                                  |                                                           |                                          |                                                            | jscpd                                                         |
+| Security                |                                                  | bandit · ruff `S` rules                                   |                                          | gosec                                                      | gitleaks · opengrep · zizmor · osv-scanner · govulncheck (Go) |
+| Test quality (`--deep`) | StrykerJS                                        | cosmic-ray · coverage.py (context only)                   | Stryker.NET (repo-owned)                 | gremlins (repo-owned) · `go test` coverage (context only)  |                                                               |
 
 The build-backed C# categories — lint, types, complexity, dead code — need MSBuild, which executes a
 project's own build logic, so they run only under `--deep`; the quick profile grades C# format and
 duplication and defers the rest honestly.
+
+Go is the other way round: every quick-profile Go analyzer reads the code without running it, so a
+Go repo gets seven graded categories from the quick profile, and only `go test` (coverage as
+context) and gremlins — mutation testing, run only where the repo already owns a gremlins config —
+wait for `--deep`.
 
 When several tools cover one category they all run and their findings merge; the tool is part of
 each finding's identity, so two tools flagging the same line are two findings.
@@ -291,6 +299,15 @@ without `go` gives no verdicts, so every Go advisory grades exactly as it would 
 are recorded verbatim; govulncheck over-claims when a database record carries no symbol information,
 and second-guessing it locally would replace a checkable answer with an unfalsifiable one.
 
+**`CRANK_GOVULNCHECK_DB` points govulncheck at another vulnerability database.** Unset — the normal
+case — it reads the public Go vulnerability database, which is what someone scanning their own repo
+wants. It exists for two audiences: this repo's own golden capture, which pins a checked-in snapshot
+(`test/support/vulndb`) so an advisory published overnight cannot move a golden, and air-gapped
+mirrors, where the value is whatever URL the mirror serves. It is passed straight through to
+govulncheck's `-db`, so anything that tool accepts (an `https://` or a `file://` URL) works. Note
+that the coverage number Go's deep tier reports is **statement coverage** — `go test -cover`'s own
+measure — not the branch or line coverage the other languages' tools report.
+
 **npm advisories say which half of `package.json` ships them.** A vulnerability in a build tool that
 never leaves the repo is not the same exposure as one in the code a user runs, so crank-health reads
 the repo's own lockfile and records `packageAdvisories[].scope`. `pnpm-lock.yaml` records scope only
@@ -375,9 +392,13 @@ brew install opengrep       # SAST
 brew install osv-scanner    # dependency vulnerabilities
 ```
 
-The Go toolchain is the same kind of prerequisite: govulncheck is pinned and fetched by `go run`
-itself, so a machine with no `go` reports `Go toolchain absent — Go advisories graded conservatively
-(reachability unknown)` and every Go advisory keeps counting toward the grade.
+The Go toolchain is a prerequisite of a different kind: it is not a tool crank-health reports under
+its own name, it is the fetcher and the compiler every pinned Go analyzer runs through (`go run
+<path>@<version>`). A machine with no `go`, or one below the 1.25 floor the pinned analyzers need,
+degrades every Go tool with one sentence naming <https://go.dev/dl> — Go's categories go
+`not-assessed`, nothing else in the scan changes. On the advisory side the degradation is quieter
+still: govulncheck reports `Go toolchain absent — Go advisories graded conservatively (reachability
+unknown)` and every Go advisory keeps counting toward the grade, exactly as it would have.
 
 An owner crank-health declines to impose is the other way a tool goes missing. ESLint and Biome are
 never imposed on a repo that did not choose them, and an owner declared without an install may never

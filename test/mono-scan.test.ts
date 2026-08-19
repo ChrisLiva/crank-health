@@ -606,12 +606,37 @@ describe('quick scan of the mono-mixed fixture', () => {
    * With no `go` on `PATH` — the golden toolchain — that row is the
    * deterministic `not-available` spec §8 requires, and it is exactly why `go`
    * now gates the goldens: a machine that has it runs govulncheck instead.
+   *
+   * On a machine that *has* `go` the run is real, and it is still deterministic
+   * for a reason that belongs to the database rather than to the day: the suite
+   * points govulncheck at the checked-in `test/support/vulndb`, whose index is
+   * empty by construction, so no advisory the public database learns tomorrow
+   * can reach this report. That is what lets the live branch assert the
+   * findings and not merely the row.
+   *
+   * The live state is `error`, and deliberately asserted as such: this module
+   * is a `go.mod` with no Go source, so `./...` matches no package and
+   * govulncheck exits non-zero having analyzed nothing. That is the honest
+   * answer spec §8 asks for — a scan that measured nothing must not read as a
+   * clean one — and it is a fact about the fixture, fixed for as long as the
+   * module has no source. Either way the count of govulncheck findings is zero,
+   * which is the half that the frozen database is answering for.
    */
   it('reports a govulncheck run over the fixture’s Go module', async () => {
     const row = scan.report.tools.find((tool) => tool.tool === 'govulncheck')
     expect(row).toMatchObject({ category: 'security', repoWide: true })
     expect(row?.detection?.ownedVia).toBe('services/go-api/go.mod')
-    if (!(await onPath('go'))) {
+    expect(reportFindings(scan.report).filter((finding) => finding.tool === 'govulncheck')).toEqual(
+      [],
+    )
+    if (await onPath('go')) {
+      expect(row).toMatchObject({
+        state: 'error',
+        reason:
+          'govulncheck analyzed nothing in services/go-api (exit 1): ' +
+          'govulncheck: no packages matched the provided patterns',
+      })
+    } else {
       expect(row).toMatchObject({ state: 'not-available', reason: GO_ABSENT_REASON })
     }
   })

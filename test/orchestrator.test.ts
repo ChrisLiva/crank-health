@@ -36,7 +36,7 @@ async function isDirectory(path: string): Promise<boolean> {
 
 const FILES: FileInventory = {
   all: ['src/a.ts', 'src/b.py', 'README.md'],
-  byLanguage: { 'js-ts': ['src/a.ts'], python: ['src/b.py'], csharp: [] },
+  byLanguage: { 'js-ts': ['src/a.ts'], python: ['src/b.py'], csharp: [], go: [] },
 }
 
 /** Real, because the orchestrator stages each project's scratch dir on disk. */

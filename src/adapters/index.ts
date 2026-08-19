@@ -1,6 +1,7 @@
 import type { LanguageAdapter } from '../core/types.ts'
 import { commonAdapter } from './common/index.ts'
 import { csharpAdapter } from './csharp/index.ts'
+import { goAdapter } from './go/index.ts'
 import { jsTsAdapter } from './jsts/index.ts'
 import { pythonAdapter } from './python/index.ts'
 
@@ -15,5 +16,6 @@ export const ADAPTERS: readonly LanguageAdapter[] = [
   jsTsAdapter,
   pythonAdapter,
   csharpAdapter,
+  goAdapter,
   commonAdapter,
 ]

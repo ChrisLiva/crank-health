@@ -20,6 +20,7 @@ import {
   firstLine,
   identify,
   repoRelative,
+  scanMemo,
 } from '../support.ts'
 import { DOTNET, dotnetExecOptions, sdkGate } from './dotnet-project.ts'
 
@@ -420,10 +421,7 @@ export const CA1502_SUPPRESSED_REASON = 'CA1502 suppressed by the repo’s analy
  * every job shares — plus the project path; the per-job `ctx.scratch` would
  * never collide across the trio of one project and would never share.
  */
-const builds = new Map<string, Promise<CsBuild>>()
-
-/** Between the key's two halves; can never appear in a path. */
-const KEY_SEPARATOR = '\u0000'
+const builds = scanMemo<CsBuild>()
 
 /** The per-TFM logs one build writes (see {@link INJECTED_TARGETS}). */
 const PER_TFM_SARIF = /^build\..+\.sarif$/
@@ -435,12 +433,7 @@ const PER_TFM_SARIF = /^build\..+\.sarif$/
  * from all three" hold by construction when the build is unavailable.
  */
 export function buildFor(ctx: RunContext): Promise<CsBuild> {
-  const key = `${ctx.runScratch}${KEY_SEPARATOR}${ctx.project.path}`
-  const cached = builds.get(key)
-  if (cached !== undefined) return cached
-  const build = runBuild(ctx)
-  builds.set(key, build)
-  return build
+  return builds.for(ctx, runBuild)
 }
 
 /**
@@ -451,11 +444,7 @@ export function buildFor(ctx: RunContext): Promise<CsBuild> {
  * `<scratch>/head-scratch`) under the one dir its finally holds.
  */
 export function forgetBuilds(runScratch: string): void {
-  const prefix = `${runScratch}/`
-  for (const key of builds.keys()) {
-    const root = key.slice(0, key.indexOf(KEY_SEPARATOR))
-    if (root === runScratch || root.startsWith(prefix)) builds.delete(key)
-  }
+  builds.forget(runScratch)
 }
 
 /**
