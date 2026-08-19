@@ -164,10 +164,35 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
    */
   it('measures nothing under vendor/', () => {
     expect(findings.every((finding) => !finding.file.startsWith('vendor/'))).toBe(true)
-    // The `format` denominator is the five root `.go` files plus `brokenpkg`'s
-    // one; the vendored file would have made it seven and turned 1-of-6 into
-    // 1-of-7.
-    expect(report.metrics['format']).toEqual({ formattableFiles: 6 })
+    // The `format` denominator is the six root `.go` files plus `brokenpkg`'s
+    // one; the vendored file would have made it eight and turned 1-of-7 into
+    // 1-of-8.
+    expect(report.metrics['format']).toEqual({ formattableFiles: 7 })
+    // The census denominator, likewise: the vendored file carries two functions
+    // of its own, and gocognit — handed a directory — walked straight into them.
+    expect(report.metrics['complexity']).toEqual({ functionsTotal: 8, functionsOverCeiling: 1 })
+  })
+
+  /**
+   * The complexity census is metrics and no findings: the grade is a share of
+   * every function measured, so the denominator is the whole answer.
+   *
+   * `brokenpkg` gets its own completed census beside the root's, which is the
+   * point of a pure-AST tool: the module whose packages do not type-check — the
+   * one whose `go vet` errored and whose staticcheck minted a compile record —
+   * still has countable functions.
+   */
+  it('censuses both modules’ functions, including the one that does not compile', () => {
+    expect(
+      report.tools
+        .filter((tool) => tool.tool === 'gocognit')
+        .map((tool) => [tool.project, tool.state, tool.version]),
+    ).toEqual([
+      ['.', 'ok', 'v1.2.1'],
+      ['brokenpkg', 'ok', 'v1.2.1'],
+    ])
+    expect(findings.every((finding) => finding.tool !== 'gocognit')).toBe(true)
+    expect(report.categories['complexity']).toMatchObject({ status: 'graded' })
   })
 
   /** The planted pair is duplication the repo-wide jscpd pass has to see. */

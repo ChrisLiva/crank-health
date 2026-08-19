@@ -9,4 +9,5 @@ func main() {
 	fmt.Println(Widen(7))
 	fmt.Println(Describe(true))
 	fmt.Printf("%d", "not-an-int")
+	fmt.Println(Classify(values, "loose", false))
 }

@@ -1,4 +1,5 @@
 import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
+import { gocognitRunner } from './gocognit.ts'
 import { gofmtRunner } from './gofmt.ts'
 import { golangciLintRunner } from './golangci-lint.ts'
 import { goVetRunner } from './go-vet.ts'
@@ -28,6 +29,7 @@ export const goAdapter: LanguageAdapter = {
   runners: [
     staticcheckTypesRunner,
     staticcheckDeadCodeRunner,
+    gocognitRunner,
     staticcheckLintRunner,
     goVetRunner,
     golangciLintRunner,

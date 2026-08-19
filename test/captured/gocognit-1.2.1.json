@@ -1,0 +1,101 @@
+[
+    {
+        "PkgName": "main",
+        "FuncName": "Classify",
+        "Complexity": 25,
+        "Pos": {
+            "Filename": "complex.go",
+            "Offset": 147,
+            "Line": 5,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "main",
+        "FuncName": "AccumulateSecond",
+        "Complexity": 6,
+        "Pos": {
+            "Filename": "dupe_b.go",
+            "Offset": 79,
+            "Line": 4,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "main",
+        "FuncName": "AccumulateFirst",
+        "Complexity": 6,
+        "Pos": {
+            "Filename": "dupe_a.go",
+            "Offset": 78,
+            "Line": 4,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "main",
+        "FuncName": "Widen",
+        "Complexity": 1,
+        "Pos": {
+            "Filename": "unformatted.go",
+            "Offset": 14,
+            "Line": 3,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "main",
+        "FuncName": "Describe",
+        "Complexity": 1,
+        "Pos": {
+            "Filename": "checks.go",
+            "Offset": 72,
+            "Line": 4,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "dep",
+        "FuncName": "Name",
+        "Complexity": 0,
+        "Pos": {
+            "Filename": "vendor/example.com/dep/dep.go",
+            "Offset": 13,
+            "Line": 3,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "main",
+        "FuncName": "main",
+        "Complexity": 0,
+        "Pos": {
+            "Filename": "main.go",
+            "Offset": 28,
+            "Line": 5,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "main",
+        "FuncName": "unusedHelper",
+        "Complexity": 0,
+        "Pos": {
+            "Filename": "checks.go",
+            "Offset": 233,
+            "Line": 12,
+            "Column": 1
+        }
+    },
+    {
+        "PkgName": "brokenpkg",
+        "FuncName": "Answer",
+        "Complexity": 0,
+        "Pos": {
+            "Filename": "brokenpkg/broken.go",
+            "Offset": 100,
+            "Line": 4,
+            "Column": 1
+        }
+    }
+]

@@ -17,6 +17,14 @@ Planted, one per category the Go adapter reaches:
 | lint        | `main.go`                 | `fmt.Printf("%d", "not-an-int")` → one `go vet` `printf` *and* one staticcheck `SA5009`, on the same line: the two lint tools overlap and neither stands the other down |
 | dead-code   | `checks.go`               | `unusedHelper`, called from nowhere → one staticcheck `U1000` |
 | types       | `brokenpkg/broken.go`     | a `string` returned where the signature promises `int` → one staticcheck `compile` |
+| complexity  | `complex.go`              | `Classify`, nested loops and conditions → cognitive 25, the one function over the ceiling |
+
+Complexity is graded as a share of every function measured rather than as
+findings, so the census has a denominator to pin: gocognit counts **8**
+functions — `main`, `Describe`, `unusedHelper`, `AccumulateFirst`,
+`AccumulateSecond`, `Widen`, `Classify` in the root module and `Answer` in
+`brokenpkg` — of which **1** is over cognitive 15. Add a function to this
+fixture and that number moves.
 
 ## The `brokenpkg/` module
 
@@ -29,7 +37,8 @@ and here that project is `brokenpkg` alone.
 ## The `vendor/` tree
 
 `vendor/example.com/dep/` holds a copied dependency: `dep.go` is unformatted
-*and* carries a third copy of the accumulator body, and `vendor/modules.txt`
+*and* carries a third copy of the accumulator body — and two functions gocognit
+walks straight into, because it is handed a directory — and `vendor/modules.txt`
 and the vendored `go.mod` are the bookkeeping `go mod vendor` writes. None of
 it is the repo's own source, so it must produce no finding, add no KLOC and
 make no project of its own — while `vendor/modules.txt` (not Go source) stays
