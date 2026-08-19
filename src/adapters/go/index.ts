@@ -1,5 +1,10 @@
 import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
 import { gofmtRunner } from './gofmt.ts'
+import {
+  staticcheckDeadCodeRunner,
+  staticcheckLintRunner,
+  staticcheckTypesRunner,
+} from './staticcheck.ts'
 
 /**
  * The Go language adapter. It answers one question — does this project contain
@@ -18,5 +23,5 @@ import { gofmtRunner } from './gofmt.ts'
 export const goAdapter: LanguageAdapter = {
   language: 'go',
   detect: (ctx: DetectContext) => Promise.resolve(ctx.project.files.byLanguage.go.length > 0),
-  runners: [gofmtRunner],
+  runners: [staticcheckTypesRunner, staticcheckDeadCodeRunner, staticcheckLintRunner, gofmtRunner],
 }

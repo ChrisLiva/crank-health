@@ -54,8 +54,13 @@ describe('meetsGoFloor', () => {
  * unreadable" whether or not it has a toolchain of its own.
  */
 
-/** Every Go-adapter tool the gate must degrade. Each later task extends it. */
-const GO_TOOLS: readonly string[] = ['gofmt']
+/**
+ * Every Go-adapter tool *record* the gate must degrade — one per (tool ×
+ * category), so staticcheck appears three times: it grades `types`, `dead-code`
+ * and `lint` from one run, and a gate failure has to take all three down. Each
+ * later task extends the list.
+ */
+const GO_TOOLS: readonly string[] = ['staticcheck', 'staticcheck', 'staticcheck', 'gofmt']
 
 /** The gate's install hint, verbatim: user copy, so drift has to fail a test. */
 const INSTALL_HINT =
@@ -88,8 +93,16 @@ describe('a Go repo scanned on a machine whose toolchain cannot grade it', () =>
    * Python rows are legitimately not-available for their own reasons.
    */
   it('degrades every Go tool with the install hint when there is no go on PATH', async () => {
-    const tools = await toolsUnder(fixture, { gofmt: SILENT_GOFMT })
+    const records = await recordsUnder(fixture, { gofmt: SILENT_GOFMT })
+    const tools = byTool(records)
 
+    // Every record, not every name: three of them are staticcheck's.
+    expect(
+      records
+        .filter((record) => GO_TOOLS.includes(record.tool))
+        .map((record) => record.tool)
+        .toSorted(),
+    ).toEqual([...GO_TOOLS].toSorted())
     for (const tool of GO_TOOLS) {
       expect(tools.get(tool)).toEqual({ state: 'not-available', reason: INSTALL_HINT })
     }
@@ -140,22 +153,40 @@ describe('a Go repo scanned on a machine whose toolchain cannot grade it', () =>
   })
 })
 
-/** Every tool record's state and reason, from a scan run under a farmed `PATH`. */
+/** Every tool record's state and reason, keyed by tool name. */
 async function toolsUnder(
   fixture: FixtureRepo,
   extras: Readonly<Record<string, string>>,
-): Promise<Map<string, { state: string; reason: string | null }>> {
+): Promise<Map<string, ToolRow>> {
+  return byTool(await recordsUnder(fixture, extras))
+}
+
+function byTool(records: readonly (ToolRow & { tool: string })[]): Map<string, ToolRow> {
+  return new Map(
+    records.map((record) => [record.tool, { state: record.state, reason: record.reason }]),
+  )
+}
+
+interface ToolRow {
+  readonly state: string
+  readonly reason: string | null
+}
+
+/** Every tool record, in report order, from a scan run under a farmed `PATH`. */
+async function recordsUnder(
+  fixture: FixtureRepo,
+  extras: Readonly<Record<string, string>>,
+): Promise<readonly (ToolRow & { tool: string })[]> {
   const farm = await pathFarm(extras)
   const original = process.env['PATH']
   process.env['PATH'] = farm.path
   try {
     const result = await runHealthScan({ path: fixture.root })
-    return new Map(
-      result.report.tools.map((tool) => [
-        tool.tool,
-        { state: tool.state, reason: tool.reason ?? null },
-      ]),
-    )
+    return result.report.tools.map((tool) => ({
+      tool: tool.tool,
+      state: tool.state,
+      reason: tool.reason ?? null,
+    }))
   } finally {
     process.env['PATH'] = original
     await farm.remove()

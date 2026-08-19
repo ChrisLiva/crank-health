@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { mergeReachability } from './adapters/common/govulncheck.ts'
 import { forgetBuilds } from './adapters/csharp/build.ts'
+import { forgetStaticcheck } from './adapters/go/staticcheck.ts'
 import { ADAPTERS } from './adapters/index.ts'
 import { readRepoExcludes } from './adapters/jsts/repo-excludes.ts'
 import { CliUsageError } from './args.ts'
@@ -153,9 +154,11 @@ export async function runHealthScan(options: HealthScanOptions): Promise<HealthS
       }),
     )
   } finally {
-    // The C# build memo keys on this scratch path; forgetting it here means a
-    // long-lived process (the test suite) never retains a parsed SARIF per scan.
+    // The C# build and staticcheck memos key on this scratch path; forgetting
+    // them here means a long-lived process (the test suite) never retains a
+    // parsed SARIF or finding set per scan.
     forgetBuilds(scratch)
+    forgetStaticcheck(scratch)
     await rm(scratch, { recursive: true, force: true })
   }
 }

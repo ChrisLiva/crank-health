@@ -7,4 +7,5 @@ func main() {
 	fmt.Println(AccumulateFirst(values))
 	fmt.Println(AccumulateSecond(values))
 	fmt.Println(Widen(7))
+	fmt.Println(Describe(true))
 }

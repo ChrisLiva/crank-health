@@ -2,7 +2,7 @@ import { access, readFile } from 'node:fs/promises'
 import { isAbsolute, relative } from 'node:path'
 import { readSources } from '../core/discover.ts'
 import { computeAnchors } from '../core/fingerprint.ts'
-import type { Finding, PendingFinding } from '../core/types.ts'
+import type { Finding, PendingFinding, RunContext } from '../core/types.ts'
 
 /**
  * The parts every tool wrapper repeats, in one place: reading JSON off disk
@@ -36,6 +36,62 @@ export function batchFiles(files: readonly string[], budget = MAX_ARGS_BYTES): s
   }
   if (current.length > 0) batches.push(current)
   return batches
+}
+
+/**
+ * Between a memo key's two halves; can never appear in a path — which a space
+ * can, and a project directory holding one would otherwise share a key with its
+ * sibling.
+ */
+const KEY_SEPARATOR = '\u0000'
+
+/**
+ * One scan's per-project work, memoized: the trio of runners that share a
+ * single expensive invocation (`dotnet build`, `staticcheck ./...`) call
+ * {@link ScanMemo.for} and every one of them awaits the same promise.
+ *
+ * The **promise** is cached, not the result, so runners the orchestrator's pool
+ * started concurrently share one invocation instead of racing several — and
+ * every one of them reads the same resolved value, which is what makes "the
+ * identical reason from all three" hold by construction when the work failed.
+ */
+export interface ScanMemo<T> {
+  /** This scan × project's work, started at most once. */
+  for(ctx: RunContext, make: (ctx: RunContext) => Promise<T>): Promise<T>
+  /** Releases everything memoized under a scan's scratch dir; see below. */
+  forget(runScratch: string): void
+}
+
+/**
+ * A fresh memo, keyed on {@link RunContext.runScratch} — the scan-root scratch
+ * every job shares — plus the project path. The per-job `ctx.scratch` would
+ * never collide across one project's trio and would therefore never share.
+ *
+ * {@link ScanMemo.forget} is called from the scan teardowns beside the `rm` of
+ * that dir, so a long-lived process (the test suite) does not retain a scan's
+ * parsed output for ever. It matches by path prefix because PR mode nests its
+ * two sides (`<scratch>/base-scratch`, `<scratch>/head-scratch`) under the one
+ * dir its `finally` holds: forgetting that dir must release both.
+ */
+export function scanMemo<T>(): ScanMemo<T> {
+  const entries = new Map<string, Promise<T>>()
+  return {
+    for(ctx: RunContext, make: (ctx: RunContext) => Promise<T>): Promise<T> {
+      const key = `${ctx.runScratch}${KEY_SEPARATOR}${ctx.project.path}`
+      const cached = entries.get(key)
+      if (cached !== undefined) return cached
+      const started = make(ctx)
+      entries.set(key, started)
+      return started
+    },
+    forget(runScratch: string): void {
+      const prefix = `${runScratch}/`
+      for (const key of entries.keys()) {
+        const root = key.slice(0, key.indexOf(KEY_SEPARATOR))
+        if (root === runScratch || root.startsWith(prefix)) entries.delete(key)
+      }
+    },
+  }
 }
 
 /**

@@ -1,4 +1,5 @@
 import { readdir } from 'node:fs/promises'
+import { sep } from 'node:path'
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
 import { gofmtArgs, parseListed, toPendingFindings } from '../src/adapters/go/gofmt.ts'
 import { reportFindings } from '../src/render/json.ts'
@@ -28,6 +29,24 @@ const HAVE_GO = await onPath('go')
 /** Every finding planted in `test/fixtures/go-basic` — see that fixture's README. */
 const PLANTED = [
   {
+    category: 'types',
+    tool: 'staticcheck',
+    rule: 'compile',
+    file: 'brokenpkg/broken.go',
+    startLine: 5,
+    severity: 'error',
+    gradeScope: true,
+  },
+  {
+    category: 'dead-code',
+    tool: 'staticcheck',
+    rule: 'U1000',
+    file: 'checks.go',
+    startLine: 12,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
     category: 'duplication',
     tool: 'jscpd',
     rule: 'jscpd/duplicate-block',
@@ -37,6 +56,15 @@ const PLANTED = [
     // Duplication is graded as a percentage of tokens, so the clone rows are
     // evidence rather than counted findings.
     gradeScope: false,
+  },
+  {
+    category: 'lint',
+    tool: 'staticcheck',
+    rule: 'S1002',
+    file: 'checks.go',
+    startLine: 5,
+    severity: 'warning',
+    gradeScope: true,
   },
   {
     category: 'format',
@@ -54,10 +82,12 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
   let json: string
   let findings: readonly Finding[]
   let report: ReportShape
+  let outputDir: string
 
   beforeAll(async () => {
     fixture = await createFixtureRepo('go-basic')
     const result = await runHealthScan({ path: fixture.root })
+    outputDir = result.outputDir
     json = result.json
     findings = reportFindings(result.report)
     report = JSON.parse(json) as ReportShape
@@ -71,10 +101,15 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
     expect(findings.map(shape)).toEqual(PLANTED.map((planted) => ({ ...planted })))
   })
 
-  /** One module, one project — and the vendored `go.mod` is not a second one. */
-  it('discovers exactly the root module as a Go project', () => {
+  /**
+   * Two modules, two projects — and the vendored `go.mod` is not a third one.
+   * `brokenpkg` carries its own `go.mod`, which is what keeps its compile error
+   * out of the root module's analysis and gives it its own denominators.
+   */
+  it('discovers each module as a Go project, and the vendored one as none', () => {
     expect(report.projects.map((project) => [project.path, project.languages])).toEqual([
       ['.', ['go']],
+      ['brokenpkg', ['go']],
     ])
   })
 
@@ -93,9 +128,10 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
    */
   it('measures nothing under vendor/', () => {
     expect(findings.every((finding) => !finding.file.startsWith('vendor/'))).toBe(true)
-    // The `format` denominator is the four root `.go` files; the vendored one
-    // would have made it five and turned 1-of-4 into 1-of-5.
-    expect(report.metrics['format']).toEqual({ formattableFiles: 4 })
+    // The `format` denominator is the five root `.go` files plus `brokenpkg`'s
+    // one; the vendored file would have made it seven and turned 1-of-6 into
+    // 1-of-7.
+    expect(report.metrics['format']).toEqual({ formattableFiles: 6 })
   })
 
   /** The planted pair is duplication the repo-wide jscpd pass has to see. */
@@ -119,6 +155,34 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
     for (const state of Object.values(report.categories)) {
       expect(state.status === 'graded' ? state.grade : state.reason).toBeDefined()
     }
+  })
+
+  /**
+   * One `staticcheck` process per project, three tool records reading it: the
+   * evidence is staged once and all three records cite that one file, which is
+   * what a reader checks "these three grades came from one analysis" against.
+   */
+  it('runs staticcheck once per project and has all three records cite it', async () => {
+    const staged = (await readdir(outputDir, { recursive: true }))
+      .map((file) => file.split(sep).join('/'))
+      .filter((file) => file.endsWith('staticcheck.jsonl'))
+
+    expect(staged.toSorted()).toEqual([
+      'raw/brokenpkg/staticcheck.jsonl',
+      'raw/root/staticcheck.jsonl',
+    ])
+    expect(
+      report.tools
+        .filter((tool) => tool.tool === 'staticcheck')
+        .map((tool) => [tool.project, tool.category, tool.raw]),
+    ).toEqual([
+      ['.', 'types', ['raw/root/staticcheck.jsonl']],
+      ['brokenpkg', 'types', ['raw/brokenpkg/staticcheck.jsonl']],
+      ['.', 'dead-code', ['raw/root/staticcheck.jsonl']],
+      ['brokenpkg', 'dead-code', ['raw/brokenpkg/staticcheck.jsonl']],
+      ['.', 'lint', ['raw/root/staticcheck.jsonl']],
+      ['brokenpkg', 'lint', ['raw/brokenpkg/staticcheck.jsonl']],
+    ])
   })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
@@ -188,8 +252,11 @@ interface ReportShape {
   readonly projects: { readonly path: string; readonly languages: readonly string[] }[]
   readonly tools: {
     readonly tool: string
+    readonly category: string
+    readonly project: string
     readonly version: string | null
     readonly state: string
     readonly reason: string | null
+    readonly raw: readonly string[]
   }[]
 }

@@ -1,0 +1,5 @@
+{"code":"compile","severity":"error","location":{"file":"","line":0,"column":0},"end":{"file":"","line":0,"column":0},"message":"# example.com/probe/sub\nsub/sub.go:4:9: cannot use \"forty-two\" (untyped string constant) as int value in return statement"}
+{"code":"S1002","severity":"error","location":{"file":"/repo/main.go","line":7,"column":5},"end":{"file":"/repo/main.go","line":7,"column":17},"message":"should omit comparison to bool constant, can be simplified to cond"}
+{"code":"SA1006","severity":"error","location":{"file":"/repo/main.go","line":11,"column":2},"end":{"file":"/repo/main.go","line":11,"column":18},"message":"printf-style function with dynamic format string and no further arguments should use print-style function instead"}
+{"code":"SA4006","severity":"error","location":{"file":"/repo/main.go","line":13,"column":2},"end":{"file":"/repo/main.go","line":13,"column":28},"message":"this value of values is never used"}
+{"code":"U1000","severity":"error","location":{"file":"/repo/main.go","line":21,"column":6},"end":{"file":"","line":0,"column":0},"message":"func unusedHelper is unused"}
