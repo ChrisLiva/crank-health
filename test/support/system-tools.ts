@@ -1,4 +1,5 @@
 import { execa } from 'execa'
+import { meetsGoFloor, parseGoVersion } from '../../src/adapters/go/go-toolchain.ts'
 
 /**
  * The three security tools crank-health can only use when the machine already
@@ -24,20 +25,23 @@ export type SystemToolName = (typeof SYSTEM_TOOLS)[number]
  * Every binary whose presence on `PATH` makes a machine a different toolchain,
  * and therefore decides whether the checked-in goldens apply at all.
  *
- * It is the three above *and Go's*. `go` is not a tool crank-health reports
- * under its own name — it is govulncheck's fetcher and its analyzer both
- * (`go run golang.org/x/vuln/cmd/govulncheck@…`) — so a machine that has it
- * analyzes a repo's Go modules for reachability and a machine that does not
- * degrades to `not-available` (`GO_ABSENT_REASON`). Two different, equally
- * correct reports, exactly like gitleaks: the goldens record the machine with
- * neither. `govulncheck` itself is listed for symmetry — nothing resolves it
- * from `PATH` today, and a machine that has one installed is still the machine
- * a future runner would use it on.
+ * It is the three above, plus `govulncheck` as a standalone binary: nothing
+ * resolves it from `PATH` today — the runner fetches the pinned version with
+ * `go run golang.org/x/vuln/cmd/govulncheck@…` — but an installed one would
+ * flip `detection.installed` and change the reports, so it is listed with the
+ * scanners rather than trusted to stay unused.
+ *
+ * `go` is deliberately *not* here. It is the Go adapter's fetcher and the
+ * toolchain every Go analyzer runs on, so a machine without it grades no Go at
+ * all: the goldens would then record eight `not-available` rows instead of the
+ * Go adapter's work. Go is a *prerequisite* of the golden toolchain, asserted
+ * by {@link GOLDEN_TOOLCHAIN} below, not a contaminant of it.
  *
  * `scripts/capture-goldens.sh` asserts the same list is unresolvable inside the
- * PATH it builds, so the recapture cannot record a toolchain no one else has.
+ * PATH it builds — and symlinks `go`/`gofmt` into it — so the recapture cannot
+ * record a toolchain no one else has.
  */
-export const TOOLCHAIN_BINARIES = [...SYSTEM_TOOLS, 'go', 'govulncheck'] as const
+export const TOOLCHAIN_BINARIES = [...SYSTEM_TOOLS, 'govulncheck'] as const
 
 /** Which of {@link SYSTEM_TOOLS} this machine has on `PATH`. */
 export async function installedSystemTools(): Promise<Set<SystemToolName>> {
@@ -48,12 +52,36 @@ export async function installedSystemTools(): Promise<Set<SystemToolName>> {
 }
 
 /**
- * True when this machine resolves none of {@link TOOLCHAIN_BINARIES} — the
- * toolchain the checked-in goldens were recorded against.
+ * Whether this machine's `go` clears the floor the pinned Go analyzers need.
+ *
+ * The version line is read by the **imported** {@link parseGoVersion} and
+ * {@link meetsGoFloor} — the same pair the Go gate itself uses — because two
+ * copies of the floor rule is how a support file and the runtime gate come to
+ * disagree about what `MINIMUM_GO_MINOR` means.
  */
-export const GOLDEN_TOOLCHAIN = (
-  await Promise.all(TOOLCHAIN_BINARIES.map((binary) => onPath(binary)))
-).every((found) => !found)
+async function goMeetsFloor(): Promise<boolean> {
+  try {
+    const { stdout } = await execa('go', ['version'])
+    const version = parseGoVersion(stdout.split('\n')[0] ?? '')
+    return version !== undefined && meetsGoFloor(version)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * True when this machine resolves none of {@link TOOLCHAIN_BINARIES} **and**
+ * has a Go toolchain at or above the floor — the toolchain the checked-in
+ * goldens were recorded against.
+ *
+ * The conjunction is what makes the goldens honest about Go: a machine without
+ * Go, or with a Go below `MINIMUM_GO_MINOR`, *skips* the golden
+ * assertions rather than comparing a report its toolchain could not produce.
+ */
+export const GOLDEN_TOOLCHAIN =
+  (await Promise.all(TOOLCHAIN_BINARIES.map((binary) => onPath(binary)))).every(
+    (found) => !found,
+  ) && (await goMeetsFloor())
 
 /** Whether `binary` resolves on this machine's `PATH`. */
 export async function onPath(binary: string): Promise<boolean> {

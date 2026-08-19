@@ -28,6 +28,16 @@ const SCAN_TIMEOUT_MS = 180_000
 
 const HAVE_GO = await onPath('go')
 
+/** Every tool a Go project's grade comes from — the ones a usable `go` makes answerable. */
+const GO_TOOLS: ReadonlySet<string> = new Set([
+  'gosec',
+  'staticcheck',
+  'gocognit',
+  'go-vet',
+  'gofmt',
+  'govulncheck',
+])
+
 /** Security tools that are release binaries, so a machine either has one or does not. */
 const SYSTEM_SCANNERS: ReadonlySet<string> = new Set(['gitleaks', 'opengrep', 'osv-scanner'])
 
@@ -348,6 +358,24 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
     },
     SCAN_TIMEOUT_MS,
   )
+
+  /**
+   * The positive guard on the golden toolchain: a capture run whose farm `PATH`
+   * failed to resolve part of the Go toolchain would write a golden full of
+   * `not-available` rows and then compare cleanly against itself forever. The
+   * golden toolchain *has* Go at or above the floor, so every Go-graded tool
+   * this fixture reaches has something to say and `not-available` is the one
+   * state none of their records may carry. (The three release-binary scanners
+   * are `not-available` by construction on that toolchain — that is what makes
+   * it the golden one — so the guard is over the Go tools, not every row.)
+   */
+  it.runIf(GOLDEN_TOOLCHAIN)('leaves no Go tool unavailable under the golden toolchain', () => {
+    expect(
+      report.tools
+        .filter((tool) => GO_TOOLS.has(tool.tool) && tool.state === 'not-available')
+        .map((tool) => [tool.tool, tool.project, tool.reason]),
+    ).toEqual([])
+  })
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
     await expectGolden('go-basic.report.json', normalizeReport(json))

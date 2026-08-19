@@ -3,7 +3,7 @@
   "crankHealth": "0.10.0",
   "repo": {
     "path": "<repo>",
-    "commit": "1e84ef63f0b7067eb8e22569987523f55a14d47c"
+    "commit": "c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -20,7 +20,7 @@
   "categories": {
     "security": {
       "status": "graded",
-      "grade": "A"
+      "grade": "B"
     },
     "types": {
       "status": "graded",
@@ -28,23 +28,23 @@
     },
     "dead-code": {
       "status": "graded",
-      "grade": "A"
+      "grade": "D"
     },
     "complexity": {
       "status": "graded",
-      "grade": "A"
+      "grade": "D"
     },
     "duplication": {
       "status": "graded",
-      "grade": "A"
+      "grade": "D"
     },
     "lint": {
       "status": "graded",
-      "grade": "F"
+      "grade": "D"
     },
     "format": {
       "status": "graded",
-      "grade": "A"
+      "grade": "C"
     },
     "test-quality": {
       "status": "not-assessed",
@@ -53,131 +53,127 @@
   },
   "gradeBasis": {
     "security": {
-      "value": 0,
+      "value": 1,
       "denominator": null,
       "unit": "graded findings"
     },
     "types": {
       "value": 5,
-      "denominator": 0.02,
+      "denominator": 0.129,
       "unit": "weighted findings per KLOC"
     },
     "dead-code": {
-      "value": 0,
-      "denominator": 0.02,
+      "value": 1,
+      "denominator": 0.129,
       "unit": "weighted findings per KLOC"
     },
     "complexity": {
-      "value": 0,
-      "denominator": 3,
+      "value": 1,
+      "denominator": 8,
       "unit": "functions over cognitive complexity 15"
     },
     "duplication": {
-      "value": 0,
+      "value": 19.813519813519815,
       "denominator": null,
       "unit": "% of tokens duplicated"
     },
     "lint": {
-      "value": 10,
-      "denominator": 0.02,
+      "value": 3,
+      "denominator": 0.129,
       "unit": "weighted findings per KLOC"
     },
     "format": {
-      "value": 0,
-      "denominator": 4,
+      "value": 1,
+      "denominator": 7,
       "unit": "files failing the formatter"
     }
   },
   "metrics": {
     "complexity": {
-      "functionsTotal": 3,
-      "functionsOverCeiling": 0
+      "functionsTotal": 8,
+      "functionsOverCeiling": 1
     },
     "duplication": {
-      "duplicationPercent": 0
+      "duplicationPercent": 19.813519813519815
     },
     "format": {
-      "formattableFiles": 4
+      "formattableFiles": 7
     }
   },
   "languages": {
-    "js-ts": {
-      "lint": 1
-    },
-    "python": {
+    "go": {
+      "security": 1,
       "types": 1,
-      "lint": 1
+      "dead-code": 1,
+      "duplication": 1,
+      "lint": 3,
+      "format": 1
     }
   },
   "coverage": {
     "files": {
-      "total": 8,
-      "assessed": 4
+      "total": 12,
+      "assessed": 7
     },
     "lines": {
-      "total": 75,
-      "assessed": 20
+      "total": 206,
+      "assessed": 129
     },
     "unassessed": [
       {
-        "extension": ".json",
-        "files": 1,
-        "lines": 7
-      },
-      {
         "extension": ".md",
         "files": 1,
-        "lines": 40
+        "lines": 63
       },
       {
         "extension": ".mod",
-        "files": 1,
-        "lines": 3
+        "files": 3,
+        "lines": 11
       },
       {
-        "extension": ".toml",
+        "extension": ".txt",
         "files": 1,
-        "lines": 5
+        "lines": 3
       }
     ]
   },
   "projects": [
     {
-      "path": "services/api",
+      "path": ".",
       "manifests": [
-        "services/api/pyproject.toml"
+        "go.mod"
       ],
       "languages": [
-        "python"
+        "go"
       ],
       "categories": {
         "security": {
           "status": "graded",
-          "grade": "A"
+          "grade": "B"
         },
         "types": {
           "status": "graded",
-          "grade": "F"
+          "grade": "A"
         },
         "dead-code": {
           "status": "graded",
-          "grade": "A"
+          "grade": "D"
         },
         "complexity": {
           "status": "graded",
-          "grade": "A"
+          "grade": "D"
         },
         "duplication": {
           "status": "graded",
-          "grade": "A"
+          "grade": "D"
         },
         "lint": {
           "status": "graded",
-          "grade": "F"
+          "grade": "D"
         },
         "format": {
           "status": "graded",
-          "grade": "A"
+          "grade": "C"
         },
         "test-quality": {
           "status": "not-assessed",
@@ -186,34 +182,34 @@
       },
       "metrics": {
         "complexity": {
-          "functionsTotal": 2,
-          "functionsOverCeiling": 0
+          "functionsTotal": 7,
+          "functionsOverCeiling": 1
         },
         "duplication": {
-          "duplicationPercent": 0
+          "duplicationPercent": 19.813519813519815
         },
         "format": {
-          "formattableFiles": 2
+          "formattableFiles": 6
         }
       },
       "toolchain": []
     },
     {
-      "path": "services/web",
+      "path": "brokenpkg",
       "manifests": [
-        "services/web/package.json"
+        "brokenpkg/go.mod"
       ],
       "languages": [
-        "js-ts"
+        "go"
       ],
       "categories": {
         "security": {
           "status": "not-assessed",
-          "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no Python files, so bandit assessed nothing"
+          "reason": "repo-scoped"
         },
         "types": {
-          "status": "not-assessed",
-          "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category"
+          "status": "graded",
+          "grade": "F"
         },
         "dead-code": {
           "status": "graded",
@@ -229,7 +225,7 @@
         },
         "lint": {
           "status": "graded",
-          "grade": "F"
+          "grade": "A"
         },
         "format": {
           "status": "graded",
@@ -249,37 +245,19 @@
           "duplicationPercent": 0
         },
         "format": {
-          "formattableFiles": 2
+          "formattableFiles": 1
         }
       },
       "toolchain": []
     }
   ],
-  "rootShell": {
-    "declaredBy": []
-  },
   "tools": [
     {
       "tool": "bandit",
       "category": "security",
       "scope": "common",
-      "project": "services/api",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "1.9.4",
-      "pinned": "1.9.4",
-      "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": [
-        "raw/services/api/bandit.json"
-      ]
-    },
-    {
-      "tool": "bandit",
-      "category": "security",
-      "scope": "common",
-      "project": "services/web",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
@@ -305,6 +283,38 @@
       "raw": []
     },
     {
+      "tool": "gosec",
+      "category": "security",
+      "scope": "go",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "v2.28.0",
+      "pinned": "v2.28.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/gosec.json"
+      ]
+    },
+    {
+      "tool": "gosec",
+      "category": "security",
+      "scope": "go",
+      "project": "brokenpkg",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "v2.28.0",
+      "detection": null,
+      "state": "error",
+      "reason": "./broken.go:5:9: cannot use \"forty-two\" (untyped string constant) as int value in return statement",
+      "raw": [
+        "raw/brokenpkg/gosec.json"
+      ]
+    },
+    {
       "tool": "govulncheck",
       "category": "security",
       "scope": "common",
@@ -312,48 +322,37 @@
       "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": null,
+      "version": "v1.7.0",
       "pinned": "v1.7.0",
       "detection": {
         "reason": "dependency",
         "configFiles": [],
-        "ownedVia": "services/go-api/go.mod",
+        "ownedVia": "brokenpkg/go.mod",
         "installed": false,
         "version": null
       },
-      "state": "error",
-      "reason": "govulncheck analyzed nothing in services/go-api (exit 1): govulncheck: no packages matched the provided patterns",
+      "state": "ok",
+      "reason": "govulncheck analyzed nothing in brokenpkg (exit 1): govulncheck: loading packages: ",
       "raw": [
-        "raw/repo/govulncheck-services-go-api.json",
-        "raw/repo/govulncheck-services-go-api.stderr.txt"
+        "raw/repo/govulncheck-brokenpkg.json",
+        "raw/repo/govulncheck-brokenpkg.stderr.txt",
+        "raw/repo/govulncheck.json",
+        "raw/repo/govulncheck-vendor-example.com-dep.json"
       ]
     },
     {
       "tool": "opengrep",
       "category": "security",
       "scope": "common",
-      "project": "services/api",
+      "project": "repo",
+      "repoWide": true,
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
       "pinned": "1.26.0",
       "detection": null,
       "state": "not-available",
-      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
-      "raw": []
-    },
-    {
-      "tool": "opengrep",
-      "category": "security",
-      "scope": "common",
-      "project": "services/web",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": null,
-      "pinned": "1.26.0",
-      "detection": null,
-      "state": "not-available",
-      "reason": "opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected",
+      "reason": "no JavaScript, TypeScript or Python files, so opengrep assessed nothing",
       "raw": []
     },
     {
@@ -387,145 +386,131 @@
       "raw": []
     },
     {
-      "tool": "pyright",
+      "tool": "staticcheck",
       "category": "types",
-      "scope": "python",
-      "project": "services/api",
+      "scope": "go",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": null,
-      "pinned": "1.1.411",
+      "version": "v0.7.0",
+      "pinned": "v0.7.0",
       "detection": null,
-      "state": "not-available",
-      "reason": "standing down: this project has no virtualenv, so ty type-checks it",
-      "raw": []
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/staticcheck.jsonl"
+      ]
     },
     {
-      "tool": "tsc",
+      "tool": "staticcheck",
       "category": "types",
-      "scope": "js-ts",
-      "project": "services/web",
+      "scope": "go",
+      "project": "brokenpkg",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": null,
-      "pinned": "7.0.2",
-      "detection": null,
-      "state": "not-available",
-      "reason": "no tsconfig.json and no TypeScript sources — nothing owns the types category",
-      "raw": []
-    },
-    {
-      "tool": "ty",
-      "category": "types",
-      "scope": "python",
-      "project": "services/api",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "0.0.72",
-      "pinned": "0.0.72",
+      "version": "v0.7.0",
+      "pinned": "v0.7.0",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/services/api/ty.gitlab.json"
+        "raw/brokenpkg/staticcheck.jsonl"
       ]
     },
     {
-      "tool": "fallow-dead-code",
+      "tool": "staticcheck",
       "category": "dead-code",
-      "scope": "js-ts",
-      "project": "services/web",
+      "scope": "go",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "3.17.0",
-      "pinned": "3.17.0",
+      "version": "v0.7.0",
+      "pinned": "v0.7.0",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/services/web/fallow-dead-code.json",
-        "raw/services/web/fallow-dead-code.stderr.txt"
+        "raw/root/staticcheck.jsonl"
       ]
     },
     {
-      "tool": "knip",
+      "tool": "staticcheck",
       "category": "dead-code",
-      "scope": "js-ts",
-      "project": "services/web",
+      "scope": "go",
+      "project": "brokenpkg",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": null,
-      "pinned": "6.32.2",
+      "version": "v0.7.0",
+      "pinned": "v0.7.0",
       "detection": null,
-      "state": "error",
-      "reason": "could not parse knip output: Unexpected token 'R', \"\nRun `knip \"... is not valid JSON",
+      "state": "ok",
+      "reason": null,
       "raw": [
-        "raw/services/web/knip.json",
-        "raw/services/web/knip.stderr.txt"
+        "raw/brokenpkg/staticcheck.jsonl"
       ]
     },
     {
-      "tool": "vulture",
-      "category": "dead-code",
-      "scope": "python",
-      "project": "services/api",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "2.16",
-      "pinned": "2.16",
-      "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": []
-    },
-    {
-      "tool": "complexipy",
+      "tool": "gocognit",
       "category": "complexity",
-      "scope": "python",
-      "project": "services/api",
+      "scope": "go",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "7.0.1",
-      "pinned": "7.0.1",
+      "version": "v1.2.1",
+      "pinned": "v1.2.1",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/services/api/complexipy.json",
-        "raw/services/api/complexipy.sarif.json"
+        "raw/root/gocognit.json"
       ]
     },
     {
-      "tool": "fallow-health",
+      "tool": "gocognit",
       "category": "complexity",
-      "scope": "js-ts",
-      "project": "services/web",
+      "scope": "go",
+      "project": "brokenpkg",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "3.17.0",
-      "pinned": "3.17.0",
+      "version": "v1.2.1",
+      "pinned": "v1.2.1",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/services/web/fallow-health.json",
-        "raw/services/web/fallow-health.stderr.txt"
+        "raw/brokenpkg/gocognit.json"
       ]
     },
     {
-      "tool": "fta",
-      "category": "complexity",
-      "scope": "js-ts",
-      "project": "services/web",
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "3.0.1",
-      "pinned": "3.0.1",
+      "version": "5.0.15",
+      "pinned": "5.0.15",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/services/web/fta.json"
+        "raw/root/jscpd-report.json"
+      ]
+    },
+    {
+      "tool": "jscpd",
+      "category": "duplication",
+      "scope": "common",
+      "project": "brokenpkg",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "5.0.15",
+      "pinned": "5.0.15",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/brokenpkg/jscpd-report.json"
       ]
     },
     {
@@ -546,174 +531,240 @@
       ]
     },
     {
-      "tool": "jscpd",
-      "category": "duplication",
-      "scope": "common",
-      "project": "services/api",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "5.0.15",
-      "pinned": "5.0.15",
-      "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": [
-        "raw/services/api/jscpd-report.json"
-      ]
-    },
-    {
-      "tool": "jscpd",
-      "category": "duplication",
-      "scope": "common",
-      "project": "services/web",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "5.0.15",
-      "pinned": "5.0.15",
-      "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": [
-        "raw/services/web/jscpd-report.json"
-      ]
-    },
-    {
-      "tool": "oxlint",
+      "tool": "go-vet",
       "category": "lint",
-      "scope": "js-ts",
-      "project": "services/web",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "1.78.0",
-      "pinned": "1.78.0",
-      "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": [
-        "raw/services/web/oxlint.sarif.json"
-      ]
-    },
-    {
-      "tool": "react-doctor",
-      "category": "lint",
-      "scope": "js-ts",
-      "project": "services/web",
+      "scope": "go",
+      "project": ".",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
       "version": null,
-      "pinned": "0.9.12",
+      "pinned": "1.25",
       "detection": null,
-      "state": "not-available",
-      "reason": "no React dependency detected",
-      "raw": []
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/go-vet.json"
+      ]
     },
     {
-      "tool": "ruff-lint",
+      "tool": "go-vet",
       "category": "lint",
-      "scope": "python",
-      "project": "services/api",
+      "scope": "go",
+      "project": "brokenpkg",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "0.16.3",
-      "pinned": "0.16.3",
+      "version": null,
+      "pinned": "1.25",
+      "detection": null,
+      "state": "error",
+      "reason": "# example.com/go-basic/brokenpkg",
+      "raw": []
+    },
+    {
+      "tool": "staticcheck",
+      "category": "lint",
+      "scope": "go",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "v0.7.0",
+      "pinned": "v0.7.0",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": [
-        "raw/services/api/ruff-lint.json"
+        "raw/root/staticcheck.jsonl"
       ]
     },
     {
-      "tool": "prettier",
-      "category": "format",
-      "scope": "js-ts",
-      "project": "services/web",
+      "tool": "staticcheck",
+      "category": "lint",
+      "scope": "go",
+      "project": "brokenpkg",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": "3.9.6",
-      "pinned": "3.9.6",
+      "version": "v0.7.0",
+      "pinned": "v0.7.0",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/brokenpkg/staticcheck.jsonl"
+      ]
+    },
+    {
+      "tool": "gofmt",
+      "category": "format",
+      "scope": "go",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.25",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/gofmt.txt"
+      ]
+    },
+    {
+      "tool": "gofmt",
+      "category": "format",
+      "scope": "go",
+      "project": "brokenpkg",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": null,
+      "pinned": "1.25",
       "detection": null,
       "state": "ok",
       "reason": null,
       "raw": []
-    },
-    {
-      "tool": "ruff-format",
-      "category": "format",
-      "scope": "python",
-      "project": "services/api",
-      "execution": "ephemeral-pinned",
-      "provenance": "default-config",
-      "version": "0.16.3",
-      "pinned": "0.16.3",
-      "detection": null,
-      "state": "ok",
-      "reason": null,
-      "raw": [
-        "raw/services/api/ruff-format.json"
-      ]
     }
   ],
   "findings": [
     {
-      "id": "583a56acd40665f9",
-      "category": "types",
-      "tool": "ty",
-      "rule": "unresolved-reference",
-      "severity": "error",
-      "file": "services/api/greet.py",
-      "project": "services/api",
+      "id": "31b389eb921f08f7",
+      "category": "security",
+      "tool": "gosec",
+      "rule": "G101",
+      "severity": "warning",
+      "file": "main.go",
+      "project": ".",
       "range": {
-        "startLine": 2,
-        "startCol": 23,
-        "endLine": 2,
-        "endCol": 35
-      },
-      "message": "Name `missing_name` used when not defined",
-      "provenance": "default-config",
-      "related": [
-        "07af5e4f619dc8dd"
-      ]
-    },
-    {
-      "id": "07af5e4f619dc8dd",
-      "category": "lint",
-      "tool": "ruff-lint",
-      "rule": "F821",
-      "severity": "error",
-      "file": "services/api/greet.py",
-      "project": "services/api",
-      "range": {
-        "startLine": 2,
-        "startCol": 23,
-        "endLine": 2,
-        "endCol": 35
-      },
-      "message": "Undefined name `missing_name`",
-      "provenance": "default-config",
-      "related": [
-        "583a56acd40665f9"
-      ],
-      "fixHint": "see https://docs.astral.sh/ruff/rules/undefined-name"
-    },
-    {
-      "id": "f0760aef25a91e41",
-      "category": "lint",
-      "tool": "oxlint",
-      "rule": "eslint(no-dupe-keys)",
-      "severity": "error",
-      "file": "services/web/src/dupe-keys.js",
-      "project": "services/web",
-      "range": {
-        "startLine": 2,
-        "startCol": 3,
-        "endLine": 2,
+        "startLine": 5,
+        "startCol": 7,
+        "endLine": 5,
         "endCol": 7
       },
-      "message": "Duplicate key 'home'",
+      "message": "Potential hardcoded credentials (high severity, low confidence)",
+      "provenance": "default-config",
+      "fixHint": "see https://cwe.mitre.org/data/definitions/798.html"
+    },
+    {
+      "id": "0a2b46f6fe5b9b0e",
+      "category": "types",
+      "tool": "staticcheck",
+      "rule": "compile",
+      "severity": "error",
+      "file": "brokenpkg/broken.go",
+      "project": "brokenpkg",
+      "range": {
+        "startLine": 5,
+        "startCol": 9,
+        "endLine": 5,
+        "endCol": 9
+      },
+      "message": "cannot use \"forty-two\" (untyped string constant) as int value in return statement",
       "provenance": "default-config"
+    },
+    {
+      "id": "84ac469f007ccec5",
+      "category": "dead-code",
+      "tool": "staticcheck",
+      "rule": "U1000",
+      "severity": "warning",
+      "file": "checks.go",
+      "project": ".",
+      "range": {
+        "startLine": 12,
+        "startCol": 6,
+        "endLine": 12,
+        "endCol": 6
+      },
+      "message": "func unusedHelper is unused",
+      "provenance": "default-config"
+    },
+    {
+      "id": "2f9ddb3bdcafc7b5",
+      "category": "lint",
+      "tool": "staticcheck",
+      "rule": "S1002",
+      "severity": "warning",
+      "file": "checks.go",
+      "project": ".",
+      "range": {
+        "startLine": 5,
+        "startCol": 5,
+        "endLine": 5,
+        "endCol": 20
+      },
+      "message": "should omit comparison to bool constant, can be simplified to verbose",
+      "provenance": "default-config"
+    },
+    {
+      "id": "eac2ea9c26478688",
+      "category": "lint",
+      "tool": "staticcheck",
+      "rule": "SA5009",
+      "severity": "warning",
+      "file": "main.go",
+      "project": ".",
+      "range": {
+        "startLine": 13,
+        "startCol": 13,
+        "endLine": 13,
+        "endCol": 17
+      },
+      "message": "Printf format %d has arg #1 of wrong type string",
+      "provenance": "default-config"
+    },
+    {
+      "id": "f50f5a0a7744f55f",
+      "category": "lint",
+      "tool": "go-vet",
+      "rule": "printf",
+      "severity": "warning",
+      "file": "main.go",
+      "project": ".",
+      "range": {
+        "startLine": 13,
+        "startCol": 14,
+        "endLine": 13,
+        "endCol": 16
+      },
+      "message": "fmt.Printf format %d has arg \"not-an-int\" of wrong type string",
+      "provenance": "default-config"
+    },
+    {
+      "id": "ea605e7576bf2abb",
+      "category": "format",
+      "tool": "gofmt",
+      "rule": "gofmt/unformatted",
+      "severity": "warning",
+      "file": "unformatted.go",
+      "project": ".",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "File does not match gofmt’s formatting",
+      "provenance": "default-config",
+      "fixHint": "gofmt -w unformatted.go"
     }
   ],
-  "advisories": [],
+  "advisories": [
+    {
+      "id": "a7de59f370191dbc",
+      "category": "duplication",
+      "tool": "jscpd",
+      "rule": "jscpd/duplicate-block",
+      "severity": "warning",
+      "file": "dupe_a.go",
+      "project": ".",
+      "range": {
+        "startLine": 4,
+        "startCol": 1,
+        "endLine": 23,
+        "endCol": 1
+      },
+      "message": "20 lines (85 tokens) duplicated from dupe_b.go:4-23",
+      "provenance": "default-config",
+      "fixHint": "Extract the duplicated block into a shared function or module"
+    }
+  ],
   "warnings": []
 }

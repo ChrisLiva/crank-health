@@ -25,7 +25,15 @@ import { expectGolden, normalizeMarkdown, readGoldenReport } from './support/rep
  * exactly what this renders is asserted in the fixture scans.
  */
 
-const FIXTURES = ['cs-basic', 'js-basic', 'mono-js', 'mono-mixed', 'py-basic', 'sec-basic'] as const
+const FIXTURES = [
+  'cs-basic',
+  'go-basic',
+  'js-basic',
+  'mono-js',
+  'mono-mixed',
+  'py-basic',
+  'sec-basic',
+] as const
 
 /** The golden form: the timings trailer cut, the repo path already `<repo>`. */
 async function render(name: string): Promise<string> {
