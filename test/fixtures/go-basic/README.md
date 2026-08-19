@@ -14,6 +14,7 @@ Planted, one per category the Go adapter reaches:
 | format      | `unformatted.go`          | spacing and indentation `gofmt` rewrites → one `gofmt/unformatted` finding |
 | duplication | `dupe_a.go` / `dupe_b.go` | the same 18-line accumulator body under two names → nonzero `duplicationPercent` |
 | lint        | `checks.go`               | `if verbose == true` → one staticcheck `S1002` |
+| lint        | `main.go`                 | `fmt.Printf("%d", "not-an-int")` → one `go vet` `printf` *and* one staticcheck `SA5009`, on the same line: the two lint tools overlap and neither stands the other down |
 | dead-code   | `checks.go`               | `unusedHelper`, called from nowhere → one staticcheck `U1000` |
 | types       | `brokenpkg/broken.go`     | a `string` returned where the signature promises `int` → one staticcheck `compile` |
 

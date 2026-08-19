@@ -1,0 +1,2 @@
+# example.com/vetfail/broken
+vet: broken/broken.go:5:9: cannot use "forty-two" (untyped string constant) as int value in return statement

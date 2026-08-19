@@ -67,6 +67,24 @@ const PLANTED = [
     gradeScope: true,
   },
   {
+    category: 'lint',
+    tool: 'staticcheck',
+    rule: 'SA5009',
+    file: 'main.go',
+    startLine: 11,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
+    category: 'lint',
+    tool: 'go-vet',
+    rule: 'printf',
+    file: 'main.go',
+    startLine: 11,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
     category: 'format',
     tool: 'gofmt',
     rule: 'gofmt/unformatted',
@@ -119,6 +137,24 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
    */
   it('records gofmt as a toolchain tool with no version to report', () => {
     expect(byTool(report).get('gofmt')).toMatchObject({ state: 'ok', version: null })
+  })
+
+  /**
+   * `go vet` is per project, and one project's refusal is not the other's: the
+   * root module type-checks, so its vet run completed and its `printf`
+   * diagnostic is graded; `brokenpkg` does not, so vet exits non-zero there and
+   * reports the package it could not load rather than half a stream. `lint` is
+   * still graded — one project's tool failing never takes a category down.
+   */
+  it('completes vet on the root module and refuses it on brokenpkg', () => {
+    const vet = report.tools.filter((tool) => tool.tool === 'go-vet')
+
+    expect(vet.map((tool) => [tool.project, tool.state, tool.version])).toEqual([
+      ['.', 'ok', null],
+      ['brokenpkg', 'error', null],
+    ])
+    expect(vet[1]?.reason).toContain('brokenpkg')
+    expect(report.categories['lint']).toMatchObject({ status: 'graded' })
   })
 
   /**

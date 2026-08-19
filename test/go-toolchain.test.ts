@@ -60,7 +60,7 @@ describe('meetsGoFloor', () => {
  * and `lint` from one run, and a gate failure has to take all three down. Each
  * later task extends the list.
  */
-const GO_TOOLS: readonly string[] = ['staticcheck', 'staticcheck', 'staticcheck', 'gofmt']
+const GO_TOOLS: readonly string[] = ['staticcheck', 'staticcheck', 'staticcheck', 'go-vet', 'gofmt']
 
 /** The gate's install hint, verbatim: user copy, so drift has to fail a test. */
 const INSTALL_HINT =
