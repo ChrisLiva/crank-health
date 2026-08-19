@@ -61,6 +61,7 @@ describe('meetsGoFloor', () => {
  * later task extends the list.
  */
 const GO_TOOLS: readonly string[] = [
+  'gosec',
   'staticcheck',
   'staticcheck',
   'staticcheck',

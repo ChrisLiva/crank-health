@@ -2,6 +2,7 @@ import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
 import { gocognitRunner } from './gocognit.ts'
 import { gofmtRunner } from './gofmt.ts'
 import { golangciLintRunner } from './golangci-lint.ts'
+import { gosecRunner } from './gosec.ts'
 import { goVetRunner } from './go-vet.ts'
 import {
   staticcheckDeadCodeRunner,
@@ -27,6 +28,7 @@ export const goAdapter: LanguageAdapter = {
   language: 'go',
   detect: (ctx: DetectContext) => Promise.resolve(ctx.project.files.byLanguage.go.length > 0),
   runners: [
+    gosecRunner,
     staticcheckTypesRunner,
     staticcheckDeadCodeRunner,
     gocognitRunner,

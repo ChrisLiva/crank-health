@@ -313,6 +313,7 @@ async function scanReplaying(
         exitCode: golangci.exitCode ?? 0,
       },
       { match: '*gocognit*', stdout: await captured('gocognit-1.2.1.json') },
+      { match: '*gosec*', stdout: '{"Golang errors":{},"Issues":[]}' },
       { match: 'vet', stdout: '{}\n' },
     ]),
     gofmt: '#!/bin/sh\nexit 0\n',

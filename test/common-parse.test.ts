@@ -35,6 +35,7 @@ import {
   parseZizmorJson,
   toPendingFindings as toZizmorFindings,
 } from '../src/adapters/common/zizmor.ts'
+import { OMITTED, sanitizeRawResults } from '../src/adapters/support.ts'
 import { computeAnchors } from '../src/core/fingerprint.ts'
 import { gradeAbsolute } from '../src/core/grade.ts'
 import type { Finding, PendingFinding } from '../src/core/types.ts'
@@ -446,6 +447,22 @@ describe('raw evidence sanitizing', () => {
       ['python-subprocess-shell-true', 13],
       ['js-eval-call', 2],
     ])
+  })
+
+  /**
+   * The scrubber is told which array holds the results, because not every
+   * scanner keys it `results`: gosec's envelope keys its issues `Issues`, and a
+   * sanitizer that looked only for `results` would hand that document back
+   * untouched — every source excerpt still in it, and still parseable, so
+   * nothing downstream would notice.
+   */
+  it('rewrites the array it is named, whatever the scanner called it', () => {
+    const sanitized = sanitizeRawResults('{"Issues":[{"code":"secret"}]}', 'Issues', (issue) => ({
+      ...issue,
+      code: OMITTED,
+    }))
+
+    expect(JSON.parse(sanitized)).toEqual({ Issues: [{ code: '<omitted>' }] })
   })
 
   /** Output nothing can be made of is the only clue to why; it is kept as-is. */

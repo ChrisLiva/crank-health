@@ -8,6 +8,7 @@ import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeReport } from './support/report.ts'
+import { expectNoSecretUnder } from './support/secrets.ts'
 import { GOLDEN_TOOLCHAIN, onPath } from './support/system-tools.ts'
 
 /**
@@ -26,8 +27,23 @@ const SCAN_TIMEOUT_MS = 180_000
 
 const HAVE_GO = await onPath('go')
 
+/** Security tools that are release binaries, so a machine either has one or does not. */
+const SYSTEM_SCANNERS: ReadonlySet<string> = new Set(['gitleaks', 'opengrep', 'osv-scanner'])
+
+/** The fake AWS key planted in `main.go`; see that fixture's README. */
+const PLANTED_SECRET = 'AKIA4XZQ7WPD2NR6VK8TJ1'
+
 /** Every finding planted in `test/fixtures/go-basic` — see that fixture's README. */
 const PLANTED = [
+  {
+    category: 'security',
+    tool: 'gosec',
+    rule: 'G101',
+    file: 'main.go',
+    startLine: 5,
+    severity: 'warning',
+    gradeScope: true,
+  },
   {
     category: 'types',
     tool: 'staticcheck',
@@ -71,7 +87,7 @@ const PLANTED = [
     tool: 'staticcheck',
     rule: 'SA5009',
     file: 'main.go',
-    startLine: 11,
+    startLine: 13,
     severity: 'warning',
     gradeScope: true,
   },
@@ -80,7 +96,7 @@ const PLANTED = [
     tool: 'go-vet',
     rule: 'printf',
     file: 'main.go',
-    startLine: 11,
+    startLine: 13,
     severity: 'warning',
     gradeScope: true,
   },
@@ -115,8 +131,18 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
     await fixture.remove()
   })
 
+  /**
+   * The three release-binary scanners are left out of the comparison, not out
+   * of the run: gitleaks, opengrep and osv-scanner are absent on most machines
+   * (and on the golden toolchain by construction — `system-tools.ts`), and a
+   * machine that has gitleaks installed reads the planted credential a second
+   * time as `generic-api-key`. What those tools say about a planted secret is
+   * `sec-scan.test.ts`'s subject; what this fixture pins is the Go adapter.
+   */
   it('finds every planted finding, and nothing else', () => {
-    expect(findings.map(shape)).toEqual(PLANTED.map((planted) => ({ ...planted })))
+    expect(findings.filter((finding) => !SYSTEM_SCANNERS.has(finding.tool)).map(shape)).toEqual(
+      PLANTED.map((planted) => ({ ...planted })),
+    )
   })
 
   /**
@@ -245,6 +271,67 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
       ['brokenpkg', 'lint', ['raw/brokenpkg/staticcheck.jsonl']],
     ])
   })
+
+  /**
+   * gosec is `complementary`: a security scanner is not an alternative another
+   * security scanner stands down for, so the Go SAST row runs beside every
+   * repo-scoped security tool rather than instead of one.
+   */
+  it('runs gosec beside the repo-scoped security tools, not instead of them', () => {
+    const security = report.tools.filter((tool) => tool.category === 'security')
+
+    // One gosec run per Go project, and the root's is the one that graded: the
+    // module whose packages do not load has no analysis to report.
+    expect(
+      security
+        .filter((tool) => tool.tool === 'gosec')
+        .map((tool) => [tool.project, tool.state, tool.version]),
+    ).toEqual([
+      ['.', 'ok', 'v2.28.0'],
+      ['brokenpkg', 'error', null],
+    ])
+    // The repo-scoped scanners still have their say — a Go repo scanned by
+    // gosec has not thereby declined its secrets, SAST or dependency scan.
+    expect([...new Set(security.map((tool) => tool.tool))].toSorted()).toEqual([
+      'bandit',
+      'gitleaks',
+      'gosec',
+      'govulncheck',
+      'opengrep',
+      'osv-scanner',
+      'zizmor',
+    ])
+    expect(report.categories['security']).toMatchObject({ status: 'graded' })
+  })
+
+  /**
+   * gosec quotes three lines of the file it flagged, and on the planted G101 the
+   * middle one is the credential. The sweep walks the whole run directory, raw
+   * evidence included — the prefix as well as the literal, so a truncated leak
+   * cannot pass.
+   */
+  it('quotes the planted credential nowhere in the run directory', async () => {
+    for (const artifact of [json]) {
+      expect(artifact).not.toContain(PLANTED_SECRET)
+      expect(artifact).not.toContain('AKIA')
+    }
+    await expectNoSecretUnder(outputDir, [PLANTED_SECRET, 'AKIA'])
+  })
+
+  /**
+   * Spec §6: same crank-health, same commit, same toolchain ⇒ the same report,
+   * down to the bytes, once the two things that legitimately vary — how long it
+   * took and where the repo sat — are normalized away.
+   */
+  it(
+    'produces the same report twice',
+    async () => {
+      const again = await runHealthScan({ path: fixture.root })
+
+      expect(normalizeReport(again.json)).toEqual(normalizeReport(json))
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   it.runIf(GOLDEN_TOOLCHAIN)('matches the golden normalized report', async () => {
     await expectGolden('go-basic.report.json', normalizeReport(json))

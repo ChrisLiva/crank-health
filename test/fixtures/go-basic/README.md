@@ -18,6 +18,16 @@ Planted, one per category the Go adapter reaches:
 | dead-code   | `checks.go`               | `unusedHelper`, called from nowhere → one staticcheck `U1000` |
 | types       | `brokenpkg/broken.go`     | a `string` returned where the signature promises `int` → one staticcheck `compile` |
 | complexity  | `complex.go`              | `Classify`, nested loops and conditions → cognitive 25, the one function over the ceiling |
+| security    | `main.go`                 | `const apiPassword = "AKIA4XZQ7WPD2NR6VK8TJ1"` → one gosec `G101` (high severity, low confidence) |
+
+The planted credential is fake and belongs to nobody, and it is deliberately
+AWS-shaped: `test/go-scan.test.ts` sweeps the whole run directory for both the
+literal and the bare `AKIA` prefix, because gosec quotes three lines of the
+flagged file around every issue and that window is what the secrets contract
+keeps out of `raw/`. A machine with `gitleaks` installed reads the same line a
+second time as `generic-api-key`; that finding is machine-dependent, so the
+journey test compares the planted table against everything *except* the
+release-binary scanners.
 
 Complexity is graded as a share of every function measured rather than as
 findings, so the census has a denominator to pin: gocognit counts **8**

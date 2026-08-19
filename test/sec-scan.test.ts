@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join, relative } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { execa } from 'execa'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -13,6 +13,7 @@ import { runHealthScan } from '../src/run.ts'
 import type { FixtureRepo } from './support/fixture.ts'
 import { COMMIT_IDENTITY, createFixtureRepo } from './support/fixture.ts'
 import { expectGolden, normalizeMarkdown, normalizeReport } from './support/report.ts'
+import { expectNoSecretUnder } from './support/secrets.ts'
 import { GOLDEN_TOOLCHAIN, SYSTEM_TOOLS, installedSystemTools } from './support/system-tools.ts'
 import { reportFindings } from '../src/render/json.ts'
 
@@ -208,7 +209,7 @@ describe('quick scan of the sec-basic fixture', () => {
       expect(artifact).not.toContain(PLANTED_SECRET)
       expect(artifact).not.toContain('AKIA')
     }
-    await expectNoSecretUnder(scan.outputDir)
+    await expectNoSecretUnder(scan.outputDir, [PLANTED_SECRET, 'AKIA'])
   })
 
   it.runIf(installed.has('opengrep'))('reports the planted SAST findings', () => {
@@ -582,7 +583,7 @@ describe('a leaked credential, with gitleaks stubbed onto PATH', () => {
       expect(artifact).not.toContain(PLANTED_SECRET)
       expect(artifact).not.toContain('AKIA')
     }
-    await expectNoSecretUnder(scan.outputDir)
+    await expectNoSecretUnder(scan.outputDir, [PLANTED_SECRET, 'AKIA'])
   })
 
   /** Nothing dropped, nothing to explain: the receipt is not a permanent note. */
@@ -658,35 +659,9 @@ describe('a secret in a gitignored file, with gitleaks stubbed onto PATH', () =>
       expect(artifact).not.toContain(PLANTED_SECRET)
       expect(artifact).not.toContain('AKIA')
     }
-    await expectNoSecretUnder(scan.outputDir)
+    await expectNoSecretUnder(scan.outputDir, [PLANTED_SECRET, 'AKIA'])
   })
 })
-
-/**
- * The whole run directory, `raw/` included: the artifacts are not the only
- * thing a user hands to somebody else. Security scanners quote the line they
- * matched, so this is the assertion that keeps their raw output sanitized (see
- * `sanitizeRawResults`).
- */
-async function expectNoSecretUnder(runDirectory: string): Promise<void> {
-  const names = await readdir(runDirectory, { recursive: true })
-  const files: string[] = []
-  for (const name of names) {
-    const path = join(runDirectory, name)
-    // eslint-disable-next-line no-await-in-loop
-    if ((await stat(path)).isFile()) files.push(path)
-  }
-  // A run that wrote nothing would pass this vacuously.
-  expect(files.length).toBeGreaterThan(3)
-
-  for (const file of files) {
-    // eslint-disable-next-line no-await-in-loop
-    const contents = await readFile(file, 'utf8')
-    const where = relative(runDirectory, file)
-    expect(contents, `${where} carries the planted secret`).not.toContain(PLANTED_SECRET)
-    expect(contents, `${where} carries the planted secret`).not.toContain('AKIA')
-  }
-}
 
 /**
  * A throwaway git repo from a file map, committed before it is scanned — the

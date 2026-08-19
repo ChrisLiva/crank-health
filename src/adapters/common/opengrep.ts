@@ -267,7 +267,7 @@ export function parseOpengrepJson(stdout: string): OpengrepResult[] {
  * {@link sanitizeRawResults}.
  */
 export function sanitizeRawJson(stdout: string): string {
-  return sanitizeRawResults(stdout, (result) => {
+  return sanitizeRawResults(stdout, 'results', (result) => {
     const extra = asRecord(result['extra'])
     return extra === undefined || extra['lines'] === undefined
       ? result
