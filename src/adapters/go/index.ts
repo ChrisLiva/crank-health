@@ -1,5 +1,7 @@
 import type { DetectContext, LanguageAdapter } from '../../core/types.ts'
 import { gocognitRunner } from './gocognit.ts'
+import { goTestRunner } from './go-test.ts'
+import { gremlinsRunner } from './gremlins.ts'
 import { gofmtRunner } from './gofmt.ts'
 import { golangciLintRunner } from './golangci-lint.ts'
 import { gosecRunner } from './gosec.ts'
@@ -36,5 +38,7 @@ export const goAdapter: LanguageAdapter = {
     goVetRunner,
     golangciLintRunner,
     gofmtRunner,
+    gremlinsRunner,
+    goTestRunner,
   ],
 }

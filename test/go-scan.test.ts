@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises'
 import { sep } from 'node:path'
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
 import { gofmtArgs, parseListed, toPendingFindings } from '../src/adapters/go/gofmt.ts'
+import { QUICK_MODE_DEEP_REASON } from '../src/core/orchestrator.ts'
 import { reportFindings } from '../src/render/json.ts'
 import type { Finding } from '../src/core/types.ts'
 import { runHealthScan } from '../src/run.ts'
@@ -219,6 +220,21 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
     ])
     expect(findings.every((finding) => finding.tool !== 'gocognit')).toBe(true)
     expect(report.categories['complexity']).toMatchObject({ status: 'graded' })
+  })
+
+  /**
+   * The quick profile never executes the repo's code, and the report says so
+   * rather than flattering it: `test-quality`'s deep runners were not asked, so
+   * the category names the flag as its reason and neither `gremlins` nor
+   * `go-test` has a record — no `go test` was spawned against this fixture.
+   */
+  it('defers test-quality to --deep without running the repo’s tests', () => {
+    expect(report.categories['test-quality']).toEqual({
+      status: 'not-assessed',
+      reason: QUICK_MODE_DEEP_REASON,
+    })
+    expect(report.tools.map((tool) => tool.tool)).not.toContain('gremlins')
+    expect(report.tools.map((tool) => tool.tool)).not.toContain('go-test')
   })
 
   /** The planted pair is duplication the repo-wide jscpd pass has to see. */
