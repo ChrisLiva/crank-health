@@ -109,7 +109,7 @@ async function runGoVet(ctx: RunContext): Promise<ToolResult> {
  * The one invocation. `./...` is every package of the module at `cwd` and stops
  * at a nested module's boundary, so a project's run measures the project.
  */
-export function invocationArgs(): string[] {
+function invocationArgs(): string[] {
   return ['vet', '-json', './...']
 }
 
