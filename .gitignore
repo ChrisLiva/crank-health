@@ -5,3 +5,6 @@ coverage/
 .claude/worktrees/
 *.tsbuildinfo
 .DS_Store
+
+# Go build output from probing the go-basic fixture (module example.com/go-basic)
+test/fixtures/go-basic/go-basic
