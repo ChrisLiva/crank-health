@@ -173,7 +173,14 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
    * record's `version` is null — the report never invents one.
    */
   it('records gofmt as a toolchain tool with no version to report', () => {
-    expect(byTool(report).get('gofmt')).toMatchObject({ state: 'ok', version: null })
+    expect(
+      report.tools
+        .filter((tool) => tool.tool === 'gofmt')
+        .map((tool) => [tool.project, tool.state, tool.version]),
+    ).toEqual([
+      ['.', 'ok', null],
+      ['brokenpkg', 'ok', null],
+    ])
   })
 
   /**
@@ -431,10 +438,6 @@ function shape(finding: Finding) {
     severity: finding.severity,
     gradeScope: finding.gradeScope,
   }
-}
-
-function byTool(report: ReportShape): Map<string, ReportShape['tools'][number]> {
-  return new Map(report.tools.map((tool) => [tool.tool, tool]))
 }
 
 interface ReportShape {

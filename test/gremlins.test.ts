@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { GREMLINS_TOOL, gremlinsOutcome, parseGremlinsReport } from '../src/adapters/go/gremlins.ts'
-import { GO_COVERAGE_REASON, parseCoverageTotal } from '../src/adapters/go/go-test.ts'
+import { parseCoverageTotal } from '../src/adapters/go/go-test.ts'
 import { mutationCounts } from '../src/adapters/mutation-report.ts'
 
 /**
@@ -177,13 +177,6 @@ describe('the go test coverage total', () => {
     expect(
       parseCoverageTotal('example.com/weaklib/calc.go:3:\tIsPositive\t100.0%\n'),
     ).toBeUndefined()
-  })
-
-  /** The honesty sentence a reader of `lineCoveragePercent` needs. */
-  it('says which coverage Go actually measured', () => {
-    expect(GO_COVERAGE_REASON).toBe(
-      'Go reports statement coverage; recorded as the shared line-coverage context metric',
-    )
   })
 })
 

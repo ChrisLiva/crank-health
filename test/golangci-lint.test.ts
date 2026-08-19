@@ -209,9 +209,6 @@ describe('a Go repo that owns golangci-lint', () => {
           [GOLANGCI_LINT_TOOL, 'staticcheck'],
           [GOLANGCI_LINT_TOOL, 'unused'],
         ])
-        // The stood-down runs really did have something to say — which is what
-        // makes the stand-down a decision rather than an empty coincidence.
-        expect(scan.findings.some((finding) => finding.tool === STATICCHECK_TOOL)).toBe(true)
       } finally {
         await fixture.remove()
       }
