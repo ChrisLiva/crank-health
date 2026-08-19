@@ -1,4 +1,3 @@
-import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import type { ToolExecution, ToolFailure } from '../../core/exec.ts'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
@@ -14,6 +13,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
+import { goExecEnv } from '../go/go-toolchain.ts'
 import {
   asArray,
   asRecord,
@@ -565,29 +565,6 @@ export function invocationArgs(db: string | undefined): string[] {
 }
 
 /**
- * The environment every `go` spawn carries — the zero-footprint contract (spec
- * §7) for a toolchain that is perfectly willing to write into the module it is
- * pointed at.
- *
- * `GOFLAGS=-mod=readonly` is Go's own default, set explicitly so an ambient
- * `GOFLAGS=-mod=mod` cannot turn a scan into a `go.mod`/`go.sum` rewrite. It is
- * safe for a vendored module too: verified against a `go mod vendor`ed tree,
- * where it produces byte-identical findings.
- *
- * `GOMODCACHE` is pinned to the machine's warm cache — `$HOME/go/pkg/mod`,
- * Go's own default — for the same reason `dotnet-project.ts` pins
- * `NUGET_PACKAGES`: it is the one setting that could otherwise be pointed
- * inside the repo being scanned. The build cache (`GOCACHE`) is derived from
- * the OS cache directory and is never inside a repo.
- */
-export function goEnv(): Record<string, string> {
-  return {
-    GOFLAGS: '-mod=readonly',
-    GOMODCACHE: join(homedir(), 'go', 'pkg', 'mod'),
-  }
-}
-
-/**
  * One `go run govulncheck` per module in the repo, merged.
  *
  * **The quick profile still applies.** govulncheck reads source and the module
@@ -627,7 +604,7 @@ async function runGovulncheck(ctx: RunContext): Promise<ToolResult> {
     const execution = await execTool(systemCommand(GO_BINARY, invocationArgs(database)), {
       cwd: join(ctx.repoRoot, dirname(goMod)),
       timeoutMs: ctx.timeoutMs,
-      env: goEnv(),
+      env: goExecEnv(),
     })
     // A cold module cache narrates its downloads on stderr and a warm one says
     // nothing, so the narration goes before anything reads or stages the stream
