@@ -29,7 +29,7 @@ import { dotnetExecOptions, sdkGate } from './dotnet-project.ts'
  *   mutating `--remove` mode is never built.
  */
 
-export const ROSLYNATOR_TOOL = 'roslynator'
+const ROSLYNATOR_TOOL = 'roslynator'
 
 /** NuGet tool-package id, pinned in the dotnet manifest. */
 const ROSLYNATOR_PACKAGE = 'roslynator.dotnet.cli'

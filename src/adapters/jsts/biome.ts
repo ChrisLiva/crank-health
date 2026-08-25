@@ -33,8 +33,8 @@ import { detectNodeTool } from './node-package.ts'
  * against it. Every Biome finding is therefore `repo-config` and graded.
  */
 
-export const BIOME_LINT_TOOL = 'biome-lint'
-export const BIOME_FORMAT_TOOL = 'biome-format'
+const BIOME_LINT_TOOL = 'biome-lint'
+const BIOME_FORMAT_TOOL = 'biome-format'
 
 /** npm package name; the command it ships is `biome`. */
 const BIOME_PACKAGE = '@biomejs/biome'
@@ -43,7 +43,7 @@ const BIOME_BIN = 'biome'
 export const BIOME_CONFIG_FILES: readonly string[] = ['biome.json', 'biome.jsonc']
 
 /** The one rule id every formatting failure reports under. */
-export const BIOME_FORMAT_RULE = 'biome/format'
+const BIOME_FORMAT_RULE = 'biome/format'
 
 /**
  * Flags shared by both subcommands.

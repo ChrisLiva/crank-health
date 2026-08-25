@@ -370,7 +370,7 @@ export function languageOf(file: string): Language | undefined {
 }
 
 /** True when any path segment is on the hard exclusion list. */
-export function isExcluded(file: string): boolean {
+function isExcluded(file: string): boolean {
   return file.split('/').some((segment) => EXCLUDED_SEGMENTS.includes(segment))
 }
 
@@ -414,7 +414,7 @@ const GITHUB_DIRECTORY = '.github'
  * repo's own config wherever it sits, so `.gitignore`,
  * `src/.hidden-named-file.ts` and `packages/web/.eslintrc.cjs` all stay.
  */
-export function isHiddenScope(file: string): boolean {
+function isHiddenScope(file: string): boolean {
   return hiddenScopeRoot(file) !== undefined
 }
 
@@ -474,7 +474,7 @@ export async function countPhysicalLines(
 }
 
 /** Physical line count of one blob of text. */
-export function countLines(text: string): number {
+function countLines(text: string): number {
   if (text.length === 0) return 0
   let lines = 1
   for (let index = 0; index < text.length; index++) {

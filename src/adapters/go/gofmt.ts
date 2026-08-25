@@ -26,10 +26,10 @@ import { MINIMUM_GO_MINOR, goExecOptions, withGoGate } from './go-toolchain.ts'
  * anywhere in this adapter for the same reason.
  */
 
-export const GOFMT_TOOL = 'gofmt'
+const GOFMT_TOOL = 'gofmt'
 
 /** The one rule id every formatting failure reports under. */
-export const GOFMT_RULE = 'gofmt/unformatted'
+const GOFMT_RULE = 'gofmt/unformatted'
 
 /**
  * Not a pin crank-health can enforce — the formatter is the machine's Go

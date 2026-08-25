@@ -7,7 +7,7 @@ import { ROOT_PROJECT } from './discover.ts'
 export const DEFAULT_OUTPUT_DIRNAME = '.codebase-health'
 
 /** Where a repo-scoped run's evidence lands under `raw/`. */
-export const REPO_RAW_DIRNAME = 'repo'
+const REPO_RAW_DIRNAME = 'repo'
 
 /** …and the root project's, whose path `.` is not a directory name. */
 export const ROOT_RAW_DIRNAME = 'root'

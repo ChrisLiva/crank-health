@@ -64,7 +64,7 @@ const JSCPD_PACKAGE = 'jscpd'
  * ephemeral one) and is reported under `Detection.ownedVia`, while every run
  * says `configOwned: false` — the settings that produced the number were ours.
  */
-export const JSCPD_CONFIG_FILES: readonly string[] = ['.jscpd.json', '.jscpd.jsonc']
+const JSCPD_CONFIG_FILES: readonly string[] = ['.jscpd.json', '.jscpd.jsonc']
 
 /** The one rule id every clone reports under. */
 export const JSCPD_RULE = 'jscpd/duplicate-block'
@@ -163,7 +163,7 @@ export function ignoreGlobs(scanRoot: string, nested: readonly string[] = []): s
  * @param repoRoot absolute path of the repo the patterns are relative to
  * @param patterns repo-relative posix globs, already sorted and deduped
  */
-export function inheritedIgnoreGlobs(repoRoot: string, patterns: readonly string[]): string[] {
+function inheritedIgnoreGlobs(repoRoot: string, patterns: readonly string[]): string[] {
   const root = escapeGlob(repoRoot)
   return patterns.map((pattern) => `${root}/${pattern}`)
 }

@@ -54,7 +54,7 @@ export const BANDIT_TOOL = 'bandit'
 const BANDIT_DISTRIBUTION = 'bandit'
 
 /** Config artifacts that make bandit repo-owned (spec §1, first check). */
-export const BANDIT_CONFIG_FILES: readonly string[] = ['.bandit', 'bandit.yaml', 'bandit.yml']
+const BANDIT_CONFIG_FILES: readonly string[] = ['.bandit', 'bandit.yaml', 'bandit.yml']
 
 /** `pyproject.toml` sections that make bandit repo-owned. */
 const BANDIT_SECTIONS: readonly string[] = ['tool.bandit']

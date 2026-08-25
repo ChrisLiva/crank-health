@@ -36,12 +36,12 @@ import { detectNodeTool, isLibraryPackage } from './node-package.ts'
  * ever runs where there is no config to inherit.
  */
 
-export const KNIP_TOOL = 'knip'
+const KNIP_TOOL = 'knip'
 
 /** npm package name; knip's command and package names coincide. */
 const KNIP_PACKAGE = 'knip'
 
-export const KNIP_CONFIG_FILES: readonly string[] = [
+const KNIP_CONFIG_FILES: readonly string[] = [
   'knip.json',
   'knip.jsonc',
   'knip.ts',
@@ -155,7 +155,7 @@ export interface KnipIssues {
   readonly unusedDependencies: readonly KnipDependency[]
 }
 
-export interface KnipSymbol {
+interface KnipSymbol {
   readonly file: string
   readonly name: string
   readonly line: number
@@ -164,7 +164,7 @@ export interface KnipSymbol {
   readonly kind: string
 }
 
-export interface KnipDependency {
+interface KnipDependency {
   readonly file: string
   readonly name: string
   /** `dependencies`, `devDependencies`, `optionalPeerDependencies`. */

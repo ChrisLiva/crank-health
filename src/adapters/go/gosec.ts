@@ -44,7 +44,7 @@ import { goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain
  * envelope always prints, and the exit code stops being the whole story.
  */
 
-export const GOSEC_TOOL = 'gosec'
+const GOSEC_TOOL = 'gosec'
 
 /** The import path `go run` fetches; pinned exactly in `manifest.ts`. */
 const GOSEC_PACKAGE = 'github.com/securego/gosec/v2/cmd/gosec'

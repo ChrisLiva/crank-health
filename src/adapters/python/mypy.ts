@@ -33,13 +33,13 @@ import { detectPythonTool, findVenv } from './py-project.ts'
  * repo.
  */
 
-export const MYPY_TOOL = 'mypy'
+const MYPY_TOOL = 'mypy'
 
 /** PyPI distribution; mypy's command and distribution names coincide. */
 const MYPY_DISTRIBUTION = 'mypy'
 
 /** Root config artifacts that make mypy repo-owned (spec §1, first check). */
-export const MYPY_CONFIG_FILES: readonly string[] = ['mypy.ini', '.mypy.ini']
+const MYPY_CONFIG_FILES: readonly string[] = ['mypy.ini', '.mypy.ini']
 
 /** `pyproject.toml` sections that make mypy repo-owned. */
 const MYPY_SECTIONS: readonly string[] = ['tool.mypy']

@@ -37,13 +37,13 @@ import { detectNodeTool } from './node-package.ts'
  *    noise, not signal, and nothing in the repo asked for it.
  */
 
-export const TSC_TOOL = 'tsc'
+const TSC_TOOL = 'tsc'
 
 /** npm package name; the command it ships is `tsc`. */
 const TSC_PACKAGE = 'typescript'
 
 /** The artifact that owns the types category, per spec §1. */
-export const TSCONFIG = 'tsconfig.json'
+const TSCONFIG = 'tsconfig.json'
 
 /** Extensions that make a repo worth type-checking without a `tsconfig.json`. */
 const TS_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.mts', '.cts']
@@ -55,7 +55,7 @@ const TS_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.mts', '.cts']
  * strict project would flag. `noEmit` plus an explicit `files` list keeps the
  * run read-only and scoped to the paths discovery already vetted.
  */
-export const DEFAULT_TSCONFIG = {
+const DEFAULT_TSCONFIG = {
   compilerOptions: {
     target: 'es2022',
     lib: ['es2023', 'dom'],
@@ -80,7 +80,7 @@ export const DEFAULT_TSCONFIG = {
  * `types` set the repo never did — every one of these says "install a
  * `@types/*` package", which is a fact about `node_modules`, not about the code.
  */
-export const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
+const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
   'TS2307', // Cannot find module '…' or its corresponding type declarations.
   'TS2503', // Cannot find namespace '…'.
   'TS2580', // Cannot find name 'require'/'module'/'__dirname'. Try `npm i --save-dev @types/node`.

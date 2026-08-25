@@ -15,7 +15,7 @@ import { pinnedDotnetSpec, pinnedPythonSpec, pinnedPythonVersion, pinnedSpec } f
  * Python side, the .NET SDK's `dnx` for the C# side. All three install into
  * their own caches, never into the target repo.
  */
-export type EphemeralFetcher = 'npx' | 'uvx' | 'dnx'
+type EphemeralFetcher = 'npx' | 'uvx' | 'dnx'
 
 /** A resolved command line: the binary plus its arguments. */
 export interface ToolCommand {
@@ -198,7 +198,7 @@ const MAX_BUFFER_BYTES = 128 * 1024 * 1024
 const FORCE_KILL_AFTER_MS = 2_000
 
 /** How long an ephemeral tool may run before we explain the wait (see below). */
-export const FIRST_RUN_NOTICE_MS = 4_000
+const FIRST_RUN_NOTICE_MS = 4_000
 
 /**
  * Runs one tool, converting every way a subprocess can go wrong into a

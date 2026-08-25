@@ -35,13 +35,13 @@ import { defaultTypeChecker, detectPythonTool, findVenv } from './py-project.ts'
  * sees an install either way.
  */
 
-export const PYRIGHT_TOOL = 'pyright'
+const PYRIGHT_TOOL = 'pyright'
 
 /** PyPI distribution; pyright's command and distribution names coincide. */
 const PYRIGHT_DISTRIBUTION = 'pyright'
 
 /** Root config artifacts that make pyright repo-owned (spec §1, first check). */
-export const PYRIGHT_CONFIG_FILES: readonly string[] = ['pyrightconfig.json']
+const PYRIGHT_CONFIG_FILES: readonly string[] = ['pyrightconfig.json']
 
 /** `pyproject.toml` sections that make pyright repo-owned. */
 const PYRIGHT_SECTIONS: readonly string[] = ['tool.pyright']
@@ -71,7 +71,7 @@ export const PYRIGHT_GENERAL_RULE = 'pyright/diagnostic'
  * environment; on ours they stay advisory, because we chose to point pyright at
  * an interpreter the repo never asked us to check against.
  */
-export const DEFAULT_ADVISORY_RULES: ReadonlySet<string> = new Set([
+const DEFAULT_ADVISORY_RULES: ReadonlySet<string> = new Set([
   'reportMissingImports',
   'reportMissingModuleSource',
   'reportMissingTypeStubs',

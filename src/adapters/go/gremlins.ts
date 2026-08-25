@@ -56,11 +56,10 @@ const GREMLINS_PACKAGE = 'github.com/go-gremlins/gremlins/cmd/gremlins'
 const GO_BINARY = 'go'
 
 /** The config names gremlins answers to, and the repo's declaration of it. */
-export const GREMLINS_CONFIG_FILES: readonly string[] = ['.gremlins.yaml', '.gremlins.yml']
+const GREMLINS_CONFIG_FILES: readonly string[] = ['.gremlins.yaml', '.gremlins.yml']
 
 /** What to tell a Go repo that has no mutation testing set up. */
-export const GREMLINS_SETUP_HINT =
-  'add a `.gremlins.yaml` to this module to enable mutation testing'
+const GREMLINS_SETUP_HINT = 'add a `.gremlins.yaml` to this module to enable mutation testing'
 
 /** The name the machine-readable report is staged under, per project. */
 const RAW_NAME = 'gremlins.json'

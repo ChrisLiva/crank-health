@@ -32,7 +32,7 @@ import { VERSION } from '../version.ts'
  */
 
 /** Bumped whenever the shape below changes incompatibly. */
-export const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 2
 
 /**
  * One finding as `report.json` carries it.
@@ -172,7 +172,7 @@ export interface ReportDelta {
   readonly resolvedFindings: readonly ReportFinding[]
 }
 
-export interface ReportDeltaCounts {
+interface ReportDeltaCounts {
   readonly new: number
   /** Of the new ones, how many sit on a line this change touched (spec §4). */
   readonly touchedLine: number
@@ -181,7 +181,7 @@ export interface ReportDeltaCounts {
   readonly unchanged: number
 }
 
-export interface ReportCategoryMovement {
+interface ReportCategoryMovement {
   readonly category: Category
   readonly base: CategoryState
   readonly head: CategoryState
@@ -203,7 +203,7 @@ export interface ReportProjectMovement {
 }
 
 /** A finding in {@link ReportDelta.newFindings}: the schema plus the flag. */
-export type ReportNewFinding = ReportFinding & { readonly touchedLine: boolean }
+type ReportNewFinding = ReportFinding & { readonly touchedLine: boolean }
 
 /**
  * The two numbers one category's formula divided, and what they count.
@@ -249,7 +249,7 @@ export interface ReportCoverage {
   readonly unassessed: readonly ReportUnassessed[]
 }
 
-export interface ReportCoverageCounts {
+interface ReportCoverageCounts {
   /** Everything in the scan's inventory. */
   readonly total: number
   /** Of those, the ones a language adapter claims — what the tools could read. */
@@ -263,7 +263,7 @@ export interface ReportUnassessed {
   readonly lines: number
 }
 
-export interface ReportRepo {
+interface ReportRepo {
   readonly path: string
   /** `null` in a repo with no commits yet. */
   readonly commit: string | null
@@ -352,7 +352,7 @@ export interface ReportTool {
   readonly raw: readonly string[]
 }
 
-export interface ReportDetection {
+interface ReportDetection {
   readonly reason: 'config' | 'dependency' | 'config+dependency'
   readonly configFiles: readonly string[]
   /**
@@ -364,7 +364,7 @@ export interface ReportDetection {
   readonly version: string | null
 }
 
-export interface ReportTimings {
+interface ReportTimings {
   readonly generatedAt: string
   readonly durationMs: number
   readonly tools: readonly { readonly tool: string; readonly durationMs: number }[]

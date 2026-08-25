@@ -92,7 +92,7 @@ export function meetsGoFloor(version: { major: number; minor: number }): boolean
  *
  * @returns `undefined` when Go is present, working and new enough
  */
-export async function goGate(options: ExecOptions): Promise<ToolFailure | undefined> {
+async function goGate(options: ExecOptions): Promise<ToolFailure | undefined> {
   const execution = await execTool(systemCommand(GO_BINARY, GO_VERSION_ARGS), options)
   if (execution.failure !== undefined) {
     return {

@@ -32,13 +32,13 @@ import {
  * one of its runners returns `ok`.
  */
 
-export const ZIZMOR_TOOL = 'zizmor'
+const ZIZMOR_TOOL = 'zizmor'
 
 /** PyPI distribution; zizmor's command and distribution names coincide. */
 const ZIZMOR_DISTRIBUTION = 'zizmor'
 
 /** Config artifacts that make zizmor repo-owned (spec §1, first check). */
-export const ZIZMOR_CONFIG_FILES: readonly string[] = ['.github/zizmor.yml', 'zizmor.yml']
+const ZIZMOR_CONFIG_FILES: readonly string[] = ['.github/zizmor.yml', 'zizmor.yml']
 
 /** `pyproject.toml` sections that make zizmor repo-owned. */
 const ZIZMOR_SECTIONS: readonly string[] = ['tool.zizmor']

@@ -38,8 +38,8 @@ import { detectNodeTool, isLibraryPackage } from './node-package.ts'
  * nested inside this one can never reach a report.
  */
 
-export const FALLOW_DEAD_CODE_TOOL = 'fallow-dead-code'
-export const FALLOW_HEALTH_TOOL = 'fallow-health'
+const FALLOW_DEAD_CODE_TOOL = 'fallow-dead-code'
+const FALLOW_HEALTH_TOOL = 'fallow-health'
 
 /** npm package name; fallow's command and package names coincide. */
 const FALLOW_PACKAGE = 'fallow'
@@ -292,7 +292,7 @@ export interface FallowDeadCode {
   readonly unusedDependencies: readonly string[]
 }
 
-export interface FallowSymbol {
+interface FallowSymbol {
   readonly file: string
   readonly name: string
   readonly line: number
@@ -398,12 +398,12 @@ export interface FallowHealth {
   readonly findings: readonly FallowComplexity[]
 }
 
-export interface FallowFileScore {
+interface FallowFileScore {
   readonly file: string
   readonly functionCount: number
 }
 
-export interface FallowComplexity {
+interface FallowComplexity {
   readonly file: string
   readonly name: string
   readonly line: number

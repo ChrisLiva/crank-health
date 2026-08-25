@@ -31,10 +31,10 @@ import { DOTNET, dotnetExecOptions, sdkGate } from './dotnet-project.ts'
  * says `configOwned: true`, always.
  */
 
-export const DOTNET_FORMAT_TOOL = 'dotnet-format'
+const DOTNET_FORMAT_TOOL = 'dotnet-format'
 
 /** The one rule id every whitespace finding reports under. */
-export const DOTNET_FORMAT_RULE = 'dotnet-format/whitespace'
+const DOTNET_FORMAT_RULE = 'dotnet-format/whitespace'
 
 /** 0 = already formatted; 2 = "would reformat", which is a finding, not a failure. */
 const EXPECTED_EXIT_CODES: ReadonlySet<number> = new Set([0, 2])

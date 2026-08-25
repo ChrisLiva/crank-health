@@ -16,7 +16,7 @@ import type { Finding, PendingFinding, RunContext } from '../core/types.ts'
  * a command line can hold, so the file list is spent across several runs and
  * their findings merged.
  */
-export const MAX_ARGS_BYTES = 100_000
+const MAX_ARGS_BYTES = 100_000
 
 /** Splits the file list so no single command line exceeds {@link MAX_ARGS_BYTES}. */
 export function batchFiles(files: readonly string[], budget = MAX_ARGS_BYTES): string[][] {

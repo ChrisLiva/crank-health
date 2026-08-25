@@ -10,7 +10,7 @@
  * Bumping a version here can change grades, so it is a crank-health version
  * bump and it must come with re-captured parse fixtures under `test/captured/`.
  */
-export const TOOL_MANIFEST = {
+const TOOL_MANIFEST = {
   oxlint: '1.78.0',
   eslint: '10.8.1',
   '@biomejs/biome': '2.5.9',
@@ -34,7 +34,7 @@ export const TOOL_MANIFEST = {
  * formats move between releases, which is precisely why the version is pinned
  * here and its parser is tested against captured bytes.
  */
-export const PYTHON_TOOL_MANIFEST = {
+const PYTHON_TOOL_MANIFEST = {
   ruff: '0.16.3',
   ty: '0.0.72',
   pyright: '1.1.411',
@@ -51,7 +51,7 @@ export const PYTHON_TOOL_MANIFEST = {
  * ships with the .NET SDK itself (see {@link SYSTEM_TOOL_MANIFEST}'s `dotnet`
  * entry), so these pins only apply on a machine that has the SDK.
  */
-export const DOTNET_TOOL_MANIFEST = {
+const DOTNET_TOOL_MANIFEST = {
   'microsoft.codeanalysis.netanalyzers': '10.0.400',
   'roslynator.dotnet.cli': '0.13.1',
 } as const satisfies Readonly<Record<string, string>>
@@ -67,7 +67,7 @@ export const DOTNET_TOOL_MANIFEST = {
  *
  * The `v` prefix is part of a Go version, so it is part of the pin.
  */
-export const GO_TOOL_MANIFEST = {
+const GO_TOOL_MANIFEST = {
   'github.com/go-gremlins/gremlins/cmd/gremlins': 'v0.6.0',
   'github.com/golangci/golangci-lint/v2/cmd/golangci-lint': 'v2.12.2',
   'github.com/securego/gosec/v2/cmd/gosec': 'v2.28.0',
@@ -99,7 +99,7 @@ export const GO_TOOL_MANIFEST = {
  * `dotnet` SDK, uses whatever the machine has installed, and records here the
  * verified floor this release was tested against.
  */
-export const SYSTEM_TOOL_MANIFEST = {
+const SYSTEM_TOOL_MANIFEST = {
   dotnet: '10.0.203',
   gitleaks: '8.30.1',
   opengrep: '1.26.0',
@@ -124,7 +124,7 @@ export const SYSTEM_TOOL_MANIFEST = {
  * against — a floor for "known to work", the same contract as
  * {@link SYSTEM_TOOL_MANIFEST}, not a pin crank-health can enforce.
  */
-export const REPO_TOOL_MANIFEST = {
+const REPO_TOOL_MANIFEST = {
   '@stryker-mutator/core': '10.0.0',
   'cosmic-ray': '8.7.0',
   coverage: '7.15.4',

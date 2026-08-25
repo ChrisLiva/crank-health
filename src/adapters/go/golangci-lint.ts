@@ -45,7 +45,7 @@ const GOLANGCI_LINT_PACKAGE = 'github.com/golangci/golangci-lint/v2/cmd/golangci
  * The config names golangci-lint answers to, in the order it looks for them.
  * Owning any one of them is owning the tool.
  */
-export const GOLANGCI_LINT_CONFIGS: readonly string[] = [
+const GOLANGCI_LINT_CONFIGS: readonly string[] = [
   '.golangci.yml',
   '.golangci.yaml',
   '.golangci.toml',
@@ -82,7 +82,7 @@ export const golangciLintRunner: ToolRunner = {
  * `--out-format json` was removed in v2 — and the run's own directory is the
  * project's, so the paths it prints are the project's.
  */
-export function invocationArgs(): string[] {
+function invocationArgs(): string[] {
   return ['run', pinnedGoSpec(GOLANGCI_LINT_PACKAGE), 'run', '--output.json.path', 'stdout']
 }
 

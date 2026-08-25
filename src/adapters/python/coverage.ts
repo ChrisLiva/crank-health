@@ -53,25 +53,25 @@ import { detectPythonTool, findVenv } from './py-project.ts'
  * output format, which nothing here reads.
  */
 
-export const COVERAGE_TOOL = 'coverage'
+const COVERAGE_TOOL = 'coverage'
 
 /** PyPI distribution; coverage.py's command and distribution names coincide. */
 const COVERAGE_DISTRIBUTION = 'coverage'
 
 /** Config artifacts that make coverage.py repo-owned (spec §1, first check). */
-export const COVERAGE_CONFIG_FILES: readonly string[] = ['.coveragerc']
+const COVERAGE_CONFIG_FILES: readonly string[] = ['.coveragerc']
 
 /** `pyproject.toml` sections that make coverage.py repo-owned. */
 const COVERAGE_SECTIONS: readonly string[] = ['tool.coverage']
 
 /** The rule uncovered lines are reported under. */
-export const UNCOVERED_LINE_RULE = 'coverage/uncovered-line'
+const UNCOVERED_LINE_RULE = 'coverage/uncovered-line'
 
 /** Uncovered changed lines listed before the rest is left to the raw report. */
 export const UNCOVERED_FINDING_LIMIT = 50
 
 /** What to tell a project that cannot be measured as it stands. */
-export const COVERAGE_SETUP_HINT =
+const COVERAGE_SETUP_HINT =
   'install `coverage` and `pytest` in the project virtualenv (e.g. `uv pip install coverage ' +
   'pytest`) to measure deep-tier coverage'
 

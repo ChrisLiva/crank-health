@@ -28,7 +28,7 @@ import { goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain
  * in.
  */
 
-export const GOCOGNIT_TOOL = 'gocognit'
+const GOCOGNIT_TOOL = 'gocognit'
 
 /** The import path `go run` fetches; pinned exactly in `manifest.ts`. */
 const GOCOGNIT_PACKAGE = 'github.com/uudashr/gocognit/cmd/gocognit'

@@ -26,15 +26,15 @@ import { detectNodeTool } from './node-package.ts'
  * provenance so a reader can see the repo never opted into prettier.
  */
 
-export const PRETTIER_TOOL = 'prettier'
+const PRETTIER_TOOL = 'prettier'
 
 /** npm package name; prettier's command and package names coincide. */
 const PRETTIER_PACKAGE = 'prettier'
 
 /** The one rule id every formatting failure reports under. */
-export const PRETTIER_FORMAT_RULE = 'prettier/format'
+const PRETTIER_FORMAT_RULE = 'prettier/format'
 
-export const PRETTIER_CONFIG_FILES: readonly string[] = [
+const PRETTIER_CONFIG_FILES: readonly string[] = [
   '.prettierrc',
   '.prettierrc.json',
   '.prettierrc.json5',

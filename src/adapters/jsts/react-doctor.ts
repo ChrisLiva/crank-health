@@ -37,9 +37,9 @@ import { declaresDependency, detectNodeTool } from './node-package.ts'
  * default linter down.
  */
 
-export const REACT_DOCTOR_TOOL = 'react-doctor'
+const REACT_DOCTOR_TOOL = 'react-doctor'
 
-export const REACT_DOCTOR_CONFIG_FILES: readonly string[] = [
+const REACT_DOCTOR_CONFIG_FILES: readonly string[] = [
   'doctor.config.ts',
   'doctor.config.js',
   'doctor.config.mjs',

@@ -61,7 +61,7 @@ const DEPENDENCY_ARRAY_KEYS: ReadonlySet<string> = new Set([
 ])
 
 /** The manifest a Python project's tool configuration lives in. */
-export const PYPROJECT = 'pyproject.toml'
+const PYPROJECT = 'pyproject.toml'
 
 /** A project virtualenv crank-health found, and the interpreter inside it. */
 export interface Venv {
@@ -247,7 +247,7 @@ async function declaringFile(
  * `requirements.txt`, `requirements-dev.txt`, `requirements/*.txt` (spec §1),
  * in one project directory — the repo root unless a nearer one is named.
  */
-export function requirementsFiles(files: readonly string[], directory = ROOT_PROJECT): string[] {
+function requirementsFiles(files: readonly string[], directory = ROOT_PROJECT): string[] {
   const prefix = directory === ROOT_PROJECT ? '' : `${directory}/`
   return files.filter((file) => {
     const name = file.startsWith(prefix) ? file.slice(prefix.length) : ''
@@ -264,7 +264,7 @@ export function requirementsFiles(files: readonly string[], directory = ROOT_PRO
  * other content — which TOML forbids anyway — is not recognized, and quoted key
  * segments keep their quotes. Neither can turn a real `[tool.ruff]` into a miss.
  */
-export function tomlSections(text: string): Set<string> {
+function tomlSections(text: string): Set<string> {
   const sections = new Set<string>()
   for (const line of significantLines(text)) {
     const match = /^\[\[?\s*([^\]]+?)\s*\]?\]$/.exec(line)
@@ -285,7 +285,7 @@ export function tomlSections(text: string): Set<string> {
  * declaration costs a `default-config` tag on a tool the repo owns — visible in
  * the report, never a crash.
  */
-export function tomlDependencies(text: string): Set<string> {
+function tomlDependencies(text: string): Set<string> {
   const names = new Set<string>()
   let section = ''
   let inArray = false
@@ -333,7 +333,7 @@ export function tomlDependencies(text: string): Set<string> {
  * lines (`-r other.txt`, `--index-url …`) and comments are skipped; a `-e`
  * editable install contributes nothing, because its argument is a path.
  */
-export function requirementNames(text: string): Set<string> {
+function requirementNames(text: string): Set<string> {
   const names = new Set<string>()
   for (const raw of text.split('\n')) {
     const line = raw.split('#')[0]?.trim() ?? ''
@@ -349,7 +349,7 @@ export function requirementNames(text: string): Set<string> {
  * normalization (lowercase, runs of `-`, `_` and `.` collapsed to `-`) applied
  * to everything before the first extra, marker, URL or version specifier.
  */
-export function normalizeDistribution(requirement: string): string {
+function normalizeDistribution(requirement: string): string {
   const name = requirement.trim().split(/[\s[<>=!~;(@,]/)[0] ?? ''
   return name.toLowerCase().replaceAll(/[-_.]+/g, '-')
 }

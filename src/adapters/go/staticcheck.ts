@@ -52,7 +52,7 @@ export const STATICCHECK_TOOL = 'staticcheck'
 const STATICCHECK_PACKAGE = 'honnef.co/go/tools/cmd/staticcheck'
 
 /** The config file a repo owns staticcheck through, and its only name. */
-export const STATICCHECK_CONFIG = 'staticcheck.conf'
+const STATICCHECK_CONFIG = 'staticcheck.conf'
 
 /** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
 const GO_BINARY = 'go'

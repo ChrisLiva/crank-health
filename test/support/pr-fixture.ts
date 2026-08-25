@@ -24,14 +24,14 @@ export const CLEAN = `export function bump() {
 `
 
 /** Statements after an unconditional `return` — oxlint's `no-unreachable`. */
-export const UNREACHABLE = `export function loop() {
+const UNREACHABLE = `export function loop() {
   return 1
   return 2
 }
 `
 
 /** Duplicate object keys — oxlint's `no-dupe-keys`. */
-export const DUPE_KEYS = `export function dupe() {
+const DUPE_KEYS = `export function dupe() {
   return { x: 1, x: 2 }
 }
 `

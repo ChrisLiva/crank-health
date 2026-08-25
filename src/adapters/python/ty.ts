@@ -34,13 +34,13 @@ import { defaultTypeChecker, detectPythonTool, findVenv } from './py-project.ts'
  * a test instead of quietly reporting a clean repo.
  */
 
-export const TY_TOOL = 'ty'
+const TY_TOOL = 'ty'
 
 /** PyPI distribution; ty's command and distribution names coincide. */
 const TY_DISTRIBUTION = 'ty'
 
 /** Root config artifacts that make ty repo-owned (spec §1, first check). */
-export const TY_CONFIG_FILES: readonly string[] = ['ty.toml', '.ty.toml']
+const TY_CONFIG_FILES: readonly string[] = ['ty.toml', '.ty.toml']
 
 /** `pyproject.toml` sections that make ty repo-owned. */
 const TY_SECTIONS: readonly string[] = ['tool.ty']
@@ -85,7 +85,7 @@ const SEVERITY_BY_LEVEL: Readonly<Record<string, Severity>> = {
  * the health of the code and stays advisory. On the repo's own ty config it is
  * graded like anything else: they configured the environment they are failing.
  */
-export const DEFAULT_ADVISORY_RULES: ReadonlySet<string> = new Set([
+const DEFAULT_ADVISORY_RULES: ReadonlySet<string> = new Set([
   'unresolved-import',
   'missing-typeshed-stub',
 ])

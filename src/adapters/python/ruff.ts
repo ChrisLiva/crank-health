@@ -35,14 +35,14 @@ import { detectPythonTool } from './py-project.ts'
  * {@link DEFAULT_CONFIG} materialized in the scratch dir.
  */
 
-export const RUFF_LINT_TOOL = 'ruff-lint'
-export const RUFF_FORMAT_TOOL = 'ruff-format'
+const RUFF_LINT_TOOL = 'ruff-lint'
+const RUFF_FORMAT_TOOL = 'ruff-format'
 
 /** PyPI distribution; ruff's command and distribution names coincide. */
 const RUFF_DISTRIBUTION = 'ruff'
 
 /** Root config artifacts that make ruff repo-owned (spec §1, first check). */
-export const RUFF_CONFIG_FILES: readonly string[] = ['ruff.toml', '.ruff.toml']
+const RUFF_CONFIG_FILES: readonly string[] = ['ruff.toml', '.ruff.toml']
 
 /** `pyproject.toml` sections that make ruff repo-owned. */
 const RUFF_SECTIONS: readonly string[] = ['tool.ruff']
@@ -68,7 +68,7 @@ export const RUFF_SYNTAX_CODE = 'invalid-syntax'
  * import/statement/runtime subsets of pycodestyle — and of those only the
  * correctness classes count toward the grade ({@link GRADED_DEFAULT_PREFIXES}).
  */
-export const DEFAULT_CONFIG = `# crank-health default ruff configuration.
+const DEFAULT_CONFIG = `# crank-health default ruff configuration.
 # Written into a scratch dir; the target repo is never modified.
 [lint]
 select = ["E4", "E7", "E9", "F"]

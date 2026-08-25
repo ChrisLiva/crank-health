@@ -50,13 +50,13 @@ import { detectPythonTool } from './py-project.ts'
  * is graded against by moving its own.
  */
 
-export const COMPLEXIPY_TOOL = 'complexipy'
+const COMPLEXIPY_TOOL = 'complexipy'
 
 /** PyPI distribution; complexipy's command and distribution names coincide. */
 const COMPLEXIPY_DISTRIBUTION = 'complexipy'
 
 /** Root config artifacts that make complexipy repo-owned. */
-export const COMPLEXIPY_CONFIG_FILES: readonly string[] = ['complexipy.toml', '.complexipy.toml']
+const COMPLEXIPY_CONFIG_FILES: readonly string[] = ['complexipy.toml', '.complexipy.toml']
 
 /** `pyproject.toml` sections that make complexipy repo-owned. */
 const COMPLEXIPY_SECTIONS: readonly string[] = ['tool.complexipy']

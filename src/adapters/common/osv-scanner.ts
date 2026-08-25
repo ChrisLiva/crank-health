@@ -50,7 +50,7 @@ export const OSV_SCANNER: SystemToolSpec = {
 }
 
 /** Config artifact that makes osv-scanner repo-owned (spec §1, first check). */
-export const OSV_CONFIG_FILES: readonly string[] = ['osv-scanner.toml']
+const OSV_CONFIG_FILES: readonly string[] = ['osv-scanner.toml']
 
 /** Where osv-scanner writes its report, under the scratch dir. */
 const REPORT_FILE = 'osv-scanner.json'
@@ -402,7 +402,7 @@ function fixesById(
  * sorts above `1.2.3` — and the cost of that is picking the later of two fixed
  * versions to recommend, which is a version the upgrade clears either way.
  */
-export function compareVersions(a: string, b: string): number {
+function compareVersions(a: string, b: string): number {
   const left = versionParts(a)
   const right = versionParts(b)
   for (let index = 0; index < Math.max(left.length, right.length); index++) {

@@ -65,7 +65,7 @@ export const STRYKER_TOOL = 'stryker'
 const STRYKER_PACKAGE = '@stryker-mutator/core'
 
 /** Config artifacts that make Stryker repo-owned (spec §1, first check). */
-export const STRYKER_CONFIG_FILES: readonly string[] = [
+const STRYKER_CONFIG_FILES: readonly string[] = [
   'stryker.config.json',
   'stryker.config.jsonc',
   'stryker.config.js',
@@ -78,7 +78,7 @@ export const STRYKER_CONFIG_FILES: readonly string[] = [
 ]
 
 /** What to tell a repo that has no mutation testing set up. */
-export const STRYKER_SETUP_HINT =
+const STRYKER_SETUP_HINT =
   'add a `@stryker-mutator/core` devDependency and a stryker config (plus the runner ' +
   'plugin for your test framework) to enable mutation testing'
 

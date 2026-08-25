@@ -35,12 +35,12 @@ import { detectNodeTool } from './node-package.ts'
  * that looks like the spec's and does not mean it.
  */
 
-export const FTA_TOOL = 'fta'
+const FTA_TOOL = 'fta'
 
 /** npm package name; the command it ships is `fta`. */
 const FTA_PACKAGE = 'fta-cli'
 
-export const FTA_CONFIG_FILES: readonly string[] = ['fta.json']
+const FTA_CONFIG_FILES: readonly string[] = ['fta.json']
 
 /**
  * FTA score at which a file is worth a reader's attention. fta's own bands are
@@ -48,7 +48,7 @@ export const FTA_CONFIG_FILES: readonly string[] = ['fta.json']
  * report from the last of those, so the advisory list stays short enough to be
  * read.
  */
-export const FTA_ADVISORY_SCORE = 60
+const FTA_ADVISORY_SCORE = 60
 
 /** Above this the file is flagged as `warning` rather than `info`. */
 const FTA_WARNING_SCORE = 70

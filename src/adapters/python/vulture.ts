@@ -23,7 +23,7 @@ import { detectPythonTool } from './py-project.ts'
  * framework, a decorator or `getattr`.
  */
 
-export const VULTURE_TOOL = 'vulture'
+const VULTURE_TOOL = 'vulture'
 
 /** PyPI distribution; vulture's command and distribution names coincide. */
 const VULTURE_DISTRIBUTION = 'vulture'

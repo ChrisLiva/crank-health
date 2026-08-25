@@ -47,7 +47,7 @@ import { explainMissing, systemToolVersion } from './system-tool.ts'
  * finding ids reproducible (spec §6).
  */
 
-export const OPENGREP_TOOL = 'opengrep'
+const OPENGREP_TOOL = 'opengrep'
 
 export const OPENGREP: SystemToolSpec = {
   binary: 'opengrep',

@@ -25,24 +25,6 @@
  * WARNING → `warning`, INFO → `info`.
  */
 
-/** Rule ids in {@link OPENGREP_RULES}, for tests and for the report. */
-export const OPENGREP_RULE_IDS: readonly string[] = [
-  'js-eval-call',
-  'js-function-constructor',
-  'js-child-process-shell',
-  'js-innerhtml-assignment',
-  'js-tls-verification-disabled',
-  'js-hardcoded-temp-path',
-  'python-eval-exec',
-  'python-subprocess-shell-true',
-  'python-os-system',
-  'python-yaml-unsafe-load',
-  'python-pickle-load',
-  'python-sql-string-building',
-  'python-requests-verify-disabled',
-  'python-hardcoded-temp-path',
-]
-
 /**
  * The ruleset, materialized into the scratch dir at run time. A string constant
  * rather than a `.yaml` asset because the CLI ships as a single bundled

@@ -28,7 +28,7 @@ import { CATEGORIES, REPO_SCOPE, categoryRank } from './types.ts'
 export const QUICK_MODE_DEEP_REASON = 'not assessed — run `--deep`'
 
 /** How many tools run at once. */
-export const DEFAULT_CONCURRENCY = 4
+const DEFAULT_CONCURRENCY = 4
 
 /** Per-tool wall clock budget (spec §5). */
 export const DEFAULT_TIMEOUT_MS = 120_000

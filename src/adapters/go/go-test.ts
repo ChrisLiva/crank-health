@@ -39,7 +39,7 @@ import {
  * declaration is read (`orchestrator.ts` `budgetFor`).
  */
 
-export const GO_TEST_TOOL = 'go-test'
+const GO_TEST_TOOL = 'go-test'
 
 /** `go` is the toolchain's one entry point; see `go-toolchain.ts`. */
 const GO_BINARY = 'go'

@@ -51,7 +51,7 @@ export const STRYKER_NET_TOOL = 'stryker-net'
 const STRYKER_NET_PACKAGE = 'dotnet-stryker'
 
 /** What to tell a repo that has no mutation testing set up. */
-export const STRYKER_NET_SETUP_HINT =
+const STRYKER_NET_SETUP_HINT =
   `add ${STRYKER_NET_PACKAGE} to a \`${DOTNET_TOOLS_MANIFEST}\` tools manifest ` +
   `(\`dotnet new tool-manifest && dotnet tool install ${STRYKER_NET_PACKAGE}\`) ` +
   'to enable mutation testing'
