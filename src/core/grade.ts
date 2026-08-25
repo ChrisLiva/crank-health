@@ -112,7 +112,9 @@ export const GRADE_TABLE = {
    * library check does not cover. Still a rule, still not this constant.
    */
   // Both default dead-code tools name the same export; one symbol is one
-  // finding, and the first tool in adapter order keeps it.
+  // graded finding. The first tool in adapter order keeps the row, unless the
+  // two disagree on gradeScope: then the graded row and the advisory row both
+  // stand rather than the advisory one replacing the grade.
   'dead-code': { shape: 'density', bands: { A: 0.5, B: 2, C: 5, D: 10 }, oneDefectPerAnchor: true },
 
   /**

@@ -235,7 +235,8 @@ overrides that: a repo that configured knip or fallow itself has already declare
 points are, so its own tool's findings count. Changing this rule is a version bump too. Both
 default dead-code tools, fallow and knip, run on every JS/TS repo; a symbol both name is reported
 once, kept from the first tool in adapter order (fallow), so a repo is not marked down twice for one
-export.
+export. When the two disagree on whether a file counts (each resolves entry points on its own), the
+graded row and the advisory row both stand rather than the advisory one replacing the grade.
 
 ## Output
 
