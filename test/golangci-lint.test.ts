@@ -299,7 +299,7 @@ async function scanReplaying(
   readonly warnings: readonly string[]
   readonly findings: ReturnType<typeof reportFindings>
 }> {
-  const staticcheck = (await captured('staticcheck-0.7.0.jsonl')).replaceAll(REPO, fixture.root)
+  const staticcheck = (await captured('staticcheck-0.8.1.jsonl')).replaceAll(REPO, fixture.root)
   const farm = await pathFarm({
     go: goDispatching([
       { match: '*staticcheck*', stdout: staticcheck, exitCode: 1 },

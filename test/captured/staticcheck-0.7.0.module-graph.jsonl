@@ -1,1 +1,0 @@
-{"code":"compile","severity":"error","location":{"file":"main.go","line":6,"column":2},"end":{"file":"","line":0,"column":0},"message":"cannot find module providing package example.com/absent/pkg: import lookup disabled by -mod=readonly"}

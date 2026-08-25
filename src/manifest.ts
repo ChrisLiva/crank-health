@@ -73,7 +73,7 @@ export const GO_TOOL_MANIFEST = {
   'github.com/securego/gosec/v2/cmd/gosec': 'v2.28.0',
   'github.com/uudashr/gocognit/cmd/gocognit': 'v1.2.1',
   'golang.org/x/vuln/cmd/govulncheck': 'v1.7.0',
-  'honnef.co/go/tools/cmd/staticcheck': 'v0.7.0',
+  'honnef.co/go/tools/cmd/staticcheck': 'v0.8.1',
 } as const satisfies Readonly<Record<string, string>>
 
 /**

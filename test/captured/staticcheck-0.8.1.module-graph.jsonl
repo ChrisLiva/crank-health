@@ -1,0 +1,1 @@
+{"code":"compile","severity":"error","location":{"file":"main.go","line":6,"column":2},"end":{"file":"","line":0,"column":0},"message":"no required module provides package example.com/absent/pkg; to add it:\n\tgo get example.com/absent/pkg"}
