@@ -98,9 +98,14 @@ export const osvScannerRunner: ToolRunner = {
 }
 
 /**
- * Repo-owned when `osv-scanner.toml` is present — the scanner reads that file
- * itself (it carries the repo's own advisory ignores), so ownership here is a
- * provenance tag rather than a different command line.
+ * Repo-owned when `osv-scanner.toml` is present, the file carrying the repo's
+ * own advisory ignores.
+ *
+ * osv-scanner discovers a config beside each lockfile on its own, and a root
+ * `osv-scanner.toml` reaches a nested lockfile only through `--config`. Probed
+ * on 2.5.1 against a nested lockfile: auto-discovery left 1 result standing,
+ * `--config` left 0. So the detection decides a command line as well as a
+ * provenance tag, and {@link runOsvScanner} passes `ownedVia` on.
  */
 function detectOsvScanner(ctx: DetectContext): Promise<Detection | null> {
   const configFiles = OSV_CONFIG_FILES.filter((file) => ctx.files.all.includes(file))
@@ -112,8 +117,10 @@ function detectOsvScanner(ctx: DetectContext): Promise<Detection | null> {
 
 async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
   const report = join(ctx.scratch, REPORT_FILE)
+  const ownedVia = ctx.detection?.ownedVia
+  const config = ownedVia === undefined ? undefined : join(ctx.repoRoot, ownedVia)
   const execution = await execTool(
-    systemCommand(OSV_SCANNER.binary, invocationArgs(ctx.repoRoot, report)),
+    systemCommand(OSV_SCANNER.binary, invocationArgs(ctx.repoRoot, report, config)),
     { cwd: ctx.scratch, timeoutMs: ctx.timeoutMs },
   )
 
@@ -201,8 +208,11 @@ export function centralPackageManagementReason(files: readonly string[]): string
  * is reachable. `scan source -r` walks the project for manifests and lockfiles
  * and honors `.gitignore`, which is what keeps a vendored dependency's own
  * lockfile out of the result (spec §7).
+ *
+ * @param config the repo's detected root `osv-scanner.toml`, absolute. Omitted
+ * when the repo owns none, and then the command line is unchanged.
  */
-export function invocationArgs(repoRoot: string, report: string): string[] {
+export function invocationArgs(repoRoot: string, report: string, config?: string): string[] {
   return [
     'scan',
     'source',
@@ -217,6 +227,7 @@ export function invocationArgs(repoRoot: string, report: string): string[] {
     report,
     '--verbosity',
     'error',
+    ...(config === undefined ? [] : ['--config', config]),
     repoRoot,
   ]
 }

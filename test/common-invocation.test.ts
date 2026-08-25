@@ -367,6 +367,17 @@ describe('zero footprint, in the arguments', () => {
     expect(args).not.toContain('fix')
     expect(args[args.indexOf('--output-file') + 1]).toBe('/scratch/osv-scanner.json')
   })
+
+  /**
+   * osv-scanner looks for a config beside each lockfile, so a root
+   * `osv-scanner.toml` reaches a nested lockfile only when `--config` names it.
+   * A repo that owns no config gets today's command line, byte for byte.
+   */
+  it('names a detected root config on --config, and only then', () => {
+    const withConfig = osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'), `${REPO}/osv-scanner.toml`)
+    expect(withConfig.slice(-4)).toEqual(['error', '--config', `${REPO}/osv-scanner.toml`, REPO])
+    expect(osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'))).not.toContain('--config')
+  })
 })
 
 /** A throwaway git repo (hermetic identity), scanned with `--out` kept outside. */
