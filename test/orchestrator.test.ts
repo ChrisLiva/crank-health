@@ -105,6 +105,7 @@ function deadCodePair(
   category: Category,
   knipAnchor: string,
   fallowAnchor = 'subtract',
+  fallowGradeScope = true,
 ): readonly ToolRunner[] {
   return [
     fakeRunner('fallow-dead-code', category, async () =>
@@ -115,6 +116,7 @@ function deadCodePair(
           tool: 'fallow-dead-code',
           rule: 'fallow/unused-export',
           identity: { anchor: fallowAnchor, occurrence: 0 },
+          gradeScope: fallowGradeScope,
         }),
       ]),
     ),
@@ -648,6 +650,13 @@ describe('runScan finding attribution', () => {
     expect(await tools(deadCodePair('lint', 'subtract'))).toEqual(['fallow-dead-code', 'knip'])
     // A whole unused file has no symbol to anchor on; the file still decides.
     expect(await tools(deadCodePair('dead-code', '', ''))).toEqual(['fallow-dead-code'])
+    // The two tools resolve entry points on their own, so one can demote a file
+    // to advisory while the other grades it. An advisory row is not the same
+    // verdict as a graded one and must not replace it.
+    expect(await tools(deadCodePair('dead-code', '', '', false))).toEqual([
+      'fallow-dead-code',
+      'knip',
+    ])
   })
 })
 

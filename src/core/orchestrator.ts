@@ -195,7 +195,11 @@ export async function runScan(
  * The anchor and occurrence are what both tools agree on, so they are what the
  * second copy is dropped by, and job order (fixed by adapter order) decides
  * whose verdict a reader sees. One tool reporting the same anchor twice is two
- * defects, not one, so only a different tool is dropped.
+ * defects, not one, so only a different tool is dropped. `gradeScope` is part
+ * of the key: each tool resolves entry points on its own, so one can demote a
+ * whole file to advisory while the other grades it, and dropping the graded
+ * copy for the advisory one would flatter the grade. A disagreeing pair keeps
+ * both rows, one counted and one advisory.
  */
 function attribute(records: readonly RunRecord[], projects: readonly Project[]): Finding[] {
   const projectOf = nearestProjectMap(projects)
@@ -213,6 +217,7 @@ function attribute(records: readonly RunRecord[], projects: readonly Project[]):
               finding.file,
               finding.identity.anchor,
               finding.identity.occurrence,
+              finding.gradeScope,
             ].join('\u0000')
       if (anchorKey !== undefined) {
         const claimedBy = anchorClaims.get(anchorKey)
