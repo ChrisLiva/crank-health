@@ -1,6 +1,6 @@
 import { isAbsolute, join } from 'node:path'
 import type { ToolFailure } from '../../core/exec.ts'
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type {
   Category,
   Finding,
@@ -22,7 +22,7 @@ import {
 } from '../support.ts'
 import {
   detectGoConfig,
-  goExecOptions,
+  execGo,
   projectDirectory,
   withGoGate,
   withoutFetchNarration,
@@ -53,9 +53,6 @@ const STATICCHECK_PACKAGE = 'honnef.co/go/tools/cmd/staticcheck'
 
 /** The config file a repo owns staticcheck through, and its only name. */
 const STATICCHECK_CONFIG = 'staticcheck.conf'
-
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /**
  * Five minutes, like govulncheck's: this loads the whole package graph and, on
@@ -182,7 +179,7 @@ async function runStaticcheck(ctx: RunContext): Promise<StaticcheckScan> {
     return { findings: [], rawFiles: [], emptyReason: 'no Go files' }
   }
 
-  const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), goExecOptions(ctx))
+  const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
     return { findings: [], rawFiles: [], failure: execution.failure }
   }

@@ -1,5 +1,5 @@
 import { isAbsolute, join } from 'node:path'
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type { PendingFinding, RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
 import {
@@ -14,7 +14,7 @@ import {
 } from '../support.ts'
 import {
   detectGoConfig,
-  goExecOptions,
+  execGo,
   projectDirectory,
   withGoGate,
   withoutFetchNarration,
@@ -51,9 +51,6 @@ const GOLANGCI_LINT_CONFIGS: readonly string[] = [
   '.golangci.toml',
   '.golangci.json',
 ]
-
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /**
  * Five minutes, like staticcheck's: golangci-lint loads the package graph once
@@ -99,7 +96,7 @@ async function runGolangciLint(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Go files', configOwned: true }
   }
 
-  const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), goExecOptions(ctx))
+  const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
     return {
       state: execution.failure.state,

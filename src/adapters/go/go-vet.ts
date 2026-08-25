@@ -1,4 +1,4 @@
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type { PendingFinding, RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import {
   asArray,
@@ -9,7 +9,7 @@ import {
   identify,
   repoRelative,
 } from '../support.ts'
-import { MINIMUM_GO_MINOR, goExecOptions, withGoGate } from './go-toolchain.ts'
+import { MINIMUM_GO_MINOR, execGo, withGoGate } from './go-toolchain.ts'
 
 /**
  * `go vet -json ./...` — the toolchain's own analyzer suite (spec "Categories
@@ -28,9 +28,6 @@ import { MINIMUM_GO_MINOR, goExecOptions, withGoGate } from './go-toolchain.ts'
  */
 
 export const GO_VET_TOOL = 'go-vet'
-
-/** `go` is the host here, not a fetcher; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /**
  * Five minutes, like staticcheck's: `vet` type-checks every package of the
@@ -63,7 +60,7 @@ async function runGoVet(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Go files' }
   }
 
-  const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), goExecOptions(ctx))
+  const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
     return {
       state: execution.failure.state,

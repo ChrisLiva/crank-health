@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type { ToolFailure } from '../../core/exec.ts'
 import type { RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
@@ -15,7 +15,7 @@ import {
   firstLine,
   underProject,
 } from '../support.ts'
-import { detectGoConfig, goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
+import { detectGoConfig, execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
 
 /**
  * gremlins — mutation testing for Go, and the Go adapter's only runner that
@@ -51,9 +51,6 @@ export const GREMLINS_TOOL = 'gremlins'
 
 /** The import path `go run` fetches; pinned exactly in `manifest.ts`. */
 const GREMLINS_PACKAGE = 'github.com/go-gremlins/gremlins/cmd/gremlins'
-
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /** The config names gremlins answers to, and the repo's declaration of it. */
 const GREMLINS_CONFIG_FILES: readonly string[] = ['.gremlins.yaml', '.gremlins.yml']
@@ -226,10 +223,7 @@ async function runGremlins(ctx: RunContext): Promise<ToolResult> {
   }
 
   const reportPath = join(ctx.scratch, `${GREMLINS_TOOL}-output.json`)
-  const execution = await execTool(
-    systemCommand(GO_BINARY, invocationArgs(reportPath)),
-    goExecOptions(ctx),
-  )
+  const execution = await execGo(ctx, invocationArgs(reportPath))
 
   const report = await readFileOrUndefined(reportPath)
   const rawFiles =

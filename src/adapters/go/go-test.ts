@@ -1,11 +1,11 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type { RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { firstLine } from '../support.ts'
 import {
   MINIMUM_GO_MINOR,
-  goExecOptions,
+  execGo,
   withGoGate,
   withoutFetchNarration,
 } from './go-toolchain.ts'
@@ -40,9 +40,6 @@ import {
  */
 
 const GO_TEST_TOOL = 'go-test'
-
-/** `go` is the toolchain's one entry point; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /** The honesty sentence every `go test` coverage record carries. */
 export const GO_COVERAGE_REASON =
@@ -88,11 +85,7 @@ async function runGoTest(ctx: RunContext): Promise<ToolResult> {
   // the zero-footprint contract (spec §7) says that is scratch.
   const profilePath = join(workingDir, 'coverage.out')
 
-  const options = goExecOptions(ctx)
-  const test = await execTool(
-    systemCommand(GO_BINARY, ['test', `-coverprofile=${profilePath}`, './...']),
-    options,
-  )
+  const test = await execGo(ctx, ['test', `-coverprofile=${profilePath}`, './...'])
   if (test.failure !== undefined) {
     return { state: test.failure.state, findings: [], rawFiles: [], reason: test.failure.reason }
   }
@@ -100,10 +93,7 @@ async function runGoTest(ctx: RunContext): Promise<ToolResult> {
   // The suite's own exit code is not this runner's verdict — a failing test
   // still produces coverage data, and its failures belong to the tests
   // (`coverage.ts`'s precedent). A run that wrote no profile is the failure.
-  const totals = await execTool(
-    systemCommand(GO_BINARY, ['tool', 'cover', `-func=${profilePath}`]),
-    options,
-  )
+  const totals = await execGo(ctx, ['tool', 'cover', `-func=${profilePath}`])
   if (totals.failure !== undefined || totals.exitCode !== 0) {
     return {
       state: totals.failure?.state ?? 'error',

@@ -13,7 +13,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
-import { goExecEnv, withoutFetchNarration } from '../go/go-toolchain.ts'
+import { GO_BINARY, goExecEnv, withoutFetchNarration } from '../go/go-toolchain.ts'
 import {
   asArray,
   asRecord,
@@ -463,9 +463,6 @@ function sameAdvisory(one: PackageAdvisory, other: PackageAdvisory): boolean {
 
 /** The Go module manifest that makes a directory a module worth analyzing. */
 const GO_MOD = 'go.mod'
-
-/** The fetcher: `go run <path>@<version>` builds and runs the pinned analyzer. */
-const GO_BINARY = 'go'
 
 /** The pinned analyzer's import path; see `GO_TOOL_MANIFEST`. */
 const GOVULNCHECK_PACKAGE = 'golang.org/x/vuln/cmd/govulncheck'
