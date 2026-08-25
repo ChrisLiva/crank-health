@@ -14,6 +14,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -103,12 +105,7 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
   if (execution.stdout.trim().length === 0) {
     return {
@@ -127,7 +124,7 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse knip output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse knip output: ${errorMessage(error)}`,
     }
   }
 

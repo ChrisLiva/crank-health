@@ -17,6 +17,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   readJson,
@@ -129,8 +131,7 @@ async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, 'osv-scanner.stderr.txt', execution.stderr))
   }
   if (execution.failure !== undefined) {
-    const failure = explainMissing(OSV_SCANNER, execution.failure)
-    return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+    return failed(explainMissing(OSV_SCANNER, execution.failure), rawFiles)
   }
 
   const document = await readJson(report)
@@ -157,7 +158,7 @@ async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse osv-scanner output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse osv-scanner output: ${errorMessage(error)}`,
     }
   }
 

@@ -20,6 +20,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -154,8 +156,7 @@ async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
     }
 
     if (execution.failure !== undefined) {
-      const failure = explainMissing(OPENGREP, execution.failure)
-      return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+      return failed(explainMissing(OPENGREP, execution.failure), rawFiles)
     }
 
     try {
@@ -167,7 +168,7 @@ async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
         rawFiles,
         reason:
           `could not parse opengrep output (exit ${execution.exitCode ?? 'signal'}): ` +
-          `${error instanceof Error ? error.message : String(error)}${
+          `${errorMessage(error)}${
             execution.stderr.trim().length === 0 ? '' : ` — ${firstLine(execution.stderr)}`
           }`,
       }

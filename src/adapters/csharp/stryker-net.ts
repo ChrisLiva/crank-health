@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
 import type { ToolFailure } from '../../core/exec.ts'
@@ -11,7 +10,14 @@ import {
   toPendingFindings,
 } from '../mutation-report.ts'
 import type { Mutant } from '../mutation-report.ts'
-import { firstLine, identify } from '../support.ts'
+import {
+  errorMessage,
+  failed,
+  firstLine,
+  identify,
+  readFileOrUndefined,
+  unavailable,
+} from '../support.ts'
 import {
   DOTNET,
   DOTNET_TOOLS_MANIFEST,
@@ -119,7 +125,7 @@ export function strykerNetOutcome(
   } catch (error) {
     return {
       state: 'error',
-      reason: `could not parse Stryker.NET's mutation report: ${describe(error)}`,
+      reason: `could not parse Stryker.NET's mutation report: ${errorMessage(error)}`,
     }
   }
   if (mutants.length === 0) {
@@ -163,7 +169,7 @@ async function runStrykerNet(ctx: RunContext): Promise<ToolResult> {
   const options = dotnetExecOptions(ctx, join(ctx.repoRoot, ctx.project.path))
   const gate = await sdkGate(options)
   if (gate !== undefined) {
-    return { state: gate.state, findings: [], rawFiles: [], reason: gate.reason }
+    return failed(gate)
   }
 
   const restore = await execTool(systemCommand(DOTNET.binary, TOOL_RESTORE_ARGS), options)
@@ -230,20 +236,4 @@ function commandFailure(execution: StrykerNetExecution, label: string): ToolFail
     }
   }
   return undefined
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-async function readFileOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

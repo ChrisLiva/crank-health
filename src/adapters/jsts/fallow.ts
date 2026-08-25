@@ -16,6 +16,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -109,7 +111,7 @@ async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
   try {
     report = parseDeadCode(run.stdout)
   } catch (error) {
-    return failed(FALLOW_DEAD_CODE_TOOL, run.rawFiles, error)
+    return parseFailure(FALLOW_DEAD_CODE_TOOL, run.rawFiles, error)
   }
 
   const analyzed = new Set(ctx.files)
@@ -158,7 +160,7 @@ async function runHealth(ctx: RunContext): Promise<ToolResult> {
   try {
     report = parseHealth(run.stdout)
   } catch (error) {
-    return failed(FALLOW_HEALTH_TOOL, run.rawFiles, error)
+    return parseFailure(FALLOW_HEALTH_TOOL, run.rawFiles, error)
   }
 
   const analyzed = new Set(ctx.files)
@@ -245,12 +247,7 @@ async function invoke(
     return {
       stdout: execution.stdout,
       rawFiles,
-      failure: {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      },
+      failure: failed(execution.failure, rawFiles),
     }
   }
   // fallow exits 1 whenever it found anything, so only an empty stdout is a
@@ -270,13 +267,11 @@ async function invoke(
   return { stdout: execution.stdout, rawFiles }
 }
 
-function failed(tool: string, rawFiles: string[], error: unknown): ToolResult {
-  return {
-    state: 'error',
-    findings: [],
+function parseFailure(tool: string, rawFiles: string[], error: unknown): ToolResult {
+  return failed(
+    { state: 'error', reason: `could not parse ${tool} output: ${errorMessage(error)}` },
     rawFiles,
-    reason: `could not parse ${tool} output: ${error instanceof Error ? error.message : String(error)}`,
-  }
+  )
 }
 
 /** The parts of `fallow dead-code --format json` we report on. */

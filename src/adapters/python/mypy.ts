@@ -15,6 +15,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -183,12 +185,7 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
 
   let diagnostics: MypyDiagnostic[] = []
@@ -196,7 +193,7 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
   try {
     diagnostics = parseMypyJsonl(execution.stdout)
   } catch (error) {
-    parseError = error instanceof Error ? error.message : String(error)
+    parseError = errorMessage(error)
   }
 
   // mypy exits 0 for a clean run and 1 for one that found type errors; anything

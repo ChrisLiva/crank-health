@@ -5,7 +5,7 @@ import { dnxCommand, execTool, writeScratchRaw } from '../../core/exec.ts'
 import type { ToolFailure } from '../../core/exec.ts'
 import type { PendingFinding, RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedDotnetSpec, pinnedDotnetVersion } from '../../manifest.ts'
-import { byLocation, firstLine, identify } from '../support.ts'
+import { byLocation, failed, firstLine, identify } from '../support.ts'
 import { dotnetExecOptions, sdkGate } from './dotnet-project.ts'
 
 /**
@@ -306,8 +306,7 @@ async function runRoslynator(ctx: RunContext): Promise<ToolResult> {
   // answers for the directory the run uses (see `dotnet-project.ts`).
   const options = dotnetExecOptions(ctx, scratch)
   const gate = await sdkGate(options)
-  if (gate !== undefined)
-    return { state: gate.state, findings: [], rawFiles: [], reason: gate.reason }
+  if (gate !== undefined) return failed(gate)
 
   // One run per project file, sequentially: a directory holding several
   // `.csproj`s is one project to discovery, and skipping any of them would

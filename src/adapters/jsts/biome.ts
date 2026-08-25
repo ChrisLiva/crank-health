@@ -17,6 +17,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   identify,
   repoRelative,
 } from '../support.ts'
@@ -146,12 +148,7 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
     }
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     let diagnostics: BiomeDiagnostic[]
@@ -162,7 +159,7 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
         state: 'error',
         findings: [],
         rawFiles,
-        reason: `could not parse biome output: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `could not parse biome output: ${errorMessage(error)}`,
       }
     }
 

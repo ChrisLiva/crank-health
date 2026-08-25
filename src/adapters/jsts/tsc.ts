@@ -12,7 +12,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedVersion } from '../../manifest.ts'
-import { byLocation, firstLine, identify, repoRelative } from '../support.ts'
+import { byLocation, failed, firstLine, identify, repoRelative } from '../support.ts'
 import { detectNodeTool } from './node-package.ts'
 
 /**
@@ -197,13 +197,7 @@ async function runTsc(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-      configOwned: ownsConfig,
-    }
+    return { ...failed(execution.failure, rawFiles), configOwned: ownsConfig }
   }
 
   // The findings this run actually produced: parsed, then narrowed to the files

@@ -16,6 +16,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -142,12 +144,7 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
     }
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     // ESLint exits 1 when it found problems and 2 when it could not run at all;
@@ -169,7 +166,7 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
         state: 'error',
         findings: [],
         rawFiles,
-        reason: `could not parse eslint output: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `could not parse eslint output: ${errorMessage(error)}`,
       }
     }
 

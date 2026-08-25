@@ -8,7 +8,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedVersion } from '../../manifest.ts'
-import { batchFiles, byLocation, firstLine, identify, repoRelative } from '../support.ts'
+import { batchFiles, byLocation, failed, firstLine, identify, repoRelative } from '../support.ts'
 import { detectNodeTool } from './node-package.ts'
 
 /**
@@ -132,12 +132,7 @@ async function runPrettier(ctx: RunContext): Promise<ToolResult> {
     }
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     // 0 = everything matched, 1 = some files differ, 2 = prettier itself failed.

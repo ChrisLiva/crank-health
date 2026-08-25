@@ -15,6 +15,7 @@ import {
   asRecord,
   asString,
   byLocation,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -137,13 +138,7 @@ async function resultFor(
 ): Promise<ToolResult> {
   const configOwned = ctx.detection !== null
   if (scan.failure !== undefined) {
-    return {
-      state: scan.failure.state,
-      findings: [],
-      rawFiles: scan.rawFiles,
-      reason: scan.failure.reason,
-      configOwned,
-    }
+    return { ...failed(scan.failure, scan.rawFiles), configOwned }
   }
   return Promise.resolve({
     state: 'ok',

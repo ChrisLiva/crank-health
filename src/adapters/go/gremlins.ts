@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeScratchRaw } from '../../core/exec.ts'
 import type { ToolFailure } from '../../core/exec.ts'
@@ -13,6 +12,8 @@ import {
   asString,
   compare,
   firstLine,
+  readFileOrUndefined,
+  unavailable,
   underProject,
 } from '../support.ts'
 import { detectGoConfig, execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
@@ -261,18 +262,6 @@ function invocationArgs(reportPath: string): string[] {
 function parseDocument(json: string): unknown {
   try {
     return JSON.parse(json)
-  } catch {
-    return undefined
-  }
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-async function readFileOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8')
   } catch {
     return undefined
   }

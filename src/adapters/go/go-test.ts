@@ -2,13 +2,8 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeScratchRaw } from '../../core/exec.ts'
 import type { RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
-import { firstLine } from '../support.ts'
-import {
-  MINIMUM_GO_MINOR,
-  execGo,
-  withGoGate,
-  withoutFetchNarration,
-} from './go-toolchain.ts'
+import { failed, firstLine, unavailable } from '../support.ts'
+import { MINIMUM_GO_MINOR, execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
 
 /**
  * `go test` — the deep tier's Go coverage run, the toolchain's own and nothing
@@ -87,7 +82,7 @@ async function runGoTest(ctx: RunContext): Promise<ToolResult> {
 
   const test = await execGo(ctx, ['test', `-coverprofile=${profilePath}`, './...'])
   if (test.failure !== undefined) {
-    return { state: test.failure.state, findings: [], rawFiles: [], reason: test.failure.reason }
+    return failed(test.failure)
   }
 
   // The suite's own exit code is not this runner's verdict — a failing test
@@ -141,8 +136,4 @@ export function parseCoverageTotal(funcOutput: string): number | undefined {
     if (percent !== undefined) return Number(percent)
   }
   return undefined
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
 }

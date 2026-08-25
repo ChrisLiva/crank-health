@@ -15,6 +15,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -133,12 +135,7 @@ async function runPyright(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
 
   let report: PyrightReport
@@ -153,7 +150,7 @@ async function runPyright(ctx: RunContext): Promise<ToolResult> {
       rawFiles,
       reason:
         `could not parse pyright output (exit ${execution.exitCode ?? 'signal'}): ` +
-        `${error instanceof Error ? error.message : String(error)}${suffix(execution.stderr)}`,
+        `${errorMessage(error)}${suffix(execution.stderr)}`,
     }
   }
 

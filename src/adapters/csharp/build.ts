@@ -17,6 +17,7 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
   firstLine,
   identify,
   repoRelative,
@@ -529,7 +530,7 @@ function parseFailure(rawFiles: readonly string[], error: unknown): ToolResult {
     state: 'error',
     findings: [],
     rawFiles,
-    reason: `could not parse the build SARIF: ${error instanceof Error ? error.message : String(error)}`,
+    reason: `could not parse the build SARIF: ${errorMessage(error)}`,
   }
 }
 

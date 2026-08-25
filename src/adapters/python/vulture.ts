@@ -8,7 +8,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedPythonVersion } from '../../manifest.ts'
-import { byLocation, firstLine, identify, repoRelative } from '../support.ts'
+import { byLocation, failed, firstLine, identify, repoRelative } from '../support.ts'
 import { detectPythonTool } from './py-project.ts'
 
 /**
@@ -84,12 +84,7 @@ async function runVulture(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
   if (execution.exitCode === undefined || !EXPECTED_EXIT_CODES.has(execution.exitCode)) {
     return {

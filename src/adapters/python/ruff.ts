@@ -19,6 +19,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -149,7 +151,7 @@ async function runRuffLint(ctx: RunContext): Promise<ToolResult> {
   try {
     diagnostics = run.batches.flatMap((stdout) => parseRuffJson(stdout))
   } catch (error) {
-    return failed(RUFF_LINT_TOOL, run.rawFiles, error)
+    return parseFailure(RUFF_LINT_TOOL, run.rawFiles, error)
   }
 
   const analyzed = new Set(ctx.files)
@@ -177,7 +179,7 @@ async function runRuffFormat(ctx: RunContext): Promise<ToolResult> {
   try {
     diagnostics = run.batches.flatMap((stdout) => parseRuffJson(stdout))
   } catch (error) {
-    return failed(RUFF_FORMAT_TOOL, run.rawFiles, error)
+    return parseFailure(RUFF_FORMAT_TOOL, run.rawFiles, error)
   }
 
   const analyzed = new Set(ctx.files)
@@ -420,12 +422,7 @@ async function invoke(ctx: RunContext, tool: string, subcommand: string[]): Prom
       return {
         batches: stdouts,
         rawFiles,
-        failure: {
-          state: execution.failure.state,
-          findings: [],
-          rawFiles,
-          reason: execution.failure.reason,
-        },
+        failure: failed(execution.failure, rawFiles),
       }
     }
 
@@ -451,13 +448,11 @@ async function invoke(ctx: RunContext, tool: string, subcommand: string[]): Prom
   return { batches: stdouts, rawFiles }
 }
 
-function failed(tool: string, rawFiles: string[], error: unknown): ToolResult {
-  return {
-    state: 'error',
-    findings: [],
+function parseFailure(tool: string, rawFiles: string[], error: unknown): ToolResult {
+  return failed(
+    { state: 'error', reason: `could not parse ${tool} output: ${errorMessage(error)}` },
     rawFiles,
-    reason: `could not parse ${tool} output: ${error instanceof Error ? error.message : String(error)}`,
-  }
+  )
 }
 
 /**

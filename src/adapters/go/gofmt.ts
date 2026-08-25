@@ -4,6 +4,7 @@ import type { PendingFinding, RunContext, ToolResult, ToolRunner } from '../../c
 import {
   batchFiles,
   byLocation,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -76,12 +77,7 @@ async function runGofmt(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, `gofmt${suffix}.txt`, execution.stdout))
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
     // `gofmt -l` exits 0 whether or not it listed anything; a non-zero exit is
     // gofmt itself failing (an unparseable file), never a finding.

@@ -2,7 +2,15 @@ import { writeScratchRaw } from '../../core/exec.ts'
 import { COMPLEXITY_CEILING } from '../../core/grade.ts'
 import type { RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
-import { asArray, asNumber, asRecord, asString, firstLine, underProject } from '../support.ts'
+import {
+  asArray,
+  asNumber,
+  asRecord,
+  asString,
+  failed,
+  firstLine,
+  underProject,
+} from '../support.ts'
 import { execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
 
 /**
@@ -68,12 +76,7 @@ async function runGocognit(ctx: RunContext): Promise<ToolResult> {
 
   const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles: [],
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure)
   }
 
   const rawFiles = [await writeScratchRaw(ctx.scratch, RAW_NAME, execution.stdout)]

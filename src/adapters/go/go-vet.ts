@@ -5,6 +5,7 @@ import {
   asRecord,
   asString,
   byLocation,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -62,12 +63,7 @@ async function runGoVet(ctx: RunContext): Promise<ToolResult> {
 
   const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles: [],
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure)
   }
 
   const rawFiles = [await writeScratchRaw(ctx.scratch, RAW_NAME, execution.stdout)]

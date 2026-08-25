@@ -16,9 +16,12 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
+  unavailable,
 } from '../support.ts'
 import { detectPythonTool, findVenv } from './py-project.ts'
 
@@ -186,12 +189,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
       rawFiles.push(staged)
     }
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
     if (execution.exitCode !== 0) {
       return {
@@ -216,7 +214,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
   })
   rawFiles.unshift(await writeScratchRaw(ctx.scratch, 'cosmic-ray-dump.jsonl', dump.stdout))
   if (dump.failure !== undefined) {
-    return { state: dump.failure.state, findings: [], rawFiles, reason: dump.failure.reason }
+    return failed(dump.failure, rawFiles)
   }
 
   let mutants: CosmicRayMutant[]
@@ -227,7 +225,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse the cosmic-ray session dump: ${describe(error)}`,
+      reason: `could not parse the cosmic-ray session dump: ${errorMessage(error)}`,
     }
   }
 
@@ -470,14 +468,6 @@ export function toPendingFindings(mutants: readonly CosmicRayMutant[]): PendingF
 /** A TOML basic string. Paths and commands are the only values we ever write. */
 function tomlString(value: string): string {
   return JSON.stringify(value)
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function compare(a: string, b: string): number {

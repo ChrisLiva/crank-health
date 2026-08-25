@@ -15,6 +15,7 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
   identify,
   readJson,
   repoRelative,
@@ -127,7 +128,7 @@ async function runGitleaks(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse gitleaks output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse gitleaks output: ${errorMessage(error)}`,
     }
   }
 

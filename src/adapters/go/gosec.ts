@@ -15,6 +15,7 @@ import {
   asString,
   byLocation,
   compare,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -106,12 +107,7 @@ async function runGosec(ctx: RunContext): Promise<ToolResult> {
 
   const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles: [],
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure)
   }
 
   // Scrubbed on the way to disk, never after: the run directory must not hold a

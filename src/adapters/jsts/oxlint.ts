@@ -18,6 +18,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -135,12 +137,7 @@ async function runOxlint(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(...(await stageRaw(ctx.scratch, suffix, execution.stdout, execution.stderr)))
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     // A run that matched no files after the repo's own ignore patterns prints
@@ -163,7 +160,7 @@ async function runOxlint(ctx: RunContext): Promise<ToolResult> {
         state: 'error',
         findings: [],
         rawFiles,
-        reason: `could not parse oxlint output: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `could not parse oxlint output: ${errorMessage(error)}`,
       }
     }
 

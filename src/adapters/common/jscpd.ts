@@ -19,6 +19,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   readJson,
@@ -284,13 +286,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      configOwned: false,
-      reason: execution.failure.reason,
-    }
+    return { ...failed(execution.failure, rawFiles), configOwned: false }
   }
 
   const document = await readJson(join(output, REPORT_FILE))
@@ -319,7 +315,7 @@ async function runJscpd(ctx: RunContext): Promise<ToolResult> {
       findings: [],
       rawFiles,
       configOwned: false,
-      reason: `could not parse jscpd output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse jscpd output: ${errorMessage(error)}`,
     }
   }
 

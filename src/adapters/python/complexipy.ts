@@ -1,4 +1,4 @@
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/exec.ts'
 import { COMPLEXITY_CEILING } from '../../core/grade.ts'
@@ -17,8 +17,11 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
+  readFileOrUndefined,
   repoRelative,
 } from '../support.ts'
 import { detectPythonTool } from './py-project.ts'
@@ -124,12 +127,7 @@ async function runComplexipy(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, 'complexipy.stderr.txt', execution.stderr))
   }
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
 
   const measured = await readFileOrUndefined(join(outputDir, JSON_REPORT))
@@ -167,7 +165,7 @@ async function runComplexipy(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse complexipy output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse complexipy output: ${errorMessage(error)}`,
     }
   }
 
@@ -297,12 +295,4 @@ export function toPendingFindings(
       anchor: violation.name,
     }))
     .toSorted(byLocation)
-}
-
-async function readFileOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8')
-  } catch {
-    return undefined
-  }
 }
