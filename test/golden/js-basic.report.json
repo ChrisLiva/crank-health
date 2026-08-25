@@ -3,7 +3,7 @@
   "crankHealth": "0.12.0",
   "repo": {
     "path": "<repo>",
-    "commit": "1ef990be72b477df6dfdf1ea506c796cdcea30ca"
+    "commit": "7884bf13b6a45757e42ccadd6d59cf21fd559a20"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -28,7 +28,7 @@
     },
     "dead-code": {
       "status": "graded",
-      "grade": "F"
+      "grade": "D"
     },
     "complexity": {
       "status": "graded",
@@ -53,7 +53,7 @@
   },
   "gradeBasis": {
     "dead-code": {
-      "value": 2,
+      "value": 1,
       "denominator": 0.1,
       "unit": "weighted findings per KLOC"
     },
@@ -92,7 +92,7 @@
   },
   "languages": {
     "js-ts": {
-      "dead-code": 2,
+      "dead-code": 1,
       "complexity": 1,
       "lint": 4,
       "format": 1
@@ -140,7 +140,7 @@
         },
         "dead-code": {
           "status": "graded",
-          "grade": "F"
+          "grade": "D"
         },
         "complexity": {
           "status": "graded",
@@ -425,23 +425,6 @@
         "startCol": 16,
         "endLine": 5,
         "endCol": 16
-      },
-      "message": "Export `subtract` is never used",
-      "provenance": "default-config"
-    },
-    {
-      "id": "0c1770f8cbed82ac",
-      "category": "dead-code",
-      "tool": "knip",
-      "rule": "knip/unused-exports",
-      "severity": "warning",
-      "file": "src/clean.js",
-      "project": ".",
-      "range": {
-        "startLine": 5,
-        "startCol": 17,
-        "endLine": 5,
-        "endCol": 17
       },
       "message": "Export `subtract` is never used",
       "provenance": "default-config"

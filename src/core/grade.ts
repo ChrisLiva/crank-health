@@ -111,7 +111,9 @@ export const GRADE_TABLE = {
    * its tests and its examples — the same false positive, reached by a rule the
    * library check does not cover. Still a rule, still not this constant.
    */
-  'dead-code': { shape: 'density', bands: { A: 0.5, B: 2, C: 5, D: 10 } },
+  // Both default dead-code tools name the same export; one symbol is one
+  // finding, and the first tool in adapter order keeps it.
+  'dead-code': { shape: 'density', bands: { A: 0.5, B: 2, C: 5, D: 10 }, oneDefectPerAnchor: true },
 
   /**
    * % of files failing the formatter. A ≤1, B ≤10, C ≤30, D ≤60.
@@ -202,7 +204,12 @@ export const SEVERITY_WEIGHTS: Readonly<Record<Severity, number>> = {
 type Bands = { readonly A: number; readonly B: number; readonly C: number; readonly D: number }
 
 type GradeRule =
-  | { readonly shape: 'density'; readonly bands: Bands; readonly severities?: readonly Severity[] }
+  | {
+      readonly shape: 'density'
+      readonly bands: Bands
+      readonly severities?: readonly Severity[]
+      readonly oneDefectPerAnchor?: true
+    }
   | { readonly shape: 'ratio'; readonly bands: Bands; readonly higherIsBetter?: boolean }
   | {
       readonly shape: 'absolute'
@@ -236,6 +243,17 @@ export function gradeCategory(category: Category, input: GradeInput): Grade {
     case 'absolute':
       return gradeAbsolute(category, input.findings)
   }
+}
+
+/**
+ * Whether this category counts one defect per source anchor, so a second tool
+ * naming a symbol the first already named adds no finding. The rule lives in
+ * {@link GRADE_TABLE} and the union that carries it is module-local, so callers
+ * outside this file read the answer as a boolean rather than the shape.
+ */
+export function dedupesByAnchor(category: Category): boolean {
+  const rule: GradeRule = GRADE_TABLE[category]
+  return rule.shape === 'density' && rule.oneDefectPerAnchor === true
 }
 
 /**

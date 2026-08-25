@@ -13,7 +13,7 @@ Planted, one per category the JS/TS adapter can reach without a repo config:
 | lint      | `src/dupe-keys.js`     | `no-dupe-keys`                                  |
 | lint      | `src/unreachable.js`   | `no-unreachable`                                |
 | format    | `src/unformatted.js`   | does not match prettier's defaults              |
-| dead-code | `src/clean.js`         | `subtract` is exported and never imported (both fallow and knip catch it) |
+| dead-code | `src/clean.js`         | `subtract` is exported and never imported (fallow and knip both see it; the report keeps one finding) |
 | complexity| `src/complex.js`       | `classify` is over cognitive complexity 15      |
 
 Everything else is deliberately clean; a finding elsewhere is a false positive.

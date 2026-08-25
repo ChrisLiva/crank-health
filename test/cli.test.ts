@@ -100,7 +100,7 @@ describe(
         schemaVersion: number
       }
       expect(report.schemaVersion).toBe(2)
-      expect(report.findings).toHaveLength(7)
+      expect(report.findings).toHaveLength(6)
       expect(report.advisories).toHaveLength(1)
     })
 

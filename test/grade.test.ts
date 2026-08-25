@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareGrades,
+  dedupesByAnchor,
   failingFilePercent,
   gradeAbsolute,
   gradeDensity,
@@ -106,6 +107,15 @@ describe('density grades (dead code)', () => {
     [21, 'F'], // 10.5
   ])('bands %i dead-code errors as %s', (count, grade) => {
     expect(gradeDensity('dead-code', makeFindings(count, 'error', 'dead-code'), KLOC)).toBe(grade)
+  })
+
+  /**
+   * Two default JS/TS tools name the same unused export, so the table says
+   * dead-code counts one defect per anchor; no other category opts in.
+   */
+  it('opts dead-code, and only dead-code, into one defect per anchor', () => {
+    expect(dedupesByAnchor('dead-code')).toBe(true)
+    expect(dedupesByAnchor('lint')).toBe(false)
   })
 })
 

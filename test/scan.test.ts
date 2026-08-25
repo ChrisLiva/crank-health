@@ -39,15 +39,6 @@ const PLANTED = [
     gradeScope: true,
   },
   {
-    category: 'dead-code',
-    tool: 'knip',
-    rule: 'knip/unused-exports',
-    file: 'src/clean.js',
-    startLine: 5,
-    severity: 'warning',
-    gradeScope: true,
-  },
-  {
     category: 'complexity',
     tool: 'fallow-health',
     rule: 'fallow/complexity',
@@ -215,7 +206,7 @@ describe('quick scan of the js-basic fixture', () => {
         status: 'not-assessed',
         reason: 'no tsconfig.json and no TypeScript sources — nothing owns the types category',
       },
-      'dead-code': { status: 'graded', grade: 'F' },
+      'dead-code': { status: 'graded', grade: 'D' },
       complexity: { status: 'graded', grade: 'D' },
       // jscpd found no clones: 0% duplicated tokens → A (A ≤3).
       duplication: { status: 'graded', grade: 'A' },
@@ -358,12 +349,16 @@ describe('quick scan of the js-library fixture', () => {
   })
 
   /**
-   * `src/util.js` is byte-identical to js-basic's `src/clean.js`, where the
-   * same two findings are graded. The only difference is the manifest: this one
-   * declares `exports`/`types`, so both tools' verdicts are still reported, at
-   * the same severity, rule and anchor, and neither one moves the grade.
+   * `src/util.js` is byte-identical to js-basic's `src/clean.js`, where the same
+   * export is graded. The only difference is the manifest: this one declares
+   * `exports`/`types`, so the finding is still reported, at the same severity,
+   * rule and anchor, and does not move the grade.
+   *
+   * knip names the same export and its row leaves `advisories[]` entirely: the
+   * anchor dedupe runs in `attribute()`, before anything reads `gradeScope`, so
+   * a reader of this report sees one tool's verdict rather than two.
    */
-  it('reports both tools’ unused-export findings, and grades neither', () => {
+  it('reports the unused export once, advisory, and grades nothing', () => {
     const exports = findings.filter((finding) => DEMOTED_EXPORT_RULES.has(finding.rule))
     expect(
       exports.map((finding) => ({ ...shape(finding), provenance: finding.provenance })),
@@ -378,19 +373,9 @@ describe('quick scan of the js-library fixture', () => {
         gradeScope: false,
         provenance: 'default-config',
       },
-      {
-        category: 'dead-code',
-        tool: 'knip',
-        rule: 'knip/unused-exports',
-        file: 'src/util.js',
-        startLine: 5,
-        severity: 'warning',
-        gradeScope: false,
-        provenance: 'default-config',
-      },
     ])
     // The demotion has to reach the grade, or "advisory" is only a label: the
-    // identical fixture with an application manifest grades dead-code F.
+    // identical fixture with an application manifest grades dead-code D.
     expect(scan.report.categories['dead-code']).toEqual({ status: 'graded', grade: 'A' })
   })
 })
@@ -479,26 +464,8 @@ describe('quick scan of the ts-owned fixture', () => {
       },
       {
         category: 'dead-code',
-        tool: 'knip',
-        rule: 'knip/unused-file',
-        file: 'src/lint.js',
-        startLine: 1,
-        severity: 'warning',
-        gradeScope: true,
-      },
-      {
-        category: 'dead-code',
         tool: 'fallow-dead-code',
         rule: 'fallow/unused-export',
-        file: 'src/util.ts',
-        startLine: 5,
-        severity: 'warning',
-        gradeScope: true,
-      },
-      {
-        category: 'dead-code',
-        tool: 'knip',
-        rule: 'knip/unused-exports',
         file: 'src/util.ts',
         startLine: 5,
         severity: 'warning',

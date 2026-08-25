@@ -1,8 +1,8 @@
 # Fix plan
 
-`<repo>` @ `1ef990be72b477df6dfdf1ea506c796cdcea30ca` · crank-health 0.12.0 · quick profile
+`<repo>` @ `7884bf13b6a45757e42ccadd6d59cf21fd559a20` · crank-health 0.12.0 · quick profile
 
-Grades: security not assessed · types not assessed · dead code F · complexity D · duplication A · lint F · format C · test quality not assessed
+Grades: security not assessed · types not assessed · dead code D · complexity D · duplication A · lint F · format C · test quality not assessed
 
 ## Ground rules
 
@@ -14,14 +14,13 @@ Grades: security not assessed · types not assessed · dead code F · complexity
 
 ## Tasks
 
-### T1 — Remove 2 unused exports
+### T1 — Remove 1 unused export
 
-Grade impact: dead code · F → A
+Grade impact: dead code · D → A
 
 - `src/clean.js:5` `fallow/unused-export` — Export `subtract` is never used
-- `src/clean.js:5` `knip/unused-exports` — Export `subtract` is never used
 
-Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json)
+Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt)
 
 Verify: `npx crank-health --only dead-code --fail-under A`
 
@@ -77,4 +76,4 @@ Verify: `npx crank-health --only lint --fail-under A`
 
 ---
 
-Full findings (8) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
+Full findings (7) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
