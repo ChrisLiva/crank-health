@@ -1,0 +1,8 @@
+# crank-health's own osv-scanner config. test/fixtures/sec-basic pins
+# lodash 4.17.15 on purpose; crank-health passes this file on --config, so the
+# override reaches that nested lockfile.
+[[PackageOverrides]]
+name = "lodash"
+ecosystem = "npm"
+ignore = true
+reason = "planted vulnerable dependency in test/fixtures/sec-basic"

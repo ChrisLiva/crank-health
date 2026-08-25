@@ -1,0 +1,13 @@
+# crank-health's own zizmor config. test/fixtures/sec-basic/.github/workflows/ci.yml
+# is planted to fail all four audits. zizmor 1.29.0 matches ignore entries on
+# the workflow filename only, so this also hides a workflow named ci.yml
+# anywhere in this repo; the repo has no .github/ of its own.
+rules:
+  dangerous-triggers:
+    ignore: [ci.yml]
+  excessive-permissions:
+    ignore: [ci.yml]
+  artipacked:
+    ignore: [ci.yml]
+  unpinned-uses:
+    ignore: [ci.yml]
