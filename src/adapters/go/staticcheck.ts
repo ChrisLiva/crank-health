@@ -164,7 +164,7 @@ function invocationArgs(): string[] {
  * The run itself, memoized: spawn once, stage the stream once, identify once.
  *
  * **Exit 1 is not a failure.** staticcheck exits 1 whenever it reported
- * anything at all (probed on v0.7.0), so the exit code alone cannot separate "I
+ * anything at all (probed on v0.8.1), so the exit code alone cannot separate "I
  * found problems" from "I could not run". What separates them is whether the
  * stream carries records: exit non-zero with nothing parsed is the tool failing
  * and says so with its own stderr.
@@ -266,8 +266,11 @@ const COMPILE_CODE = 'compile'
 /**
  * The three sentences `go` uses for "this package is not in the module graph",
  * quoted from the toolchain: a missing dependency, a dependency the graph does
- * not provide, and the `-mod=readonly` refusal to add one (probed on go 1.26.6
- * with a `staticcheck v0.7.0` run against an absent import).
+ * not provide, and the `-mod=readonly` refusal to add one. go 1.27 with
+ * `staticcheck v0.8.1` against an absent import under `GOPROXY=off` produces
+ * the second (`test/captured/staticcheck-0.8.1.module-graph.jsonl`); go 1.26
+ * produced `cannot find module providing package …: import lookup disabled by
+ * -mod=readonly` for the same module, so the first and third stay too.
  */
 const MODULE_GRAPH_FAILURES: readonly string[] = [
   'cannot find module providing package',
@@ -301,7 +304,7 @@ interface Placed {
 
 /**
  * A record's place in the repo. staticcheck reports it three ways (probed on
- * v0.7.0): an **absolute** path for a check it ran, a path **relative** to the
+ * v0.8.1): an **absolute** path for a check it ran, a path **relative** to the
  * run's directory for a module-graph compile error, and an **empty** one for an
  * in-package type error — whose message carries `# <package>` and then
  * `file:line:col: …` instead. All three land on one repo-relative posix path.
