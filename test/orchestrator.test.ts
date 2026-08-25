@@ -94,6 +94,46 @@ const ok = (findings: readonly Finding[] = []): ToolResult => ({
 
 const never = () => new Promise<ToolResult>(() => {})
 
+/**
+ * The two default JS/TS dead-code tools, in adapter order, each reporting one
+ * finding on `src/a.ts` under its own rule and its own id. `computeAnchors`
+ * gives a symbol-level finding the symbol name as its anchor and an unused-file
+ * one the empty string, which is what `fallowAnchor` and `knipAnchor` stand in
+ * for here.
+ */
+function deadCodePair(
+  category: Category,
+  knipAnchor: string,
+  fallowAnchor = 'subtract',
+  fallowGradeScope = true,
+): readonly ToolRunner[] {
+  return [
+    fakeRunner('fallow-dead-code', category, async () =>
+      ok([
+        makeFinding({
+          id: 'fallow-id',
+          category,
+          tool: 'fallow-dead-code',
+          rule: 'fallow/unused-export',
+          identity: { anchor: fallowAnchor, occurrence: 0 },
+          gradeScope: fallowGradeScope,
+        }),
+      ]),
+    ),
+    fakeRunner('knip', category, async () =>
+      ok([
+        makeFinding({
+          id: 'knip-id',
+          category,
+          tool: 'knip',
+          rule: 'knip/unused-exports',
+          identity: { anchor: knipAnchor, occurrence: 0 },
+        }),
+      ]),
+    ),
+  ]
+}
+
 /** A repo-owned detection; the details never matter, only that it is not null. */
 const DETECTION: Detection = { reason: 'config', configFiles: ['x'], installed: false }
 
@@ -588,6 +628,35 @@ describe('runScan finding attribution', () => {
       ['in-web', 'packages/web'],
     ])
     expect(result.findings.find((finding) => finding.id === 'in-ci')).not.toHaveProperty('project')
+  })
+
+  /**
+   * fallow and knip both run by default on a JS/TS repo and both name the same
+   * unused export, under their own rule and their own id. `dead-code` opts into
+   * one defect per anchor, so the anchor decides: the first tool in adapter
+   * order keeps the finding and the second's copy never reaches the report.
+   */
+  it('keeps one dead-code finding per anchor, from the first tool that names it', async () => {
+    const tools = async (runners: readonly ToolRunner[]) =>
+      (await runScan(REPO, [languageAdapter('js-ts', runners)])).findings.map(
+        (finding) => finding.tool,
+      )
+
+    // Same symbol, same file: fallow runs first, so fallow's finding is the one.
+    expect(await tools(deadCodePair('dead-code', 'subtract'))).toEqual(['fallow-dead-code'])
+    // Different symbols in the same file are different defects.
+    expect(await tools(deadCodePair('dead-code', 'add'))).toEqual(['fallow-dead-code', 'knip'])
+    // A category that did not opt in keeps both tools' verdicts.
+    expect(await tools(deadCodePair('lint', 'subtract'))).toEqual(['fallow-dead-code', 'knip'])
+    // A whole unused file has no symbol to anchor on; the file still decides.
+    expect(await tools(deadCodePair('dead-code', '', ''))).toEqual(['fallow-dead-code'])
+    // The two tools resolve entry points on their own, so one can demote a file
+    // to advisory while the other grades it. An advisory row is not the same
+    // verdict as a graded one and must not replace it.
+    expect(await tools(deadCodePair('dead-code', '', '', false))).toEqual([
+      'fallow-dead-code',
+      'knip',
+    ])
   })
 })
 

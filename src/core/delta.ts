@@ -52,7 +52,7 @@ export interface DeltaProject {
 }
 
 /** A new finding, plus whether this change is what put it there. */
-export interface DeltaFinding {
+interface DeltaFinding {
   readonly finding: Finding
   /**
    * The finding's start line is one the diff added or modified. Spec §4's

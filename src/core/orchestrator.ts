@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { ROOT_PROJECT, nearestProjectMap, repoProject } from './discover.ts'
+import { dedupesByAnchor } from './grade.ts'
 import { rawPrefix } from './output.ts'
 import { mapLimit } from './pool.ts'
 import type {
@@ -27,7 +28,7 @@ import { CATEGORIES, REPO_SCOPE, categoryRank } from './types.ts'
 export const QUICK_MODE_DEEP_REASON = 'not assessed — run `--deep`'
 
 /** How many tools run at once. */
-export const DEFAULT_CONCURRENCY = 4
+const DEFAULT_CONCURRENCY = 4
 
 /** Per-tool wall clock budget (spec §5). */
 export const DEFAULT_TIMEOUT_MS = 120_000
@@ -186,14 +187,43 @@ export async function runScan(
  * A path no project in this scan claims carries no attribution at all: the field
  * is optional, and a finding labelled with a project that is not in `projects[]`
  * would send a reader looking for a package this run never graded.
+ *
+ * A category {@link dedupesByAnchor} names counts one defect per source anchor,
+ * so two *different* tools reporting the same symbol in the same file leave one
+ * finding. The id cannot decide that: it hashes the tool and the rule, so
+ * fallow's `subtract` and knip's `subtract` are two ids for one unused export.
+ * The anchor and occurrence are what both tools agree on, so they are what the
+ * second copy is dropped by, and job order (fixed by adapter order) decides
+ * whose verdict a reader sees. One tool reporting the same anchor twice is two
+ * defects, not one, so only a different tool is dropped. `gradeScope` is part
+ * of the key: each tool resolves entry points on its own, so one can demote a
+ * whole file to advisory while the other grades it, and dropping the graded
+ * copy for the advisory one would flatter the grade. A disagreeing pair keeps
+ * both rows, one counted and one advisory.
  */
 function attribute(records: readonly RunRecord[], projects: readonly Project[]): Finding[] {
   const projectOf = nearestProjectMap(projects)
   const seen = new Set<string>()
+  const anchorClaims = new Map<string, string>()
   const findings: Finding[] = []
   for (const record of records) {
     for (const finding of record.result.findings) {
       if (seen.has(finding.id)) continue
+      const anchorKey =
+        finding.identity === undefined || !dedupesByAnchor(finding.category)
+          ? undefined
+          : [
+              finding.category,
+              finding.file,
+              finding.identity.anchor,
+              finding.identity.occurrence,
+              finding.gradeScope,
+            ].join('\u0000')
+      if (anchorKey !== undefined) {
+        const claimedBy = anchorClaims.get(anchorKey)
+        if (claimedBy !== undefined && claimedBy !== finding.tool) continue
+        if (claimedBy === undefined) anchorClaims.set(anchorKey, finding.tool)
+      }
       seen.add(finding.id)
       const { project: _reported, ...rest } = finding
       const project = projectOf(finding.file)

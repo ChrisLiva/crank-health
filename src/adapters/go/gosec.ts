@@ -1,4 +1,4 @@
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type {
   PendingFinding,
   RunContext,
@@ -15,12 +15,13 @@ import {
   asString,
   byLocation,
   compare,
+  failed,
   firstLine,
   identify,
   repoRelative,
   sanitizeRawResults,
 } from '../support.ts'
-import { goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
+import { execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
 
 /**
  * gosec — the Go SAST scanner (spec "Categories and tools"), reported under
@@ -44,13 +45,10 @@ import { goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain
  * envelope always prints, and the exit code stops being the whole story.
  */
 
-export const GOSEC_TOOL = 'gosec'
+const GOSEC_TOOL = 'gosec'
 
 /** The import path `go run` fetches; pinned exactly in `manifest.ts`. */
 const GOSEC_PACKAGE = 'github.com/securego/gosec/v2/cmd/gosec'
-
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /**
  * Five minutes, like staticcheck's: gosec type-checks every package of the
@@ -107,14 +105,9 @@ async function runGosec(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Go files' }
   }
 
-  const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), goExecOptions(ctx))
+  const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles: [],
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure)
   }
 
   // Scrubbed on the way to disk, never after: the run directory must not hold a

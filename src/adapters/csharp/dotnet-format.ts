@@ -8,6 +8,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -31,10 +33,10 @@ import { DOTNET, dotnetExecOptions, sdkGate } from './dotnet-project.ts'
  * says `configOwned: true`, always.
  */
 
-export const DOTNET_FORMAT_TOOL = 'dotnet-format'
+const DOTNET_FORMAT_TOOL = 'dotnet-format'
 
 /** The one rule id every whitespace finding reports under. */
-export const DOTNET_FORMAT_RULE = 'dotnet-format/whitespace'
+const DOTNET_FORMAT_RULE = 'dotnet-format/whitespace'
 
 /** 0 = already formatted; 2 = "would reformat", which is a finding, not a failure. */
 const EXPECTED_EXIT_CODES: ReadonlySet<number> = new Set([0, 2])
@@ -65,8 +67,7 @@ async function runDotnetFormat(ctx: RunContext): Promise<ToolResult> {
 
   const options = dotnetExecOptions(ctx, ctx.repoRoot)
   const gate = await sdkGate(options)
-  if (gate !== undefined)
-    return { state: gate.state, findings: [], rawFiles: [], reason: gate.reason }
+  if (gate !== undefined) return failed(gate)
 
   const reportDir = join(ctx.scratch, DOTNET_FORMAT_TOOL)
   await mkdir(reportDir, { recursive: true })
@@ -83,12 +84,7 @@ async function runDotnetFormat(ctx: RunContext): Promise<ToolResult> {
   )
   const rawFiles: string[] = []
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
 
   // Exhaustive by construction: an unexpected exit, or an expected exit whose
@@ -118,7 +114,7 @@ async function runDotnetFormat(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse dotnet format output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse dotnet format output: ${errorMessage(error)}`,
     }
   }
 

@@ -4,6 +4,7 @@ import type { PendingFinding, RunContext, ToolResult, ToolRunner } from '../../c
 import {
   batchFiles,
   byLocation,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -26,10 +27,10 @@ import { MINIMUM_GO_MINOR, goExecOptions, withGoGate } from './go-toolchain.ts'
  * anywhere in this adapter for the same reason.
  */
 
-export const GOFMT_TOOL = 'gofmt'
+const GOFMT_TOOL = 'gofmt'
 
 /** The one rule id every formatting failure reports under. */
-export const GOFMT_RULE = 'gofmt/unformatted'
+const GOFMT_RULE = 'gofmt/unformatted'
 
 /**
  * Not a pin crank-health can enforce — the formatter is the machine's Go
@@ -76,12 +77,7 @@ async function runGofmt(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, `gofmt${suffix}.txt`, execution.stdout))
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
     // `gofmt -l` exits 0 whether or not it listed anything; a non-zero exit is
     // gofmt itself failing (an unparseable file), never a finding.

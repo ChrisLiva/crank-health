@@ -15,7 +15,7 @@ import { COMMIT_IDENTITY } from './fixture.ts'
  */
 
 /** One edit in the head commit. */
-export type HistoryOp =
+type HistoryOp =
   | { readonly write: string; readonly content: string }
   /** `git mv`, so git's rename detection has a rename to detect. */
   | { readonly rename: string; readonly to: string }

@@ -247,7 +247,7 @@ function singularAt(count: string, text: string): string {
  * grade divided by nothing reads as arithmetic nobody did. A repo of twelve
  * lines is `0.012` KLOC, not `0`.
  */
-export function amount(value: number): string {
+function amount(value: number): string {
   if (value === 0 || Math.abs(value) >= 1) return String(Math.round(value * 10) / 10)
   return String(Number(value.toPrecision(2)))
 }
@@ -276,7 +276,7 @@ export function location(finding: Located): string {
 export type Located = Pick<Finding, 'file' | 'range'>
 
 /** True when the range carries no real position; see {@link location}. */
-export function isFileLevel(finding: Located): boolean {
+function isFileLevel(finding: Located): boolean {
   const { startLine, startCol, endLine, endCol } = finding.range
   return startLine === 1 && startCol === 1 && endLine === 1 && endCol === 1
 }

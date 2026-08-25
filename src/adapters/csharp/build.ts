@@ -17,6 +17,7 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
   firstLine,
   identify,
   repoRelative,
@@ -42,10 +43,10 @@ import { DOTNET, dotnetExecOptions, sdkGate } from './dotnet-project.ts'
  */
 
 /** The NuGet id of the analyzer package the build injects. */
-export const NETANALYZERS_PACKAGE = 'microsoft.codeanalysis.netanalyzers'
+const NETANALYZERS_PACKAGE = 'microsoft.codeanalysis.netanalyzers'
 
 /** The tool name all three build-backed runners report under. */
-export const DOTNET_BUILD_TOOL = 'dotnet-build'
+const DOTNET_BUILD_TOOL = 'dotnet-build'
 
 /**
  * The `CustomAfterMicrosoftCommonTargets` file injected into every compilation
@@ -69,7 +70,7 @@ export const DOTNET_BUILD_TOOL = 'dotnet-build'
  *   is set during their one compilation too — so the runtime always collects
  *   `<sarif base>.*.sarif` and merges.
  */
-export const INJECTED_TARGETS = `<Project TreatAsLocalProperty="ErrorLog">
+const INJECTED_TARGETS = `<Project TreatAsLocalProperty="ErrorLog">
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="[${pinnedDotnetVersion(NETANALYZERS_PACKAGE)}]" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
@@ -100,7 +101,7 @@ export const INJECTED_TARGETS = `<Project TreatAsLocalProperty="ErrorLog">
  * (`cs-basic`'s planted unused field fires only the CS0414 compiler warning),
  * and the lint category would grade on the analyzer set's near-empty default.
  */
-export const INJECTED_GLOBALCONFIG = `is_global = true
+const INJECTED_GLOBALCONFIG = `is_global = true
 global_level = 0
 dotnet_diagnostic.CA1502.severity = warning
 dotnet_diagnostic.CA1823.severity = warning
@@ -112,7 +113,7 @@ dotnet_diagnostic.CA1823.severity = warning
  * turns CA1502 into a complexity census — the ceiling is applied in our code
  * against `COMPLEXITY_CEILING`, never a repo threshold.
  */
-export const CODE_METRICS_CONFIG = 'CA1502: 0\n'
+const CODE_METRICS_CONFIG = 'CA1502: 0\n'
 
 /**
  * The raw text of one merged SARIF 2.1 log — what `CsBuild` carries. Kept as
@@ -222,7 +223,7 @@ export function isUnresolvedPin(output: string): boolean {
  * does not match is a parse throw, never a zero: a silently unparsed metric
  * would be a flattering complexity grade.
  */
-export const CA1502_MESSAGE = /^'(?<symbol>.+)' has a cyclomatic complexity of '(?<number>\d+)'/
+const CA1502_MESSAGE = /^'(?<symbol>.+)' has a cyclomatic complexity of '(?<number>\d+)'/
 
 /** Rule ids the C# compiler itself owns; everything else is an analyzer's. */
 const COMPILER_RULE = /^CS\d/
@@ -432,7 +433,7 @@ const PER_TFM_SARIF = /^build\..+\.sarif$/
  * reads the same resolved value, which is what makes "the identical reason
  * from all three" hold by construction when the build is unavailable.
  */
-export function buildFor(ctx: RunContext): Promise<CsBuild> {
+function buildFor(ctx: RunContext): Promise<CsBuild> {
   return builds.for(ctx, runBuild)
 }
 
@@ -529,7 +530,7 @@ function parseFailure(rawFiles: readonly string[], error: unknown): ToolResult {
     state: 'error',
     findings: [],
     rawFiles,
-    reason: `could not parse the build SARIF: ${error instanceof Error ? error.message : String(error)}`,
+    reason: `could not parse the build SARIF: ${errorMessage(error)}`,
   }
 }
 

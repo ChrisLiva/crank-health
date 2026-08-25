@@ -101,13 +101,20 @@ describe('scanMemo', () => {
 })
 
 /**
- * The parser, over bytes a real `staticcheck v0.7.0 -f json ./...` printed —
+ * The parser, over bytes a real `staticcheck v0.8.1 -f json ./...` printed —
  * captured from a throwaway module shaped like `test/fixtures/go-basic`, with
  * the repo root rewritten to `/repo`.
+ *
+ * Every check code and line the v0.7.0 corpus carried survived the bump. The
+ * refusal sentence did not: on go 1.27 an absent import under `GOPROXY=off`
+ * and the default `-mod=readonly` reads `no required module provides package
+ * …; to add it:` where go 1.26 read `cannot find module providing package …:
+ * import lookup disabled by -mod=readonly`. Both phrases are in
+ * `MODULE_GRAPH_FAILURES`, so the refusal still fires.
  */
 describe('parseStaticcheckStream', () => {
   it('routes every record it was given, and drops none of them', async () => {
-    const outcome = parseStaticcheckStream(await captured('staticcheck-0.7.0.jsonl'), REPO, REPO)
+    const outcome = parseStaticcheckStream(await captured('staticcheck-0.8.1.jsonl'), REPO, REPO)
 
     expect(
       outcome.findings.map((finding) => [
@@ -132,7 +139,7 @@ describe('parseStaticcheckStream', () => {
    * renderers print it and a delta rehashes against it.
    */
   it('reads a range even where the tool reported none', async () => {
-    const outcome = parseStaticcheckStream(await captured('staticcheck-0.7.0.jsonl'), REPO, REPO)
+    const outcome = parseStaticcheckStream(await captured('staticcheck-0.8.1.jsonl'), REPO, REPO)
     const unused = outcome.findings.find((finding) => finding.rule === 'U1000')
     const compile = outcome.findings.find((finding) => finding.rule === 'compile')
 
@@ -149,7 +156,7 @@ describe('parseStaticcheckStream', () => {
    */
   it('resolves a run-relative path against the project it ran in', async () => {
     const outcome = parseStaticcheckStream(
-      await captured('staticcheck-0.7.0.jsonl'),
+      await captured('staticcheck-0.8.1.jsonl'),
       `${REPO}/svc`,
       REPO,
     )
@@ -174,14 +181,14 @@ describe('parseStaticcheckStream', () => {
    */
   it('refuses the run when the module graph would not load', async () => {
     const outcome = parseStaticcheckStream(
-      await captured('staticcheck-0.7.0.module-graph.jsonl'),
+      await captured('staticcheck-0.8.1.module-graph.jsonl'),
       REPO,
       REPO,
     )
 
     expect(outcome.moduleGraphFailure).toBe(
-      'cannot find module providing package example.com/absent/pkg: ' +
-        'import lookup disabled by -mod=readonly',
+      'no required module provides package example.com/absent/pkg; to add it:\n' +
+        '\tgo get example.com/absent/pkg',
     )
     expect(outcome.findings).toEqual([])
   })
@@ -286,7 +293,7 @@ describe('a scan whose staticcheck replays captured output', () => {
   it('reads exit 1 with findings as a completed run, in all three categories', async () => {
     const repo = await goSourceRepo()
     try {
-      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.7.0.jsonl'))
+      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
       const records = scan.tools.filter((tool) => tool.tool === STATICCHECK_TOOL)
 
       expect(records.map((tool) => [tool.category, tool.state])).toEqual([
@@ -318,7 +325,7 @@ describe('a scan whose staticcheck replays captured output', () => {
   it('stages the stream once and has all three records name it', async () => {
     const repo = await goSourceRepo()
     try {
-      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.7.0.jsonl'))
+      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
       const raw = scan.tools
         .filter((tool) => tool.tool === STATICCHECK_TOOL)
         .map((tool) => tool.raw)
@@ -342,14 +349,14 @@ describe('a scan whose staticcheck replays captured output', () => {
     try {
       const scan = await scanReplaying(
         repo,
-        await capturedFor(repo, 'staticcheck-0.7.0.module-graph.jsonl'),
+        await capturedFor(repo, 'staticcheck-0.8.1.module-graph.jsonl'),
       )
       const records = scan.tools.filter((tool) => tool.tool === STATICCHECK_TOOL)
 
       expect(records.map((tool) => tool.state)).toEqual(['error', 'error', 'error'])
       for (const record of records) {
         expect(record.reason).toContain(
-          'cannot find module providing package example.com/absent/pkg',
+          'no required module provides package example.com/absent/pkg',
         )
       }
       expect(scan.findings.filter((finding) => finding.tool === STATICCHECK_TOOL)).toEqual([])
@@ -370,7 +377,7 @@ describe('a scan whose staticcheck replays captured output', () => {
       const scan = await scanReplaying(
         repo,
         '',
-        'go: downloading honnef.co/go/tools v0.7.0\n' +
+        'go: downloading honnef.co/go/tools v0.8.1\n' +
           'go: downloading golang.org/x/tools v0.30.0\n' +
           'staticcheck: fatal: could not load packages\n',
       )
@@ -397,7 +404,7 @@ describe('a scan whose staticcheck replays captured output', () => {
   it('reports repo-config provenance where the repo owns a staticcheck.conf', async () => {
     const repo = await goSourceRepo({ 'staticcheck.conf': 'checks = ["all"]\n' })
     try {
-      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.7.0.jsonl'))
+      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
 
       expect(
         scan.tools

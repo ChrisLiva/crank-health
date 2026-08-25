@@ -20,6 +20,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -54,7 +56,7 @@ export const BANDIT_TOOL = 'bandit'
 const BANDIT_DISTRIBUTION = 'bandit'
 
 /** Config artifacts that make bandit repo-owned (spec §1, first check). */
-export const BANDIT_CONFIG_FILES: readonly string[] = ['.bandit', 'bandit.yaml', 'bandit.yml']
+const BANDIT_CONFIG_FILES: readonly string[] = ['.bandit', 'bandit.yaml', 'bandit.yml']
 
 /** `pyproject.toml` sections that make bandit repo-owned. */
 const BANDIT_SECTIONS: readonly string[] = ['tool.bandit']
@@ -183,12 +185,7 @@ async function runBandit(ctx: RunContext): Promise<ToolResult> {
     }
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
     if (execution.exitCode === undefined || !EXPECTED_EXIT_CODES.has(execution.exitCode)) {
       return {
@@ -206,7 +203,7 @@ async function runBandit(ctx: RunContext): Promise<ToolResult> {
         state: 'error',
         findings: [],
         rawFiles,
-        reason: `could not parse bandit output: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `could not parse bandit output: ${errorMessage(error)}`,
       }
     }
   }

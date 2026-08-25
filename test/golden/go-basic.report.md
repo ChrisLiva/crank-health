@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0` · crank-health 0.11.0 · quick profile
+`<repo>` @ `c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0` · crank-health 0.12.0 · quick profile
 
 ## Grades
 
@@ -87,7 +87,7 @@ Evidence: [raw/root/gosec.json](raw/root/gosec.json) · [raw/brokenpkg/gosec.jso
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| staticcheck | ok | [default-config] | v0.7.0 | (repo root, brokenpkg) |
+| staticcheck | ok | [default-config] | v0.8.1 | (repo root, brokenpkg) |
 
 **Findings** (1)
 
@@ -101,7 +101,7 @@ Evidence: [raw/root/staticcheck.jsonl](raw/root/staticcheck.jsonl) · [raw/broke
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| staticcheck | ok | [default-config] | v0.7.0 | (repo root, brokenpkg) |
+| staticcheck | ok | [default-config] | v0.8.1 | (repo root, brokenpkg) |
 
 **Findings** (1)
 
@@ -142,7 +142,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json) · [raw/broke
 | --- | --- | --- | --- | --- |
 | go-vet | ok | [default-config] | — (pinned 1.25) | (repo root) |
 | go-vet | error | [default-config] | — (pinned 1.25) | # example.com/go-basic/brokenpkg (brokenpkg) |
-| staticcheck | ok | [default-config] | v0.7.0 | (repo root, brokenpkg) |
+| staticcheck | ok | [default-config] | v0.8.1 | (repo root, brokenpkg) |
 
 **Findings** (3)
 

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
@@ -17,7 +17,16 @@ import {
   toPendingFindings,
 } from '../mutation-report.ts'
 import type { Mutant } from '../mutation-report.ts'
-import { asRecord, firstLine, identify, readJson } from '../support.ts'
+import {
+  asRecord,
+  errorMessage,
+  failed,
+  firstLine,
+  identify,
+  readFileOrUndefined,
+  readJson,
+  unavailable,
+} from '../support.ts'
 import { detectNodeTool } from './node-package.ts'
 
 /**
@@ -65,7 +74,7 @@ export const STRYKER_TOOL = 'stryker'
 const STRYKER_PACKAGE = '@stryker-mutator/core'
 
 /** Config artifacts that make Stryker repo-owned (spec §1, first check). */
-export const STRYKER_CONFIG_FILES: readonly string[] = [
+const STRYKER_CONFIG_FILES: readonly string[] = [
   'stryker.config.json',
   'stryker.config.jsonc',
   'stryker.config.js',
@@ -78,7 +87,7 @@ export const STRYKER_CONFIG_FILES: readonly string[] = [
 ]
 
 /** What to tell a repo that has no mutation testing set up. */
-export const STRYKER_SETUP_HINT =
+const STRYKER_SETUP_HINT =
   'add a `@stryker-mutator/core` devDependency and a stryker config (plus the runner ' +
   'plugin for your test framework) to enable mutation testing'
 
@@ -157,12 +166,7 @@ async function runStryker(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
   if (report === undefined) {
     return {
@@ -183,7 +187,7 @@ async function runStryker(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse Stryker's mutation report: ${describe(error)}`,
+      reason: `could not parse Stryker's mutation report: ${errorMessage(error)}`,
     }
   }
 
@@ -345,20 +349,4 @@ async function baseConfig(
     return parsed === undefined ? undefined : { kind: 'inline', config: parsed }
   }
   return { kind: 'module', url: pathToFileURL(path).href }
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-async function readFileOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

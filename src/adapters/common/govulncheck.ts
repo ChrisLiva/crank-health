@@ -13,7 +13,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
-import { goExecEnv, withoutFetchNarration } from '../go/go-toolchain.ts'
+import { GO_BINARY, goExecEnv, withoutFetchNarration } from '../go/go-toolchain.ts'
 import {
   asArray,
   asRecord,
@@ -45,10 +45,10 @@ import { OSV_PACKAGE_RULE, severityOf, summarizePackage } from './osv-scanner.ts
 export const GOVULNCHECK_TOOL = 'govulncheck'
 
 /** The advisory database Go modules are reported under, in OSV's vocabulary. */
-export const GO_ECOSYSTEM = 'Go'
+const GO_ECOSYSTEM = 'Go'
 
 /** The reachability verdicts govulncheck's trace granularity distinguishes. */
-export type Reachability = 'symbol-reachable' | 'imported-no-call' | 'not-imported'
+type Reachability = 'symbol-reachable' | 'imported-no-call' | 'not-imported'
 
 /**
  * Deepest first: a module reported at several granularities is as reachable as
@@ -223,7 +223,7 @@ function parseObject(text: string): Record<string, unknown> | undefined {
  * analyzer's explicit "this cannot be reached from here" demotes one. That is
  * what keeps a missing toolchain from quietly improving a grade.
  */
-export function isGraded(reachability: string | undefined): boolean {
+function isGraded(reachability: string | undefined): boolean {
   return reachability === undefined || reachability === 'symbol-reachable'
 }
 
@@ -335,7 +335,7 @@ function advisoryOf(vulnerability: GoVulnerability): PackageAdvisory {
  * by `summarizePackage` for a different reason, and quoting a verdict there
  * would blame the wrong thing.
  */
-export function demotionOf(advisories: readonly PackageAdvisory[]): string | undefined {
+function demotionOf(advisories: readonly PackageAdvisory[]): string | undefined {
   if (advisories.some((advisory) => isGraded(advisory.reachability))) return undefined
   const strongest = GRANULARITY.find((verdict) =>
     advisories.some((advisory) => advisory.reachability === verdict),
@@ -462,10 +462,7 @@ function sameAdvisory(one: PackageAdvisory, other: PackageAdvisory): boolean {
 }
 
 /** The Go module manifest that makes a directory a module worth analyzing. */
-export const GO_MOD = 'go.mod'
-
-/** The fetcher: `go run <path>@<version>` builds and runs the pinned analyzer. */
-const GO_BINARY = 'go'
+const GO_MOD = 'go.mod'
 
 /** The pinned analyzer's import path; see `GO_TOOL_MANIFEST`. */
 const GOVULNCHECK_PACKAGE = 'golang.org/x/vuln/cmd/govulncheck'
@@ -493,7 +490,7 @@ export const NO_GO_MODULES_REASON =
  * module finishes and small enough that a wedged one still ends. `--timeout`
  * still wins — a user who names a budget means it.
  */
-export const GOVULNCHECK_TIMEOUT_MS = 300_000
+const GOVULNCHECK_TIMEOUT_MS = 300_000
 
 export const govulncheckRunner: ToolRunner = {
   tool: GOVULNCHECK_TOOL,

@@ -22,8 +22,8 @@ import {
 
 /** The rule ids mutant findings report under. */
 export const SURVIVED_RULE = 'stryker/survived-mutant'
-export const NO_COVERAGE_RULE = 'stryker/no-coverage-mutant'
-export const TIMEOUT_RULE = 'stryker/timeout-mutant'
+const NO_COVERAGE_RULE = 'stryker/no-coverage-mutant'
+const TIMEOUT_RULE = 'stryker/timeout-mutant'
 
 /**
  * Survived mutants listed as findings. Every one of them is a real gap, and a
@@ -34,7 +34,7 @@ export const TIMEOUT_RULE = 'stryker/timeout-mutant'
 export const SURVIVED_FINDING_LIMIT = 50
 
 /** The same, for the advisory kinds (not covered, timed out). */
-export const ADVISORY_FINDING_LIMIT = 25
+const ADVISORY_FINDING_LIMIT = 25
 
 /** One mutant, as the mutation-testing-elements report describes it. */
 export interface Mutant {

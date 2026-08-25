@@ -41,7 +41,7 @@ export type SystemToolName = (typeof SYSTEM_TOOLS)[number]
  * PATH it builds — and symlinks `go`/`gofmt` into it — so the recapture cannot
  * record a toolchain no one else has.
  */
-export const TOOLCHAIN_BINARIES = [...SYSTEM_TOOLS, 'govulncheck'] as const
+const TOOLCHAIN_BINARIES = [...SYSTEM_TOOLS, 'govulncheck'] as const
 
 /** Which of {@link SYSTEM_TOOLS} this machine has on `PATH`. */
 export async function installedSystemTools(): Promise<Set<SystemToolName>> {

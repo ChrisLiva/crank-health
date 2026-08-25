@@ -15,6 +15,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -33,13 +35,13 @@ import { detectPythonTool, findVenv } from './py-project.ts'
  * repo.
  */
 
-export const MYPY_TOOL = 'mypy'
+const MYPY_TOOL = 'mypy'
 
 /** PyPI distribution; mypy's command and distribution names coincide. */
 const MYPY_DISTRIBUTION = 'mypy'
 
 /** Root config artifacts that make mypy repo-owned (spec §1, first check). */
-export const MYPY_CONFIG_FILES: readonly string[] = ['mypy.ini', '.mypy.ini']
+const MYPY_CONFIG_FILES: readonly string[] = ['mypy.ini', '.mypy.ini']
 
 /** `pyproject.toml` sections that make mypy repo-owned. */
 const MYPY_SECTIONS: readonly string[] = ['tool.mypy']
@@ -183,12 +185,7 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
 
   let diagnostics: MypyDiagnostic[] = []
@@ -196,7 +193,7 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
   try {
     diagnostics = parseMypyJsonl(execution.stdout)
   } catch (error) {
-    parseError = error instanceof Error ? error.message : String(error)
+    parseError = errorMessage(error)
   }
 
   // mypy exits 0 for a clean run and 1 for one that found type errors; anything

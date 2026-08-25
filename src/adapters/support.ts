@@ -1,8 +1,9 @@
 import { access, readFile } from 'node:fs/promises'
 import { isAbsolute, relative } from 'node:path'
 import { readSources } from '../core/discover.ts'
+import type { ToolFailure } from '../core/exec.ts'
 import { computeAnchors } from '../core/fingerprint.ts'
-import type { Finding, PendingFinding, RunContext } from '../core/types.ts'
+import type { Finding, PendingFinding, RunContext, ToolResult } from '../core/types.ts'
 
 /**
  * The parts every tool wrapper repeats, in one place: reading JSON off disk
@@ -16,7 +17,7 @@ import type { Finding, PendingFinding, RunContext } from '../core/types.ts'
  * a command line can hold, so the file list is spent across several runs and
  * their findings merged.
  */
-export const MAX_ARGS_BYTES = 100_000
+const MAX_ARGS_BYTES = 100_000
 
 /** Splits the file list so no single command line exceeds {@link MAX_ARGS_BYTES}. */
 export function batchFiles(files: readonly string[], budget = MAX_ARGS_BYTES): string[][] {
@@ -166,6 +167,47 @@ export function compare(a: string, b: string): number {
 /** First non-empty line of a stream, for one-line failure reasons. */
 export function firstLine(text: string): string {
   return text.trim().split('\n')[0] ?? ''
+}
+
+/**
+ * The result a runner returns when the process itself could not produce one.
+ * `ToolFailure.state` is a subset of `ToolResult.state` by construction, so the
+ * only thing a runner adds is whatever raw evidence it managed to write first.
+ */
+export function failed(failure: ToolFailure, rawFiles: readonly string[] = []): ToolResult {
+  return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+}
+
+/**
+ * The result for a prerequisite that was never there to run: spec §8's
+ * `not-available` with the reason a reader can act on. No process ran, so
+ * there is no raw evidence to point at.
+ */
+export function unavailable(reason: string): ToolResult {
+  return { state: 'not-available', findings: [], rawFiles: [], reason }
+}
+
+/**
+ * A file a tool was supposed to leave behind, or `undefined` when it did not.
+ * Every read error means the same thing to a runner — no report to parse — so
+ * ENOENT, EISDIR and EACCES all land on the same answer, while an empty file
+ * that the tool really did write stays distinguishable as `''`.
+ */
+export async function readFileOrUndefined(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * What a caught `unknown` says for itself. Not named `describe`: the adapter
+ * tests import vitest's `describe`, and a shared export under that name would
+ * shadow the block function at every call site that tests it.
+ */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /** What replaces a source excerpt in raw evidence; see {@link sanitizeRawResults}. */

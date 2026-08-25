@@ -17,6 +17,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   readJson,
@@ -50,7 +52,7 @@ export const OSV_SCANNER: SystemToolSpec = {
 }
 
 /** Config artifact that makes osv-scanner repo-owned (spec §1, first check). */
-export const OSV_CONFIG_FILES: readonly string[] = ['osv-scanner.toml']
+const OSV_CONFIG_FILES: readonly string[] = ['osv-scanner.toml']
 
 /** Where osv-scanner writes its report, under the scratch dir. */
 const REPORT_FILE = 'osv-scanner.json'
@@ -98,9 +100,14 @@ export const osvScannerRunner: ToolRunner = {
 }
 
 /**
- * Repo-owned when `osv-scanner.toml` is present — the scanner reads that file
- * itself (it carries the repo's own advisory ignores), so ownership here is a
- * provenance tag rather than a different command line.
+ * Repo-owned when `osv-scanner.toml` is present, the file carrying the repo's
+ * own advisory ignores.
+ *
+ * osv-scanner discovers a config beside each lockfile on its own, and a root
+ * `osv-scanner.toml` reaches a nested lockfile only through `--config`. Probed
+ * on 2.5.1 against a nested lockfile: auto-discovery left 1 result standing,
+ * `--config` left 0. So the detection decides a command line as well as a
+ * provenance tag, and {@link runOsvScanner} passes `ownedVia` on.
  */
 function detectOsvScanner(ctx: DetectContext): Promise<Detection | null> {
   const configFiles = OSV_CONFIG_FILES.filter((file) => ctx.files.all.includes(file))
@@ -112,8 +119,10 @@ function detectOsvScanner(ctx: DetectContext): Promise<Detection | null> {
 
 async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
   const report = join(ctx.scratch, REPORT_FILE)
+  const ownedVia = ctx.detection?.ownedVia
+  const config = ownedVia === undefined ? undefined : join(ctx.repoRoot, ownedVia)
   const execution = await execTool(
-    systemCommand(OSV_SCANNER.binary, invocationArgs(ctx.repoRoot, report)),
+    systemCommand(OSV_SCANNER.binary, invocationArgs(ctx.repoRoot, report, config)),
     { cwd: ctx.scratch, timeoutMs: ctx.timeoutMs },
   )
 
@@ -122,8 +131,7 @@ async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, 'osv-scanner.stderr.txt', execution.stderr))
   }
   if (execution.failure !== undefined) {
-    const failure = explainMissing(OSV_SCANNER, execution.failure)
-    return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+    return failed(explainMissing(OSV_SCANNER, execution.failure), rawFiles)
   }
 
   const document = await readJson(report)
@@ -150,7 +158,7 @@ async function runOsvScanner(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse osv-scanner output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse osv-scanner output: ${errorMessage(error)}`,
     }
   }
 
@@ -201,8 +209,11 @@ export function centralPackageManagementReason(files: readonly string[]): string
  * is reachable. `scan source -r` walks the project for manifests and lockfiles
  * and honors `.gitignore`, which is what keeps a vendored dependency's own
  * lockfile out of the result (spec §7).
+ *
+ * @param config the repo's detected root `osv-scanner.toml`, absolute. Omitted
+ * when the repo owns none, and then the command line is unchanged.
  */
-export function invocationArgs(repoRoot: string, report: string): string[] {
+export function invocationArgs(repoRoot: string, report: string, config?: string): string[] {
   return [
     'scan',
     'source',
@@ -217,6 +228,7 @@ export function invocationArgs(repoRoot: string, report: string): string[] {
     report,
     '--verbosity',
     'error',
+    ...(config === undefined ? [] : ['--config', config]),
     repoRoot,
   ]
 }
@@ -391,7 +403,7 @@ function fixesById(
  * sorts above `1.2.3` — and the cost of that is picking the later of two fixed
  * versions to recommend, which is a version the upgrade clears either way.
  */
-export function compareVersions(a: string, b: string): number {
+function compareVersions(a: string, b: string): number {
   const left = versionParts(a)
   const right = versionParts(b)
   for (let index = 0; index < Math.max(left.length, right.length); index++) {

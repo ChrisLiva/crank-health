@@ -1,5 +1,5 @@
 import { isAbsolute, join } from 'node:path'
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type { PendingFinding, RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
 import {
@@ -8,13 +8,14 @@ import {
   asRecord,
   asString,
   byLocation,
+  failed,
   firstLine,
   identify,
   repoRelative,
 } from '../support.ts'
 import {
   detectGoConfig,
-  goExecOptions,
+  execGo,
   projectDirectory,
   withGoGate,
   withoutFetchNarration,
@@ -45,15 +46,12 @@ const GOLANGCI_LINT_PACKAGE = 'github.com/golangci/golangci-lint/v2/cmd/golangci
  * The config names golangci-lint answers to, in the order it looks for them.
  * Owning any one of them is owning the tool.
  */
-export const GOLANGCI_LINT_CONFIGS: readonly string[] = [
+const GOLANGCI_LINT_CONFIGS: readonly string[] = [
   '.golangci.yml',
   '.golangci.yaml',
   '.golangci.toml',
   '.golangci.json',
 ]
-
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /**
  * Five minutes, like staticcheck's: golangci-lint loads the package graph once
@@ -82,7 +80,7 @@ export const golangciLintRunner: ToolRunner = {
  * `--out-format json` was removed in v2 — and the run's own directory is the
  * project's, so the paths it prints are the project's.
  */
-export function invocationArgs(): string[] {
+function invocationArgs(): string[] {
   return ['run', pinnedGoSpec(GOLANGCI_LINT_PACKAGE), 'run', '--output.json.path', 'stdout']
 }
 
@@ -99,15 +97,9 @@ async function runGolangciLint(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Go files', configOwned: true }
   }
 
-  const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), goExecOptions(ctx))
+  const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles: [],
-      reason: execution.failure.reason,
-      configOwned: true,
-    }
+    return { ...failed(execution.failure), configOwned: true }
   }
 
   const rawFiles = [await writeScratchRaw(ctx.scratch, RAW_NAME, execution.stdout)]

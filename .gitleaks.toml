@@ -1,0 +1,15 @@
+# crank-health's own gitleaks config. The fixture repos and the three tests
+# that assert on them carry planted credentials on purpose; the default rules
+# still apply everywhere else. Patterns are unanchored: gitleaks matches them
+# against the path it prints, and an anchored pattern matched nothing (8.30.1).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Planted secrets: fixture repos and the tests that assert on them"
+paths = [
+  '''test/fixtures/''',
+  '''test/sec-scan\.test\.ts''',
+  '''test/gosec\.test\.ts''',
+  '''test/go-scan\.test\.ts''',
+]

@@ -164,7 +164,7 @@ export interface PackageAdvisory {
 }
 
 /** What identity is computed from, minus the fields already on the finding. */
-export interface FindingIdentity {
+interface FindingIdentity {
   /** Trimmed flagged source line, or the symbol name for symbol-level findings. */
   readonly anchor: string
   /** Index among findings sharing every other identity field, within the file. */

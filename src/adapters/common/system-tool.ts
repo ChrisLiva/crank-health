@@ -2,7 +2,7 @@ import { execTool, systemCommand } from '../../core/exec.ts'
 import type { ToolExecution, ToolFailure } from '../../core/exec.ts'
 import type { ToolResult } from '../../core/types.ts'
 import type { SystemTool } from '../../manifest.ts'
-import { firstLine } from '../support.ts'
+import { failed, firstLine } from '../support.ts'
 
 /**
  * The tools crank-health cannot fetch — gitleaks, opengrep, osv-scanner and the
@@ -70,6 +70,5 @@ export function systemToolFailure(
   execution: ToolExecution & { readonly failure: ToolFailure },
   rawFiles: readonly string[],
 ): ToolResult {
-  const failure = explainMissing(spec, execution.failure)
-  return { state: failure.state, findings: [], rawFiles, reason: failure.reason }
+  return failed(explainMissing(spec, execution.failure), rawFiles)
 }

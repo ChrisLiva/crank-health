@@ -1,4 +1,4 @@
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
@@ -15,10 +15,14 @@ import {
   asNumber,
   asRecord,
   byLocation,
+  errorMessage,
   exists,
+  failed,
   firstLine,
   identify,
+  readFileOrUndefined,
   repoRelative,
+  unavailable,
 } from '../support.ts'
 import type { Venv } from './py-project.ts'
 import { detectPythonTool, findVenv } from './py-project.ts'
@@ -53,25 +57,25 @@ import { detectPythonTool, findVenv } from './py-project.ts'
  * output format, which nothing here reads.
  */
 
-export const COVERAGE_TOOL = 'coverage'
+const COVERAGE_TOOL = 'coverage'
 
 /** PyPI distribution; coverage.py's command and distribution names coincide. */
 const COVERAGE_DISTRIBUTION = 'coverage'
 
 /** Config artifacts that make coverage.py repo-owned (spec §1, first check). */
-export const COVERAGE_CONFIG_FILES: readonly string[] = ['.coveragerc']
+const COVERAGE_CONFIG_FILES: readonly string[] = ['.coveragerc']
 
 /** `pyproject.toml` sections that make coverage.py repo-owned. */
 const COVERAGE_SECTIONS: readonly string[] = ['tool.coverage']
 
 /** The rule uncovered lines are reported under. */
-export const UNCOVERED_LINE_RULE = 'coverage/uncovered-line'
+const UNCOVERED_LINE_RULE = 'coverage/uncovered-line'
 
 /** Uncovered changed lines listed before the rest is left to the raw report. */
 export const UNCOVERED_FINDING_LIMIT = 50
 
 /** What to tell a project that cannot be measured as it stands. */
-export const COVERAGE_SETUP_HINT =
+const COVERAGE_SETUP_HINT =
   'install `coverage` and `pytest` in the project virtualenv (e.g. `uv pip install coverage ' +
   'pytest`) to measure deep-tier coverage'
 
@@ -144,7 +148,7 @@ async function runCoverage(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, 'coverage.stderr.txt', run.stderr))
   }
   if (run.failure !== undefined) {
-    return { state: run.failure.state, findings: [], rawFiles, reason: run.failure.reason }
+    return failed(run.failure, rawFiles)
   }
 
   // The test suite's own exit code is not this runner's verdict — a failing
@@ -176,7 +180,7 @@ async function runCoverage(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse the coverage report: ${describe(error)}`,
+      reason: `could not parse the coverage report: ${errorMessage(error)}`,
     }
   }
 
@@ -281,22 +285,6 @@ async function hasModule(venv: Venv, module: string): Promise<boolean> {
     if (await exists(join(root, directory, module))) return true
   }
   return false
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-async function readFileOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8')
-  } catch {
-    return undefined
-  }
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function ascending(a: number, b: number): number {

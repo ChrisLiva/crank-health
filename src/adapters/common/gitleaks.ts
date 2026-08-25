@@ -15,6 +15,7 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
   identify,
   readJson,
   repoRelative,
@@ -48,7 +49,7 @@ export const GITLEAKS: SystemToolSpec = {
 }
 
 /** The repo's own rules and allowlists, when it has them (spec §1). */
-export const GITLEAKS_CONFIG_FILES: readonly string[] = ['.gitleaks.toml']
+const GITLEAKS_CONFIG_FILES: readonly string[] = ['.gitleaks.toml']
 
 /**
  * Redaction, at 100%. gitleaks replaces both `Secret` and `Match` with
@@ -127,7 +128,7 @@ async function runGitleaks(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse gitleaks output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse gitleaks output: ${errorMessage(error)}`,
     }
   }
 
@@ -173,7 +174,7 @@ async function runGitleaks(ctx: RunContext): Promise<ToolResult> {
  *
  * @returns the reason to attach, or `undefined` when nothing was dropped
  */
-export function suppressionReason(dropped: number, kept: number): string | undefined {
+function suppressionReason(dropped: number, kept: number): string | undefined {
   if (dropped === 0) return undefined
   return (
     `${dropped} raw ${dropped === 1 ? 'hit' : 'hits'} in paths outside the analyzed inventory ` +

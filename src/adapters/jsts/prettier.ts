@@ -8,7 +8,7 @@ import type {
   ToolRunner,
 } from '../../core/types.ts'
 import { pinnedVersion } from '../../manifest.ts'
-import { batchFiles, byLocation, firstLine, identify, repoRelative } from '../support.ts'
+import { batchFiles, byLocation, failed, firstLine, identify, repoRelative } from '../support.ts'
 import { detectNodeTool } from './node-package.ts'
 
 /**
@@ -26,15 +26,15 @@ import { detectNodeTool } from './node-package.ts'
  * provenance so a reader can see the repo never opted into prettier.
  */
 
-export const PRETTIER_TOOL = 'prettier'
+const PRETTIER_TOOL = 'prettier'
 
 /** npm package name; prettier's command and package names coincide. */
 const PRETTIER_PACKAGE = 'prettier'
 
 /** The one rule id every formatting failure reports under. */
-export const PRETTIER_FORMAT_RULE = 'prettier/format'
+const PRETTIER_FORMAT_RULE = 'prettier/format'
 
-export const PRETTIER_CONFIG_FILES: readonly string[] = [
+const PRETTIER_CONFIG_FILES: readonly string[] = [
   '.prettierrc',
   '.prettierrc.json',
   '.prettierrc.json5',
@@ -132,12 +132,7 @@ async function runPrettier(ctx: RunContext): Promise<ToolResult> {
     }
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     // 0 = everything matched, 1 = some files differ, 2 = prettier itself failed.

@@ -16,6 +16,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -32,13 +34,13 @@ import { detectNodeTool } from './node-package.ts'
  * one of them is graded: the repo is violating the standard it wrote itself.
  */
 
-export const ESLINT_TOOL = 'eslint'
+const ESLINT_TOOL = 'eslint'
 
 /** npm package name; ESLint's command and package names coincide. */
 const ESLINT_PACKAGE = 'eslint'
 
 /** Flat config (ESLint 9+) first, then the legacy eslintrc family (spec §1). */
-export const ESLINT_CONFIG_FILES: readonly string[] = [
+const ESLINT_CONFIG_FILES: readonly string[] = [
   'eslint.config.js',
   'eslint.config.mjs',
   'eslint.config.cjs',
@@ -142,12 +144,7 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
     }
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     // ESLint exits 1 when it found problems and 2 when it could not run at all;
@@ -169,7 +166,7 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
         state: 'error',
         findings: [],
         rawFiles,
-        reason: `could not parse eslint output: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `could not parse eslint output: ${errorMessage(error)}`,
       }
     }
 
@@ -193,7 +190,7 @@ export interface EslintFileResult {
   readonly messages: readonly EslintMessage[]
 }
 
-export interface EslintMessage {
+interface EslintMessage {
   /** `null` for parse and configuration failures. */
   readonly ruleId: string | null
   readonly severity: number

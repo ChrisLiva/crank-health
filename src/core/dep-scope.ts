@@ -36,7 +36,7 @@ export const PNPM_LOCK = 'pnpm-lock.yaml'
 export const NPM_LOCK = 'package-lock.json'
 
 /** The advisory database's name for the ecosystem these lockfiles describe. */
-export const NPM_ECOSYSTEM = 'npm'
+const NPM_ECOSYSTEM = 'npm'
 
 /**
  * What a lockfile says about one package: it ships (`prod`), only the

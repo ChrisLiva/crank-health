@@ -38,7 +38,7 @@ export function normalizePrMarkdown(markdown: string, repoPath: string): string 
  * Commit shas, full and abbreviated, replaced by placeholders. Finding ids are
  * 16 hex characters and so match neither pattern.
  */
-export function withoutShas(text: string): string {
+function withoutShas(text: string): string {
   return text.replaceAll(/\b[0-9a-f]{40}\b/g, '<sha>').replaceAll(/\b[0-9a-f]{7,12}\b/g, '<short>')
 }
 

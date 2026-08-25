@@ -17,6 +17,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -32,13 +34,13 @@ import {
  * one of its runners returns `ok`.
  */
 
-export const ZIZMOR_TOOL = 'zizmor'
+const ZIZMOR_TOOL = 'zizmor'
 
 /** PyPI distribution; zizmor's command and distribution names coincide. */
 const ZIZMOR_DISTRIBUTION = 'zizmor'
 
 /** Config artifacts that make zizmor repo-owned (spec §1, first check). */
-export const ZIZMOR_CONFIG_FILES: readonly string[] = ['.github/zizmor.yml', 'zizmor.yml']
+const ZIZMOR_CONFIG_FILES: readonly string[] = ['.github/zizmor.yml', 'zizmor.yml']
 
 /** `pyproject.toml` sections that make zizmor repo-owned. */
 const ZIZMOR_SECTIONS: readonly string[] = ['tool.zizmor']
@@ -146,12 +148,7 @@ async function runZizmor(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
 
   let results: ZizmorFinding[]
@@ -164,7 +161,7 @@ async function runZizmor(ctx: RunContext): Promise<ToolResult> {
       rawFiles,
       reason:
         `could not parse zizmor output (exit ${execution.exitCode ?? 'signal'}): ` +
-        `${error instanceof Error ? error.message : String(error)}${
+        `${errorMessage(error)}${
           execution.stderr.trim().length === 0 ? '' : ` — ${firstLine(execution.stderr)}`
         }`,
     }

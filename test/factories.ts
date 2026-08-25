@@ -21,7 +21,7 @@ export function makeProject(files: readonly string[] = []): Project {
 }
 
 /** A workspace with no source at its root: two packages, two languages. */
-export const MONOREPO = partitionProjects(
+const MONOREPO = partitionProjects(
   inventoryOf([
     'package.json',
     'packages/api/api/main.py',
@@ -124,7 +124,7 @@ export function allGraded(grade: Grade = 'A'): Record<Category, CategoryState> {
 }
 
 /** An empty tree: nothing to assess, and nothing left unassessed either. */
-export function noCoverage(): ReportCoverage {
+function noCoverage(): ReportCoverage {
   return { files: { total: 0, assessed: 0 }, lines: { total: 0, assessed: 0 }, unassessed: [] }
 }
 

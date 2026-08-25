@@ -18,6 +18,8 @@ import {
   asString,
   batchFiles,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -35,10 +37,10 @@ import { detectNodeTool } from './node-package.ts'
  *    count toward the grade
  */
 
-export const OXLINT_TOOL = 'oxlint'
+const OXLINT_TOOL = 'oxlint'
 
 /** Root config artifacts that make oxlint repo-owned (spec §1, first check). */
-export const OXLINT_CONFIG_FILES: readonly string[] = [
+const OXLINT_CONFIG_FILES: readonly string[] = [
   '.oxlintrc.json',
   '.oxlintrc.jsonc',
   'oxlint.config.js',
@@ -59,7 +61,7 @@ export const OXLINT_CONFIG_FILES: readonly string[] = [
  * `style`/`pedantic`: a repo that never opted into an opinionated style should
  * not be graded (or nagged) on one.
  */
-export const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG = {
   plugins: ['typescript', 'unicorn', 'oxc'],
   categories: { correctness: 'error', suspicious: 'warn', perf: 'warn' },
   env: { builtin: true, node: true, browser: true, es2024: true },
@@ -135,12 +137,7 @@ async function runOxlint(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(...(await stageRaw(ctx.scratch, suffix, execution.stdout, execution.stderr)))
 
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
 
     // A run that matched no files after the repo's own ignore patterns prints
@@ -163,7 +160,7 @@ async function runOxlint(ctx: RunContext): Promise<ToolResult> {
         state: 'error',
         findings: [],
         rawFiles,
-        reason: `could not parse oxlint output: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `could not parse oxlint output: ${errorMessage(error)}`,
       }
     }
 
@@ -198,7 +195,7 @@ export interface SarifReport {
   readonly results: readonly SarifFinding[]
 }
 
-export interface SarifFinding {
+interface SarifFinding {
   readonly ruleId: string
   /** The oxlint rule category (`correctness`, `perf`, …), when SARIF has one. */
   readonly ruleCategory: string | undefined

@@ -15,6 +15,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -37,9 +39,9 @@ import { declaresDependency, detectNodeTool } from './node-package.ts'
  * default linter down.
  */
 
-export const REACT_DOCTOR_TOOL = 'react-doctor'
+const REACT_DOCTOR_TOOL = 'react-doctor'
 
-export const REACT_DOCTOR_CONFIG_FILES: readonly string[] = [
+const REACT_DOCTOR_CONFIG_FILES: readonly string[] = [
   'doctor.config.ts',
   'doctor.config.js',
   'doctor.config.mjs',
@@ -99,12 +101,7 @@ async function runReactDoctor(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
   if (execution.stdout.trim().length === 0) {
     return {
@@ -123,7 +120,7 @@ async function runReactDoctor(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse react-doctor output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse react-doctor output: ${errorMessage(error)}`,
     }
   }
 

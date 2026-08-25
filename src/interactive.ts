@@ -85,7 +85,7 @@ export interface PromptIO {
  * The security tools crank-health cannot fetch (release binaries; see
  * `adapters/common/system-tool.ts`), with what each one adds to the scan.
  */
-export const SYSTEM_TOOLS: readonly { spec: SystemToolSpec; purpose: string }[] = [
+const SYSTEM_TOOLS: readonly { spec: SystemToolSpec; purpose: string }[] = [
   { spec: GITLEAKS, purpose: 'secrets scanning' },
   { spec: OPENGREP, purpose: 'SAST rules for JS/TS, Python and C#' },
   { spec: OSV_SCANNER, purpose: 'known-vulnerability scan of dependencies' },
@@ -145,7 +145,7 @@ export interface InteractiveOutcome {
 }
 
 /** Ctrl-C / Ctrl-D mid-session: a cancellation, not a crank-health error. */
-export class PromptCancelledError extends Error {
+class PromptCancelledError extends Error {
   constructor() {
     super('interactive session cancelled')
     this.name = 'PromptCancelledError'

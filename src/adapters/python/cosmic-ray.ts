@@ -16,9 +16,12 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
+  unavailable,
 } from '../support.ts'
 import { detectPythonTool, findVenv } from './py-project.ts'
 
@@ -60,7 +63,7 @@ import { detectPythonTool, findVenv } from './py-project.ts'
  * shows a reader precisely what did.
  */
 
-export const COSMIC_RAY_TOOL = 'cosmic-ray'
+const COSMIC_RAY_TOOL = 'cosmic-ray'
 
 /** PyPI distribution; its command and distribution names coincide. */
 const COSMIC_RAY_DISTRIBUTION = 'cosmic-ray'
@@ -70,16 +73,16 @@ const COSMIC_RAY_DISTRIBUTION = 'cosmic-ray'
  * name — the config is a TOML file passed on the command line — so these are the
  * two names the documentation's examples use.
  */
-export const COSMIC_RAY_CONFIG_FILES: readonly string[] = ['cosmic-ray.toml', '.cosmic-ray.toml']
+const COSMIC_RAY_CONFIG_FILES: readonly string[] = ['cosmic-ray.toml', '.cosmic-ray.toml']
 
 /** `pyproject.toml` sections that make cosmic-ray repo-owned. */
 const COSMIC_RAY_SECTIONS: readonly string[] = ['tool.cosmic-ray']
 
 /** The rule surviving mutants are reported under. */
-export const COSMIC_RAY_SURVIVED_RULE = 'cosmic-ray/survived-mutant'
+const COSMIC_RAY_SURVIVED_RULE = 'cosmic-ray/survived-mutant'
 
 /** Survived mutants listed as findings; see StrykerJS for why there is a cap. */
-export const SURVIVED_FINDING_LIMIT = 50
+const SURVIVED_FINDING_LIMIT = 50
 
 /** Seconds one mutant's test run may take before cosmic-ray abandons it. */
 export const MUTANT_TIMEOUT_SECONDS = 30
@@ -88,7 +91,7 @@ export const MUTANT_TIMEOUT_SECONDS = 30
 const TEST_FILE_PATTERN = /(^|\/)(tests?|testing)\/|(^|\/)(test_[^/]+|[^/]+_test)\.py$/
 
 /** What to tell a project that has not adopted cosmic-ray. */
-export const COSMIC_RAY_SETUP_HINT =
+const COSMIC_RAY_SETUP_HINT =
   'cosmic-ray mutates files in place while it runs, so crank-health only runs it where the ' +
   'project has adopted it: add cosmic-ray to the project virtualenv and a `[tool.cosmic-ray]` ' +
   'section (or a cosmic-ray.toml) to enable Python mutation testing'
@@ -186,12 +189,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
       rawFiles.push(staged)
     }
     if (execution.failure !== undefined) {
-      return {
-        state: execution.failure.state,
-        findings: [],
-        rawFiles,
-        reason: execution.failure.reason,
-      }
+      return failed(execution.failure, rawFiles)
     }
     if (execution.exitCode !== 0) {
       return {
@@ -216,7 +214,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
   })
   rawFiles.unshift(await writeScratchRaw(ctx.scratch, 'cosmic-ray-dump.jsonl', dump.stdout))
   if (dump.failure !== undefined) {
-    return { state: dump.failure.state, findings: [], rawFiles, reason: dump.failure.reason }
+    return failed(dump.failure, rawFiles)
   }
 
   let mutants: CosmicRayMutant[]
@@ -227,7 +225,7 @@ async function runCosmicRay(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse the cosmic-ray session dump: ${describe(error)}`,
+      reason: `could not parse the cosmic-ray session dump: ${errorMessage(error)}`,
     }
   }
 
@@ -470,14 +468,6 @@ export function toPendingFindings(mutants: readonly CosmicRayMutant[]): PendingF
 /** A TOML basic string. Paths and commands are the only values we ever write. */
 function tomlString(value: string): string {
   return JSON.stringify(value)
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function compare(a: string, b: string): number {

@@ -2,9 +2,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { ancestryOf, repoPath } from '../../core/discover.ts'
 import { execTool, systemCommand } from '../../core/exec.ts'
-import type { ExecOptions, ToolFailure } from '../../core/exec.ts'
+import type { ExecOptions, ToolExecution, ToolFailure } from '../../core/exec.ts'
 import type { DetectContext, Detection, RunContext, ToolResult } from '../../core/types.ts'
-import { compare, exists, firstLine } from '../support.ts'
+import { compare, exists, failed, firstLine } from '../support.ts'
 
 /**
  * The shared floor of the Go adapter: the environment every `go` spawn carries,
@@ -24,8 +24,11 @@ import { compare, exists, firstLine } from '../support.ts'
  */
 export const MINIMUM_GO_MINOR = 25
 
-/** `go version`'s own binary and probe arguments. */
-const GO_BINARY = 'go'
+/**
+ * The `go` binary as it appears on `PATH`, and `go version`'s probe arguments.
+ * Every Go runner spawns this same name, so it is spelled once here.
+ */
+export const GO_BINARY = 'go'
 const GO_VERSION_ARGS: readonly string[] = ['version']
 
 /** Where a user gets a Go toolchain, quoted in the gate's install hint. */
@@ -92,7 +95,7 @@ export function meetsGoFloor(version: { major: number; minor: number }): boolean
  *
  * @returns `undefined` when Go is present, working and new enough
  */
-export async function goGate(options: ExecOptions): Promise<ToolFailure | undefined> {
+async function goGate(options: ExecOptions): Promise<ToolFailure | undefined> {
   const execution = await execTool(systemCommand(GO_BINARY, GO_VERSION_ARGS), options)
   if (execution.failure !== undefined) {
     return {
@@ -142,8 +145,7 @@ export function withGoGate(
 ): (ctx: RunContext) => Promise<ToolResult> {
   return async (ctx: RunContext): Promise<ToolResult> => {
     const gate = await goGate(goExecOptions(ctx))
-    if (gate !== undefined)
-      return { state: gate.state, findings: [], rawFiles: [], reason: gate.reason }
+    if (gate !== undefined) return failed(gate)
     return run(ctx)
   }
 }
@@ -155,6 +157,16 @@ export function withGoGate(
  */
 export function goExecOptions(ctx: RunContext): ExecOptions {
   return { cwd: projectDirectory(ctx), timeoutMs: ctx.timeoutMs, env: goExecEnv() }
+}
+
+/**
+ * One `go` invocation in the project's directory and environment. The pair it
+ * replaces — `execTool(systemCommand(GO_BINARY, args), goExecOptions(ctx))` —
+ * was written out in seven runners, and a runner that spelled either half
+ * differently would run against a different directory than the gate probed.
+ */
+export function execGo(ctx: RunContext, args: readonly string[]): Promise<ToolExecution> {
+  return execTool(systemCommand(GO_BINARY, args), goExecOptions(ctx))
 }
 
 /** The absolute directory a project's Go commands run in. */

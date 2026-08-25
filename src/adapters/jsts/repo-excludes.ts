@@ -34,7 +34,7 @@ const BIOME_INCLUDES = ['files', 'includes'] as const
 const FALLOW_IGNORE = 'ignorePatterns'
 
 /** One config that contributed at least one exclude. */
-export interface RepoExcludeSource {
+interface RepoExcludeSource {
   /** Repo-relative posix path of the config, e.g. `biome.json`. */
   readonly config: string
   /** The globs it contributed, repo-relative posix, deduped and sorted. */

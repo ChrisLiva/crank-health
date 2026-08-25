@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `1ef990be72b477df6dfdf1ea506c796cdcea30ca` · crank-health 0.11.0 · quick profile
+`<repo>` @ `7884bf13b6a45757e42ccadd6d59cf21fd559a20` · crank-health 0.12.0 · quick profile
 
 ## Grades
 
@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | security | not assessed | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected; opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected; no GitHub Actions workflows or composite actions, so zizmor assessed nothing; no Python files, so bandit assessed nothing; osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected; no go.mod in this repo, so govulncheck assessed no Go dependencies |
 | types | not assessed | no tsconfig.json and no TypeScript sources — nothing owns the types category |
-| dead code | F — 2 weighted findings per 0.1 KLOC | 2 graded findings (2 warning), weighted total 2 (error ×5, warning ×1, info ×0.2). |
+| dead code | D — 1 weighted finding per 0.1 KLOC | 1 graded finding (1 warning), weighted total 1 (error ×5, warning ×1, info ×0.2). |
 | complexity | D — 1 of 9 functions over cognitive complexity 15 | 1 of 9 functions over cognitive complexity 15 (11.1%). |
 | duplication | A — 0.0% of tokens duplicated | 0.0% of tokens duplicated. |
 | lint | F — 15 weighted findings per 0.1 KLOC | 3 graded findings (3 error), weighted total 15 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade. |
@@ -42,19 +42,18 @@ Not graded: no tsconfig.json and no TypeScript sources — nothing owns the type
 | --- | --- | --- | --- | --- |
 | tsc | not available | [default-config] | — (pinned 7.0.2) | no tsconfig.json and no TypeScript sources — nothing owns the types category |
 
-## dead code — F
+## dead code — D
 
-2 graded findings (2 warning), weighted total 2 (error ×5, warning ×1, info ×0.2).
+1 graded finding (1 warning), weighted total 1 (error ×5, warning ×1, info ×0.2).
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | fallow-dead-code | ok | [default-config] | 3.17.0 | — |
 | knip | ok | [default-config] | 6.32.2 | — |
 
-**Findings** (2)
+**Findings** (1)
 
 - warning `src/clean.js:5` `fallow/unused-export` — Export `subtract` is never used (fallow-dead-code) [default-config]
-- warning `src/clean.js:5` `knip/unused-exports` — Export `subtract` is never used (knip) [default-config]
 
 Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json)
 

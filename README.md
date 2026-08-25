@@ -135,7 +135,9 @@ alone.
 
 Every finding carries `provenance: "repo-config" | "default-config"`, and whether it counted toward
 a grade is the list it is in — `findings[]` or `advisories[]`, see the schema below. When a default
-tool steps aside for a repo-owned one, `report.json` records that it did.
+tool steps aside for a repo-owned one, `report.json` records that it did. A root
+`osv-scanner.toml` is passed to osv-scanner on `--config`, so its overrides reach lockfiles in
+subdirectories that the scanner's own beside-the-lockfile discovery would not apply them to.
 
 ## Monorepos
 
@@ -230,7 +232,11 @@ declares `exports`, `module` or `types` — or a `main` without `private: true` 
 export in a library is therefore advisory — reported in `advisories[]` — rather than graded, and
 no repo is marked down for publishing what it exists to publish. A repo-owned dead-code config
 overrides that: a repo that configured knip or fallow itself has already declared where its entry
-points are, so its own tool's findings count. Changing this rule is a version bump too.
+points are, so its own tool's findings count. Changing this rule is a version bump too. Both
+default dead-code tools, fallow and knip, run on every JS/TS repo; a symbol both name is reported
+once, kept from the first tool in adapter order (fallow), so a repo is not marked down twice for one
+export. When the two disagree on whether a file counts (each resolves entry points on its own), the
+graded row and the advisory row both stand rather than the advisory one replacing the grade.
 
 ## Output
 

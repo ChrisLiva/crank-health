@@ -1,9 +1,17 @@
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import { COMPLEXITY_CEILING } from '../../core/grade.ts'
 import type { RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
-import { asArray, asNumber, asRecord, asString, firstLine, underProject } from '../support.ts'
-import { goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
+import {
+  asArray,
+  asNumber,
+  asRecord,
+  asString,
+  failed,
+  firstLine,
+  underProject,
+} from '../support.ts'
+import { execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
 
 /**
  * gocognit — cognitive complexity per Go function, which is exactly the ratio
@@ -28,13 +36,10 @@ import { goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain
  * in.
  */
 
-export const GOCOGNIT_TOOL = 'gocognit'
+const GOCOGNIT_TOOL = 'gocognit'
 
 /** The import path `go run` fetches; pinned exactly in `manifest.ts`. */
 const GOCOGNIT_PACKAGE = 'github.com/uudashr/gocognit/cmd/gocognit'
-
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
 
 /**
  * Five minutes, like staticcheck's: this parses no more than the package graph
@@ -69,14 +74,9 @@ async function runGocognit(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Go files' }
   }
 
-  const execution = await execTool(systemCommand(GO_BINARY, invocationArgs()), goExecOptions(ctx))
+  const execution = await execGo(ctx, invocationArgs())
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles: [],
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure)
   }
 
   const rawFiles = [await writeScratchRaw(ctx.scratch, RAW_NAME, execution.stdout)]

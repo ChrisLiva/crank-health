@@ -1,6 +1,5 @@
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import { writeScratchRaw } from '../../core/exec.ts'
 import type { ToolFailure } from '../../core/exec.ts'
 import type { RunContext, ToolResult, ToolRunner } from '../../core/types.ts'
 import { pinnedGoSpec, pinnedGoVersion } from '../../manifest.ts'
@@ -13,9 +12,11 @@ import {
   asString,
   compare,
   firstLine,
+  readFileOrUndefined,
+  unavailable,
   underProject,
 } from '../support.ts'
-import { detectGoConfig, goExecOptions, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
+import { detectGoConfig, execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
 
 /**
  * gremlins — mutation testing for Go, and the Go adapter's only runner that
@@ -52,15 +53,11 @@ export const GREMLINS_TOOL = 'gremlins'
 /** The import path `go run` fetches; pinned exactly in `manifest.ts`. */
 const GREMLINS_PACKAGE = 'github.com/go-gremlins/gremlins/cmd/gremlins'
 
-/** `go` is the fetcher and the host both; see `go-toolchain.ts`. */
-const GO_BINARY = 'go'
-
 /** The config names gremlins answers to, and the repo's declaration of it. */
-export const GREMLINS_CONFIG_FILES: readonly string[] = ['.gremlins.yaml', '.gremlins.yml']
+const GREMLINS_CONFIG_FILES: readonly string[] = ['.gremlins.yaml', '.gremlins.yml']
 
 /** What to tell a Go repo that has no mutation testing set up. */
-export const GREMLINS_SETUP_HINT =
-  'add a `.gremlins.yaml` to this module to enable mutation testing'
+const GREMLINS_SETUP_HINT = 'add a `.gremlins.yaml` to this module to enable mutation testing'
 
 /** The name the machine-readable report is staged under, per project. */
 const RAW_NAME = 'gremlins.json'
@@ -227,10 +224,7 @@ async function runGremlins(ctx: RunContext): Promise<ToolResult> {
   }
 
   const reportPath = join(ctx.scratch, `${GREMLINS_TOOL}-output.json`)
-  const execution = await execTool(
-    systemCommand(GO_BINARY, invocationArgs(reportPath)),
-    goExecOptions(ctx),
-  )
+  const execution = await execGo(ctx, invocationArgs(reportPath))
 
   const report = await readFileOrUndefined(reportPath)
   const rawFiles =
@@ -268,18 +262,6 @@ function invocationArgs(reportPath: string): string[] {
 function parseDocument(json: string): unknown {
   try {
     return JSON.parse(json)
-  } catch {
-    return undefined
-  }
-}
-
-function unavailable(reason: string): ToolResult {
-  return { state: 'not-available', findings: [], rawFiles: [], reason }
-}
-
-async function readFileOrUndefined(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, 'utf8')
   } catch {
     return undefined
   }

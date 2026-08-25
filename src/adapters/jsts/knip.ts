@@ -14,6 +14,8 @@ import {
   asRecord,
   asString,
   byLocation,
+  errorMessage,
+  failed,
   firstLine,
   identify,
   repoRelative,
@@ -36,12 +38,12 @@ import { detectNodeTool, isLibraryPackage } from './node-package.ts'
  * ever runs where there is no config to inherit.
  */
 
-export const KNIP_TOOL = 'knip'
+const KNIP_TOOL = 'knip'
 
 /** npm package name; knip's command and package names coincide. */
 const KNIP_PACKAGE = 'knip'
 
-export const KNIP_CONFIG_FILES: readonly string[] = [
+const KNIP_CONFIG_FILES: readonly string[] = [
   'knip.json',
   'knip.jsonc',
   'knip.ts',
@@ -103,12 +105,7 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
   }
 
   if (execution.failure !== undefined) {
-    return {
-      state: execution.failure.state,
-      findings: [],
-      rawFiles,
-      reason: execution.failure.reason,
-    }
+    return failed(execution.failure, rawFiles)
   }
   if (execution.stdout.trim().length === 0) {
     return {
@@ -127,7 +124,7 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
       state: 'error',
       findings: [],
       rawFiles,
-      reason: `could not parse knip output: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `could not parse knip output: ${errorMessage(error)}`,
     }
   }
 
@@ -155,7 +152,7 @@ export interface KnipIssues {
   readonly unusedDependencies: readonly KnipDependency[]
 }
 
-export interface KnipSymbol {
+interface KnipSymbol {
   readonly file: string
   readonly name: string
   readonly line: number
@@ -164,7 +161,7 @@ export interface KnipSymbol {
   readonly kind: string
 }
 
-export interface KnipDependency {
+interface KnipDependency {
   readonly file: string
   readonly name: string
   /** `dependencies`, `devDependencies`, `optionalPeerDependencies`. */
