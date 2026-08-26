@@ -1183,5 +1183,5 @@ interface AislopCapture {
 }
 
 async function aislopCapture(): Promise<AislopCapture> {
-  return JSON.parse(await read('aislop-0.14.1.json')) as AislopCapture
+  return (await readAsJson('aislop-0.14.1.json')) as AislopCapture
 }
