@@ -21,6 +21,12 @@ import {
   isDatabaseUnreachable,
   invocationArgs as osvArgs,
 } from '../src/adapters/common/osv-scanner.ts'
+import { parse as parseYaml, stringify } from 'yaml'
+import {
+  invocationArgs as aislopArgs,
+  generatedConfig,
+  liftRepoConfig,
+} from '../src/adapters/common/aislop.ts'
 import { isAuditable } from '../src/adapters/common/zizmor.ts'
 import { buildInvocationArgs } from '../src/adapters/csharp/build.ts'
 import { formatInvocationArgs } from '../src/adapters/csharp/dotnet-format.ts'
@@ -377,6 +383,124 @@ describe('zero footprint, in the arguments', () => {
     const withConfig = osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'), `${REPO}/osv-scanner.toml`)
     expect(withConfig.slice(-4)).toEqual(['error', '--config', `${REPO}/osv-scanner.toml`, REPO])
     expect(osvArgs(REPO, join(SCRATCH, 'osv-scanner.json'))).not.toContain('--config')
+  })
+})
+
+/**
+ * aislop's command line and the two configs it is built from.
+ *
+ * aislop is the one runner that scans a directory crank-health assembled
+ * rather than the repo, so the arguments are where zero footprint is decided:
+ * the scan root is the scratch mirror, and no subcommand that rewrites code
+ * (`fix`, `agent`) is reachable.
+ */
+describe('aislop invocation', () => {
+  it('scans the scratch mirror and can reach no repo path or fixing subcommand', () => {
+    const args = aislopArgs(join(SCRATCH, 'aislop', 'repo'))
+
+    expect(args).toEqual(['scan', '--json', '/scratch/aislop/repo'])
+    expect(args.some((arg) => arg.startsWith('--config'))).toBe(false)
+    expect(args).not.toContain('fix')
+    expect(args).not.toContain('agent')
+    expect(args.some((arg) => arg.startsWith('--changes'))).toBe(false)
+    expect(args.some((arg) => arg === REPO || arg.startsWith(`${REPO}/`))).toBe(false)
+  })
+
+  /** The generated config with nothing lifted from the repo. */
+  const BARE_CONFIG = {
+    version: 1,
+    engines: {
+      format: false,
+      lint: false,
+      'code-quality': false,
+      security: false,
+      architecture: false,
+      'ai-slop': true,
+    },
+    ci: { failBelow: 0 },
+    telemetry: { enabled: false },
+  }
+
+  /**
+   * `version` is a number because aislop's schema is `z.number().default(1)`:
+   * the string `"1"` fails the whole parse, and the catch around it falls back
+   * to aislop's defaults, which run all six engines. `failBelow: 0` keeps the
+   * exit code out of the scoring, and telemetry is off in the file as well as
+   * in the environment.
+   */
+  it('turns off the five engines crank-health already runs, and lifts only three keys', () => {
+    expect(generatedConfig()).toEqual(BARE_CONFIG)
+    expect(
+      generatedConfig({ rules: { 'ai-slop/todo-stub': 'off' }, exclude: ['src/excluded.js'] }),
+    ).toEqual({
+      ...BARE_CONFIG,
+      rules: { 'ai-slop/todo-stub': 'off' },
+      exclude: ['src/excluded.js'],
+    })
+    expect(generatedConfig({ rules: {} })).not.toHaveProperty('include')
+    expect(stringify(generatedConfig())).toContain('version: 1\n')
+    expect(stringify(generatedConfig())).not.toContain('version: "1"')
+  })
+
+  /**
+   * The config is written by `stringify` and read back by aislop's own `yaml`
+   * parser, so the pair has to survive values YAML would rather reinterpret: a
+   * glob carrying a colon and a `#`, and `no`, which YAML 1.1 reads as false.
+   */
+  it('round-trips a rule id and a glob the YAML parser could reinterpret', () => {
+    const config = generatedConfig({
+      rules: { 'ai-slop/*': 'off', 'ai-slop/todo-stub': 'warning' },
+      exclude: ['src/a b:c#d*.js', 'no'],
+    })
+
+    expect(parseYaml(stringify(config))).toEqual(config)
+  })
+
+  /**
+   * What a repo's own `.aislop/config.yml` is allowed to say about a
+   * crank-health run: which rules, which files, and whether the engine runs at
+   * all. `extends`, `scoring` and the rest are dropped, so a repo cannot point
+   * the run at a rule pack crank-health never validated.
+   */
+  it('lifts the three keys aislop validates, and drops every other one', () => {
+    expect(
+      liftRepoConfig(
+        'version: 1\nrules:\n  ai-slop/todo-stub: off\nexclude:\n  - src/excluded.js\n',
+      ),
+    ).toEqual({
+      lifted: { rules: { 'ai-slop/todo-stub': 'off' }, exclude: ['src/excluded.js'] },
+      aiSlopDisabled: false,
+    })
+    expect(liftRepoConfig('engines:\n  ai-slop: false\n')).toEqual({
+      lifted: {},
+      aiSlopDisabled: true,
+    })
+    expect(liftRepoConfig('extends: ./base.yml\nscoring: {}\n')).toEqual({
+      lifted: {},
+      aiSlopDisabled: false,
+    })
+    // aislop's rule lookup is an exact-id map read, so a `*` id is inert. It
+    // still passes the schema, so it is lifted rather than rejected.
+    expect(liftRepoConfig('rules: {"ai-slop/*": off}\n')).toEqual({
+      lifted: { rules: { 'ai-slop/*': 'off' } },
+      aiSlopDisabled: false,
+    })
+  })
+
+  /**
+   * A config aislop itself would reject makes the repo unowned for this run:
+   * measuring with crank-health's defaults and saying so beats measuring under
+   * a file the tool would have thrown out.
+   */
+  it('reads a config it cannot validate as no config at all', () => {
+    // `info` is a severity aislop's `RuleSeverityOverride` enum does not have.
+    expect(liftRepoConfig('rules:\n  ai-slop/todo-stub: info\n')).toBeUndefined()
+    expect(liftRepoConfig('exclude: src/excluded.js\n')).toBeUndefined()
+    expect(liftRepoConfig('include:\n  - 3\n')).toBeUndefined()
+    // An unterminated flow map: `yaml` throws where a half-written config
+    // often lands, and `''` parses to null, which is no mapping at all.
+    expect(liftRepoConfig('rules: {ai-slop/todo-stub: off')).toBeUndefined()
+    expect(liftRepoConfig('')).toBeUndefined()
   })
 })
 
