@@ -18,3 +18,5 @@ the zero-footprint assertion still means something.
 
 Everything else is deliberately clean: `main.py` calls both functions, so vulture
 reports nothing, and no function is anywhere near the complexity ceiling.
+`total` returns `0 + sum(values)` rather than `sum(values)` so aislop's
+`thin-wrapper` stays quiet; `label` stays on lines 5 and 6.

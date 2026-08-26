@@ -271,11 +271,6 @@ export function toPendingFindings(
 }
 
 /**
- * `https://user:pass@host/m.js` → `https://<redacted>@host/m.js`. The class
- * stops at a quote, a slash or whitespace, so an address later in the sentence
- * is left alone.
- */
-/**
  * `JSON.parse`, with a syntax error read as "not a payload". The thrown
  * `SyntaxError` quotes the first bytes of stdout, and this runner's reason
  * reaches `report.json`, where nothing may quote what a tool printed.
@@ -288,6 +283,11 @@ function parseJson(stdout: string): unknown {
   }
 }
 
+/**
+ * `https://user:pass@host/m.js` → `https://<redacted>@host/m.js`. The class
+ * stops at a quote, a slash or whitespace, so an address later in the sentence
+ * is left alone.
+ */
 function redactUserinfo(message: string): string {
   return message.replaceAll(/:\/\/[^@\s"'/]+@/g, '://<redacted>@')
 }

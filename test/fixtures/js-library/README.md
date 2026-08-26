@@ -16,3 +16,5 @@ Everything else is deliberately clean; a finding elsewhere is a false positive.
 `src/util.js` is byte-identical to `js-basic/src/clean.js`, whose README records
 that both fallow and knip catch `subtract` — the same planted shape, graded
 differently because of the manifest.
+`run` in `src/index.js` returns `0 + add(a, b)` rather than `add(a, b)` so aislop's
+`thin-wrapper` stays quiet; `src/util.js` is untouched.
