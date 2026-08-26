@@ -1,0 +1,205 @@
+{
+  "schemaVersion": "1",
+  "cliVersion": "0.14.1",
+  "version": "0.14.1",
+  "score": 63,
+  "label": "Needs Work",
+  "scoreable": true,
+  "coverage": {
+    "supportedFiles": 2,
+    "unsupportedFiles": 0,
+    "dominantUnsupported": null,
+    "scoreable": true
+  },
+  "engines": {
+    "ai-slop": {
+      "issues": 5,
+      "skipped": false,
+      "elapsed": 18.839458000000036
+    }
+  },
+  "engineDefinitions": {
+    "format": {
+      "label": "Formatting",
+      "description": "Whitespace, indentation, line wrapping, and import ordering"
+    },
+    "lint": {
+      "label": "Linting",
+      "description": "Static analysis for likely bugs and bad patterns"
+    },
+    "code-quality": {
+      "label": "Code Quality",
+      "description": "Complexity limits, dead code detection, and duplication checks"
+    },
+    "ai-slop": {
+      "label": "AI Slop",
+      "description": "Narrative comments, dead patterns, unsafe type casts, TODO stubs, generic names"
+    },
+    "architecture": {
+      "label": "Architecture",
+      "description": "Project-specific import and layering rules"
+    },
+    "security": {
+      "label": "Security",
+      "description": "Secret leaks, risky APIs, and dependency vulnerabilities"
+    }
+  },
+  "diagnostics": [
+    {
+      "filePath": "src/excluded.js",
+      "engine": "ai-slop",
+      "rule": "ai-slop/swallowed-exception",
+      "severity": "error",
+      "message": "Empty catch block swallows errors silently",
+      "help": "Handle errors explicitly: log with context, rethrow, or return an error value",
+      "line": 4,
+      "column": 0,
+      "category": "AI Slop",
+      "fixable": false,
+      "assessment": {
+        "kind": "ai-slop-indicator",
+        "confidence": "high",
+        "label": "AI-slop indicators"
+      },
+      "scoreImpact": {
+        "tier": "strict",
+        "multiplier": 1,
+        "rationale": "Swallowed failures hide real broken states and deserve full scoring impact."
+      },
+      "forceFixable": false
+    },
+    {
+      "filePath": "src/index.js",
+      "engine": "ai-slop",
+      "rule": "ai-slop/swallowed-exception",
+      "severity": "error",
+      "message": "Empty catch block swallows errors silently",
+      "help": "Handle errors explicitly: log with context, rethrow, or return an error value",
+      "line": 9,
+      "column": 0,
+      "category": "AI Slop",
+      "fixable": false,
+      "assessment": {
+        "kind": "ai-slop-indicator",
+        "confidence": "high",
+        "label": "AI-slop indicators"
+      },
+      "scoreImpact": {
+        "tier": "strict",
+        "multiplier": 1,
+        "rationale": "Swallowed failures hide real broken states and deserve full scoring impact."
+      },
+      "forceFixable": false
+    },
+    {
+      "filePath": "src/index.js",
+      "engine": "ai-slop",
+      "rule": "ai-slop/todo-stub",
+      "severity": "info",
+      "message": "Unresolved TODO/FIXME/HACK comment indicates incomplete code",
+      "help": "Resolve the TODO or create a tracked issue for it",
+      "line": 5,
+      "column": 0,
+      "category": "AI Slop",
+      "fixable": false,
+      "assessment": {
+        "kind": "ai-slop-indicator",
+        "confidence": "medium",
+        "label": "AI-slop indicators"
+      },
+      "scoreImpact": {
+        "tier": "standard",
+        "multiplier": 1,
+        "rationale": "Unresolved TODO/stub markers often indicate unfinished behavior."
+      },
+      "forceFixable": false
+    },
+    {
+      "filePath": "src/index.js",
+      "engine": "ai-slop",
+      "rule": "ai-slop/duplicate-import",
+      "severity": "warning",
+      "message": "\"node:fs\" is also imported on line 1. Merge into a single import statement.",
+      "help": "Two imports from the same module split readers' attention and grow the import block. Run aislop fix to merge them automatically.",
+      "line": 2,
+      "column": 1,
+      "category": "AI Slop",
+      "fixable": true,
+      "assessment": {
+        "kind": "ai-slop-indicator",
+        "confidence": "medium",
+        "label": "AI-slop indicators"
+      },
+      "scoreImpact": {
+        "tier": "mechanical",
+        "multiplier": 0.5,
+        "cap": 16,
+        "rationale": "Duplicate imports are mechanical cleanup."
+      },
+      "forceFixable": false
+    },
+    {
+      "filePath": "src/index.js",
+      "engine": "ai-slop",
+      "rule": "ai-slop/hallucinated-import",
+      "severity": "error",
+      "message": "Imports \"definitely-not-a-declared-package\" but it's not declared in package.json",
+      "help": "Most often this is an LLM hallucinating a plausible-sounding package name. Either add the package to your manifest, or correct the import.",
+      "line": 3,
+      "column": 1,
+      "category": "AI Slop",
+      "fixable": false,
+      "assessment": {
+        "kind": "confirmed-defect",
+        "confidence": "high",
+        "label": "confirmed defects"
+      },
+      "scoreImpact": {
+        "tier": "strict",
+        "multiplier": 1,
+        "rationale": "Imports missing from the manifest are high-confidence install/runtime failures."
+      },
+      "forceFixable": false
+    }
+  ],
+  "findingAssessment": {
+    "rows": [
+      {
+        "kind": "ai-slop-indicator",
+        "label": "AI-slop indicators",
+        "count": 4,
+        "errors": 2,
+        "warnings": 1,
+        "info": 1,
+        "fixable": 1
+      },
+      {
+        "kind": "confirmed-defect",
+        "label": "confirmed defects",
+        "count": 1,
+        "errors": 1,
+        "warnings": 0,
+        "info": 0,
+        "fixable": 0
+      }
+    ],
+    "byKind": {
+      "confirmed-defect": 1,
+      "conservative-security": 0,
+      "style-policy": 0,
+      "ai-slop-indicator": 4
+    },
+    "byConfidence": {
+      "high": 3,
+      "medium": 2,
+      "low": 0
+    }
+  },
+  "summary": {
+    "errors": 3,
+    "warnings": 1,
+    "fixable": 1,
+    "files": 2,
+    "elapsed": "19ms"
+  }
+}

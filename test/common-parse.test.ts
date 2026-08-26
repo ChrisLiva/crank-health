@@ -1,6 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import type { AislopPayload } from '../src/adapters/common/aislop.ts'
+import {
+  parseAislopJson,
+  payloadFailure,
+  toPendingFindings as toAislopFindings,
+} from '../src/adapters/common/aislop.ts'
 import type { BanditIssue } from '../src/adapters/common/bandit.ts'
 import {
   BANDIT_TOOL,
@@ -36,6 +42,7 @@ import {
   toPendingFindings as toZizmorFindings,
 } from '../src/adapters/common/zizmor.ts'
 import { OMITTED, sanitizeRawResults } from '../src/adapters/support.ts'
+import type { ToolFailure } from '../src/core/exec.ts'
 import { computeAnchors } from '../src/core/fingerprint.ts'
 import { gradeAbsolute } from '../src/core/grade.ts'
 import type { Finding, PendingFinding } from '../src/core/types.ts'
@@ -892,4 +899,289 @@ function banditIssue(overrides: Partial<BanditIssue> = {}): BanditIssue {
 function identified(finding: Omit<Finding, 'id'> & { readonly anchor?: string }): Finding {
   const { anchor: _anchor, ...rest } = finding
   return { ...rest, id: 'test' }
+}
+
+describe('parseAislopJson', () => {
+  it('reads schema version, engines, file count and every diagnostic from real output', async () => {
+    const payload = parseAislopJson(await read('aislop-0.14.1.json'))
+    expect(
+      payload.diagnostics.map((diagnostic) => [
+        diagnostic.filePath,
+        diagnostic.rule,
+        diagnostic.severity,
+        diagnostic.line,
+        diagnostic.column,
+      ]),
+    ).toEqual([
+      ['src/excluded.js', 'ai-slop/swallowed-exception', 'error', 4, 0],
+      ['src/index.js', 'ai-slop/swallowed-exception', 'error', 9, 0],
+      ['src/index.js', 'ai-slop/todo-stub', 'info', 5, 0],
+      ['src/index.js', 'ai-slop/duplicate-import', 'warning', 2, 1],
+      ['src/index.js', 'ai-slop/hallucinated-import', 'error', 3, 1],
+    ])
+    expect(payload.schemaVersion).toBe('1')
+    expect(payload.version).toBe('0.14.1')
+    expect(payload.engines).toEqual({ 'ai-slop': { skipped: false } })
+    expect(payload.filesScanned).toBe(2)
+  })
+
+  it('rejects output that is not an aislop payload', () => {
+    // This inverts the convention at :159 and :225, where empty stdout is a
+    // clean run: aislop prints its envelope even with zero diagnostics, so
+    // nothing on stdout means the run never finished.
+    expect(() => parseAislopJson('')).toThrow('no JSON object')
+    expect(() => parseAislopJson('   \n')).toThrow('no JSON object')
+    expect(() => parseAislopJson('[]')).toThrow('no JSON object')
+    expect(() => parseAislopJson('{"error":"boom"}')).toThrow('aislop reported an error: boom')
+    expect(() => parseAislopJson('{"schemaVersion":"1","diagnostics":{}}')).toThrow(
+      'no diagnostics array',
+    )
+  })
+
+  it('drops a diagnostic whose filePath is not a string and keeps the others', async () => {
+    const capture = await aislopCapture()
+    const doctored = JSON.stringify({
+      ...capture,
+      diagnostics: capture.diagnostics.map((diagnostic, index) =>
+        index === 0 ? { ...diagnostic, filePath: 1 } : diagnostic,
+      ),
+    })
+    expect(parseAislopJson(doctored).diagnostics).toHaveLength(capture.diagnostics.length - 1)
+  })
+})
+
+describe('the captured aislop payload', () => {
+  /**
+   * The thirteen keys a live 0.14.1 diagnostic carries, plus the optional
+   * `detail`. A bump that adds a source-excerpt field fails here, and the fix
+   * is `sanitizeRawResults(stdout, 'diagnostics', …)` (`support.ts:239`) before
+   * the raw output reaches the run dir, where nothing may quote a credential.
+   */
+  it('carries one-based lines and only the documented diagnostic fields', async () => {
+    const capture = await aislopCapture()
+    const aiSlop = capture.diagnostics.filter((diagnostic) => diagnostic['engine'] === 'ai-slop')
+    expect(aiSlop).toHaveLength(5)
+    for (const diagnostic of aiSlop) {
+      expect(Object.keys(diagnostic).toSorted()).toEqual(
+        AISLOP_DIAGNOSTIC_KEYS.filter((key) => key in diagnostic),
+      )
+      expect(
+        AISLOP_DIAGNOSTIC_KEYS.filter((key) => key !== 'detail' && !(key in diagnostic)),
+      ).toEqual([])
+      expect(Number(diagnostic['line'])).toBeGreaterThanOrEqual(1)
+    }
+  })
+})
+
+describe('payloadFailure', () => {
+  it('rejects a payload whose schema version is not 1', async () => {
+    expect(await failureOf({ schemaVersion: '2' }, 2)).toEqual({
+      state: 'error',
+      reason: 'aislop printed schemaVersion "2", not "1"; its JSON contract moved',
+    })
+  })
+
+  /**
+   * The generated config names one engine. Any other engine set means aislop
+   * read a different config, and the other five engines duplicate categories
+   * crank-health already grades.
+   */
+  it('rejects an engine set that is not exactly ai-slop', async () => {
+    const capture = await aislopCapture()
+    const notHonored = {
+      state: 'error',
+      reason: 'aislop ran engines beyond ai-slop; its config was not honored',
+    }
+    expect(
+      await failureOf({ engines: { ...capture.engines, lint: { skipped: false } } }, 2),
+    ).toEqual(notHonored)
+    expect(await failureOf({ engines: {} }, 2)).toEqual(notHonored)
+  })
+
+  it('rejects an ai-slop engine that skipped itself', async () => {
+    expect(await failureOf({ engines: { 'ai-slop': { skipped: true } } }, 2)).toEqual({
+      state: 'error',
+      reason: 'aislop skipped its ai-slop engine and its JSON gives no reason',
+    })
+  })
+
+  /**
+   * Zero files scanned with files to scan is aislop's directory policy, not a
+   * clean project: `not-available` rather than a flattering graded zero.
+   */
+  it('reports not-available when aislop scanned none of the scannable files', async () => {
+    const capture = await aislopCapture()
+    const noFiles = { summary: { ...capture.summary, files: 0 } }
+    expect(await failureOf(noFiles, 2)).toEqual({
+      state: 'not-available',
+      reason: "aislop's directory policy excluded every file of this project",
+    })
+    // Nothing to scan is not a failure; the runner never gets here.
+    expect(await failureOf(noFiles, 0)).toBeUndefined()
+  })
+
+  it('accepts the captured payload', async () => {
+    expect(payloadFailure(parseAislopJson(await read('aislop-0.14.1.json')), 2)).toBeUndefined()
+  })
+})
+
+describe('toAislopFindings', () => {
+  it('maps every scannable ai-slop diagnostic to a graded lint finding', async () => {
+    const findings = toAislopFindings(await aislopPayload(), false, SCANNABLE)
+    expect(
+      findings.map((finding) => [
+        finding.file,
+        finding.rule,
+        finding.severity,
+        finding.range.startLine,
+        finding.range.startCol,
+        finding.gradeScope,
+        finding.provenance,
+      ]),
+    ).toEqual([
+      ['src/excluded.js', 'ai-slop/swallowed-exception', 'error', 4, 1, true, 'default-config'],
+      ['src/index.js', 'ai-slop/duplicate-import', 'warning', 2, 1, true, 'default-config'],
+      ['src/index.js', 'ai-slop/hallucinated-import', 'error', 3, 1, true, 'default-config'],
+      ['src/index.js', 'ai-slop/todo-stub', 'info', 5, 1, true, 'default-config'],
+      ['src/index.js', 'ai-slop/swallowed-exception', 'error', 9, 1, true, 'default-config'],
+    ])
+    expect(findings[0]?.fixHint).toBe(
+      'Handle errors explicitly: log with context, rethrow, or return an error value',
+    )
+  })
+
+  it('marks the findings repo-config when the repo owns the aislop config', async () => {
+    const findings = toAislopFindings(await aislopPayload(), true, SCANNABLE)
+    expect(findings.every((finding) => finding.provenance === 'repo-config')).toBe(true)
+  })
+
+  /**
+   * The inventory decides what is in the report. aislop walks the mirror
+   * directory, so a file the repo gitignores can come back in the payload and
+   * must not become a finding.
+   */
+  it('drops a diagnostic about a file outside the scannable set', async () => {
+    const findings = toAislopFindings(await aislopPayload(), false, new Set(['src/index.js']))
+    expect(findings.every((finding) => finding.file === 'src/index.js')).toBe(true)
+    expect(findings).toHaveLength(4)
+  })
+
+  /** The other five engines are off in the config; a row from one is not ours. */
+  it('ignores a diagnostic from an engine other than ai-slop', async () => {
+    const findings = toAislopFindings(
+      await aislopPayload([{ engine: 'lint', rule: 'eslint/no-unreachable' }]),
+      false,
+      SCANNABLE,
+    )
+    expect(findings).toHaveLength(5)
+    expect(findings.every((finding) => finding.rule.startsWith('ai-slop/'))).toBe(true)
+  })
+
+  /**
+   * An import specifier reaches the message verbatim, and a specifier can carry
+   * userinfo: nothing crank-health writes may quote a credential. Both
+   * import rules are redacted; only `duplicate-import` interpolates the raw
+   * specifier today, and `hallucinated-import` is covered against the day its
+   * message shape changes.
+   */
+  it('redacts URL userinfo in the import rules and leaves other rules verbatim', async () => {
+    const message =
+      '"https://u:p@host/m.js" is also imported on line 1. Merge into a single import statement.'
+    const hostile = '"https://u:p@héllo.example/m.js" is also imported. Ask ops@example.com.'
+    const findings = toAislopFindings(
+      await aislopPayload([
+        { rule: 'ai-slop/duplicate-import', message },
+        { rule: 'ai-slop/hallucinated-import', message },
+        { rule: 'ai-slop/todo-stub', message },
+        { rule: 'ai-slop/duplicate-import', message: hostile },
+      ]),
+      false,
+      SCANNABLE,
+    )
+    const messageOf = (rule: string): string | undefined =>
+      findings.find((finding) => finding.rule === rule && finding.message.includes('m.js'))?.message
+    const redacted =
+      '"https://<redacted>@host/m.js" is also imported on line 1. Merge into a single import statement.'
+    expect(messageOf('ai-slop/duplicate-import')).toBe(redacted)
+    expect(messageOf('ai-slop/hallucinated-import')).toBe(redacted)
+    expect(messageOf('ai-slop/todo-stub')).toBe(message)
+    // The address after the specifier is not userinfo: the pattern stops at the
+    // closing quote, so only the credential goes.
+    expect(findings.map((finding) => finding.message)).toContain(
+      '"https://<redacted>@héllo.example/m.js" is also imported. Ask ops@example.com.',
+    )
+  })
+
+  it('maps an unknown severity to info and a zero column to column 1', async () => {
+    const findings = toAislopFindings(
+      await aislopPayload([{ rule: 'ai-slop/future-rule', severity: 'fatal', column: 0 }]),
+      false,
+      SCANNABLE,
+    )
+    const future = findings.find((finding) => finding.rule === 'ai-slop/future-rule')
+    expect(future).toMatchObject({ severity: 'info' })
+    expect(future?.range).toMatchObject({ startCol: 1, endCol: 1 })
+  })
+})
+
+/** The two files the fixture mirror offered aislop. */
+const SCANNABLE: ReadonlySet<string> = new Set(['src/index.js', 'src/excluded.js'])
+
+/** The captured payload, optionally with diagnostics doctored onto the end. */
+async function aislopPayload(
+  extra: readonly Record<string, unknown>[] = [],
+): Promise<AislopPayload> {
+  const capture = await aislopCapture()
+  const first = capture.diagnostics[0]
+  return parseAislopJson(
+    JSON.stringify({
+      ...capture,
+      diagnostics: [
+        ...capture.diagnostics,
+        ...extra.map((overrides) => ({ ...first, ...overrides })),
+      ],
+    }),
+  )
+}
+
+/** The capture with one field replaced, back through the parser. */
+async function failureOf(
+  overrides: Record<string, unknown>,
+  scannableCount: number,
+): Promise<ToolFailure | undefined> {
+  const capture = await aislopCapture()
+  return payloadFailure(
+    parseAislopJson(JSON.stringify({ ...capture, ...overrides })),
+    scannableCount,
+  )
+}
+
+/** Sorted, so the key comparison reads as a set. `detail` is the optional one. */
+const AISLOP_DIAGNOSTIC_KEYS = [
+  'assessment',
+  'category',
+  'column',
+  'detail',
+  'engine',
+  'filePath',
+  'fixable',
+  'forceFixable',
+  'help',
+  'line',
+  'message',
+  'rule',
+  'scoreImpact',
+  'severity',
+]
+
+/** The captured aislop payload, as the doctored-payload tests read it. */
+interface AislopCapture {
+  readonly schemaVersion: string
+  readonly engines: Record<string, unknown>
+  readonly summary: Record<string, unknown>
+  readonly diagnostics: readonly Record<string, unknown>[]
+}
+
+async function aislopCapture(): Promise<AislopCapture> {
+  return JSON.parse(await read('aislop-0.14.1.json')) as AislopCapture
 }

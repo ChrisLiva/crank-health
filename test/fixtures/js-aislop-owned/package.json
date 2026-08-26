@@ -1,0 +1,10 @@
+{
+  "name": "js-aislop-owned",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "aislop": "0.14.1"
+  }
+}
