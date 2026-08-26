@@ -115,6 +115,40 @@
   ],
   "tools": [
     {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": ".",
+      "side": "base",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/base/root/aislop.json"
+      ]
+    },
+    {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": ".",
+      "side": "head",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/aislop.json"
+      ]
+    },
+    {
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",

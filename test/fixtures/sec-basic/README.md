@@ -19,6 +19,9 @@ Planted, one per common-adapter runner:
 | duplication | jscpd        | `src/handler.js`/`report.js`| `summarize` copied verbatim between two files                |
 | lint        | oxlint       | `src/handler.js:2`          | `no-eval` — the same `eval` a linter also objects to         |
 
+`evaluate` binds `eval`'s result before returning it so aislop's `thin-wrapper`
+stays quiet; the security findings are the `eval` itself.
+
 `src/index.js` and `src/main.py` exist to keep everything else reachable, so
 the fixture has no incidental dead code and no formatting failures. Two advisory
 `fallow/complexity` notes on the duplicated function are unavoidable — they are

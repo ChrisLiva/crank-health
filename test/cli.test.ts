@@ -100,7 +100,10 @@ describe(
         schemaVersion: number
       }
       expect(report.schemaVersion).toBe(2)
-      expect(report.findings).toHaveLength(6)
+      // js-basic's seven graded findings: six from the language runners plus
+      // aislop's `ai-slop/unreachable-code` on the same statement oxlint's
+      // `no-unreachable` reports.
+      expect(report.findings).toHaveLength(7)
       expect(report.advisories).toHaveLength(1)
     })
 
@@ -212,11 +215,17 @@ describe(
         expect(result.exitCode).toBe(0)
         const report = JSON.parse(await readFile(join(budgeted, 'report.json'), 'utf8')) as {
           tools: { tool: string; state: string; reason: string | null }[]
-          categories: Record<string, { status: string }>
+          findings: { tool: string }[]
         }
-        expect(report.tools[0]).toMatchObject({ tool: 'oxlint', state: 'timeout' })
-        expect(report.tools[0]?.reason).toContain('budget')
-        expect(report.categories['lint']?.status).toBe('not-assessed')
+        const oxlint = report.tools.find((tool) => tool.tool === 'oxlint')
+        expect(oxlint).toMatchObject({ tool: 'oxlint', state: 'timeout' })
+        expect(oxlint?.reason).toContain('budget')
+        // A tool the budget stopped contributes nothing: the report carries no
+        // finding from it. The lint *category* is not asserted here, because
+        // aislop is the other runner in it and a 1 s budget is a race against
+        // its `npx` fetch — whether the category ends up graded is that race's
+        // answer, not this test's subject.
+        expect(report.findings.some((finding) => finding.tool === 'oxlint')).toBe(false)
 
         // Far inside the 60s the abandoned sleep would otherwise have run for.
         expect(elapsedMs).toBeLessThan(20_000)

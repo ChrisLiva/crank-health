@@ -1,0 +1,5 @@
+version: 1
+rules:
+  ai-slop/todo-stub: off
+exclude:
+  - src/excluded.js

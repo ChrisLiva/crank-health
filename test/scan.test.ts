@@ -77,6 +77,15 @@ const PLANTED = [
   },
   {
     category: 'lint',
+    tool: 'aislop',
+    rule: 'ai-slop/unreachable-code',
+    file: 'src/unreachable.js',
+    startLine: 6,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
+    category: 'lint',
     tool: 'oxlint',
     rule: 'eslint(no-unreachable)',
     file: 'src/unreachable.js',
@@ -136,6 +145,7 @@ describe('quick scan of the js-basic fixture', () => {
       'fallow-health',
       'fta',
       'jscpd',
+      'aislop',
       'oxlint',
       'react-doctor',
       'prettier',
@@ -153,6 +163,30 @@ describe('quick scan of the js-basic fixture', () => {
   })
 
   /**
+   * aislop is a lint runner of the `common` adapter, so it runs on this JS-only
+   * repo as a per-project job over a mirror of the project, and its evidence
+   * lands under the project's own `raw/` directory.
+   */
+  it('runs aislop once over the project, ephemerally, on crank-health defaults', () => {
+    const report = parse(json)
+    expect(report.tools.find((tool) => tool.tool === 'aislop')).toMatchObject({
+      tool: 'aislop',
+      scope: 'common',
+      project: '.',
+      state: 'ok',
+      execution: 'ephemeral-pinned',
+      provenance: 'default-config',
+      version: '0.14.1',
+      pinned: '0.14.1',
+      detection: null,
+      raw: ['raw/root/aislop.json'],
+    })
+    // `repoWide` is written only for a run that spanned the repo; aislop's is
+    // one job per project, so the key is absent here.
+    expect(report.tools.find((tool) => tool.tool === 'aislop')).not.toHaveProperty('repoWide')
+  })
+
+  /**
    * A letter without its arithmetic is not checkable. Every graded category
    * says the two numbers its formula divided and what one of them counts, so a
    * reader can redo the sum — and a category nothing graded says nothing,
@@ -164,10 +198,11 @@ describe('quick scan of the js-basic fixture', () => {
       CATEGORIES.filter((category) => categories[category].status === 'graded'),
     )
 
-    // The three graded lint findings are all errors (weight 5) — the fourth,
-    // a `perf`-class warning, is out of grade scope — over 0.1 KLOC.
+    // Three graded oxlint errors (weight 5) plus aislop's warning (weight 1)
+    // on the same unreachable statement — the fifth finding, a `perf`-class
+    // warning, is out of grade scope — over 0.1 KLOC.
     expect(gradeBasis.lint).toEqual({
-      value: 15,
+      value: 16,
       denominator: 0.1,
       unit: 'weighted findings per KLOC',
     })
@@ -302,6 +337,7 @@ describe('quick scan of the js-basic fixture', () => {
       expect(await readdir(join(outside, 'raw'))).toContain('root')
       const raw = (await readdir(join(outside, 'raw', 'root'))).toSorted()
       expect(GOLDEN_TOOLCHAIN ? raw : raw.filter(fromFetchableTool)).toEqual([
+        'aislop.json',
         'fallow-dead-code.json',
         'fallow-dead-code.stderr.txt',
         'fallow-health.json',
@@ -648,7 +684,7 @@ describe('quick scan of a repo that owns oxlint but has not installed it', () =>
       try {
         const result = await runHealthScan({ path: fixture.root, only: ['lint'] })
 
-        expect(result.report.tools[0]).toMatchObject({
+        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')).toMatchObject({
           tool: 'oxlint',
           execution: 'ephemeral-pinned',
           provenance: 'repo-config',
@@ -728,17 +764,21 @@ describe('quick scan of crank-health itself', () => {
 
 describe('a repo whose own linter is broken', () => {
   it(
-    'reports the category as error and still writes a complete report',
+    'reports the broken linter as an error and grades lint from what did run',
     async () => {
       const fixture = await repoWithBrokenOxlint('echo "boom" 1>&2; exit 1')
       try {
         const result = await runHealthScan({ path: fixture.root, only: ['lint'] })
 
-        expect(result.report.categories.lint).toEqual({
-          status: 'error',
+        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')).toMatchObject({
+          state: 'error',
           reason: expect.stringContaining('boom') as unknown as string,
         })
-        expect(result.report.tools[0]?.state).toBe('error')
+        // aislop is the other lint runner here and it completed, so the
+        // category is graded on its findings alone: a run that broke is
+        // reported in its own row, and never turns a measured category into an
+        // unmeasured one.
+        expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'C' })
         // The other seven categories are still reported, and the artifact exists.
         expect(Object.keys(result.report.categories)).toHaveLength(8)
         expect(await readFile(result.reportPath, 'utf8')).toBe(result.json)
@@ -750,15 +790,24 @@ describe('a repo whose own linter is broken', () => {
   )
 
   it(
-    'treats unparseable output as an error rather than as zero findings',
+    'treats unparseable output as an error rather than as zero findings, and grades what ran',
     async () => {
       const fixture = await repoWithBrokenOxlint('echo "definitely not sarif"')
       try {
         const result = await runHealthScan({ path: fixture.root, only: ['lint'] })
-        expect(result.report.categories.lint).toMatchObject({ status: 'error' })
-        expect(result.report.tools[0]?.reason).toContain('could not parse oxlint output')
+        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')).toMatchObject({
+          state: 'error',
+        })
+        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')?.reason).toContain(
+          'could not parse oxlint output',
+        )
+        // Zero findings would have graded this repo A; aislop's C is the grade
+        // of the one run that produced a measurement.
+        expect(result.report.categories.lint).toEqual({ status: 'graded', grade: 'C' })
         // The evidence is kept even though nothing could be made of it (spec §8).
-        expect(result.report.tools[0]?.raw).toEqual(['raw/root/oxlint.sarif.json'])
+        expect(result.report.tools.find((tool) => tool.tool === 'oxlint')?.raw).toEqual([
+          'raw/root/oxlint.sarif.json',
+        ])
       } finally {
         await fixture.remove()
       }

@@ -3,7 +3,7 @@
   "crankHealth": "0.12.0",
   "repo": {
     "path": "<repo>",
-    "commit": "7884bf13b6a45757e42ccadd6d59cf21fd559a20"
+    "commit": "ae26f855da3e9c5e066a3f5921243a54f49eb741"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -68,7 +68,7 @@
       "unit": "% of tokens duplicated"
     },
     "lint": {
-      "value": 15,
+      "value": 16,
       "denominator": 0.1,
       "unit": "weighted findings per KLOC"
     },
@@ -94,7 +94,7 @@
     "js-ts": {
       "dead-code": 1,
       "complexity": 1,
-      "lint": 4,
+      "lint": 5,
       "format": 1
     }
   },
@@ -365,6 +365,22 @@
       ]
     },
     {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/aislop.json"
+      ]
+    },
+    {
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",
@@ -479,6 +495,24 @@
       },
       "message": "Duplicate key 'home'",
       "provenance": "default-config"
+    },
+    {
+      "id": "72553a0f50ee852d",
+      "category": "lint",
+      "tool": "aislop",
+      "rule": "ai-slop/unreachable-code",
+      "severity": "warning",
+      "file": "src/unreachable.js",
+      "project": ".",
+      "range": {
+        "startLine": 6,
+        "startCol": 1,
+        "endLine": 6,
+        "endCol": 1
+      },
+      "message": "Code after return/throw statement is unreachable",
+      "provenance": "default-config",
+      "fixHint": "Remove the unreachable code or restructure the control flow"
     },
     {
       "id": "20bf70285fec5ba4",

@@ -531,6 +531,38 @@
       ]
     },
     {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/aislop.json"
+      ]
+    },
+    {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": "brokenpkg",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/brokenpkg/aislop.json"
+      ]
+    },
+    {
       "tool": "go-vet",
       "category": "lint",
       "scope": "go",

@@ -11,7 +11,7 @@ Planted, one per category the JS/TS adapter can reach without a repo config:
 | lint      | `src/accumulate.js`    | `no-accumulating-spread` (perf → advisory)      |
 | lint      | `src/const-assign.js`  | `no-const-assign`                               |
 | lint      | `src/dupe-keys.js`     | `no-dupe-keys`                                  |
-| lint      | `src/unreachable.js`   | `no-unreachable`                                |
+| lint      | `src/unreachable.js`   | `no-unreachable` · also aislop's `ai-slop/unreachable-code` (same statement, second tool) |
 | format    | `src/unformatted.js`   | does not match prettier's defaults              |
 | dead-code | `src/clean.js`         | `subtract` is exported and never imported (fallow and knip both see it; the report keeps one finding) |
 | complexity| `src/complex.js`       | `classify` is over cognitive complexity 15      |

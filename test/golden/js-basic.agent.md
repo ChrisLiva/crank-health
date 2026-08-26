@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `7884bf13b6a45757e42ccadd6d59cf21fd559a20` · crank-health 0.12.0 · quick profile
+`<repo>` @ `ae26f855da3e9c5e066a3f5921243a54f49eb741` · crank-health 0.12.0 · quick profile
 
 Grades: security not assessed · types not assessed · dead code D · complexity D · duplication A · lint F · format C · test quality not assessed
 
@@ -74,6 +74,16 @@ Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 Verify: `npx crank-health --only lint --fail-under A`
 
+### T7 — Fix 1 `ai-slop/unreachable-code` finding
+
+Grade impact: lint · F → A
+
+- `src/unreachable.js:6` `ai-slop/unreachable-code` — Code after return/throw statement is unreachable
+
+Evidence: [raw/root/aislop.json](raw/root/aislop.json)
+
+Verify: `npx crank-health --only lint --fail-under A`
+
 ---
 
-Full findings (7) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
+Full findings (8) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).

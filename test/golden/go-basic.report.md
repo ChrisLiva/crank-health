@@ -140,6 +140,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json) · [raw/broke
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | (repo root, brokenpkg) |
 | go-vet | ok | [default-config] | — (pinned 1.25) | (repo root) |
 | go-vet | error | [default-config] | — (pinned 1.25) | # example.com/go-basic/brokenpkg (brokenpkg) |
 | staticcheck | ok | [default-config] | v0.8.1 | (repo root, brokenpkg) |
@@ -150,7 +151,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json) · [raw/broke
 - warning `main.go:13` `SA5009` — Printf format %d has arg #1 of wrong type string (staticcheck) [default-config]
 - warning `main.go:13` `printf` — fmt.Printf format %d has arg "not-an-int" of wrong type string (go-vet) [default-config]
 
-Evidence: [raw/root/go-vet.json](raw/root/go-vet.json) · [raw/root/staticcheck.jsonl](raw/root/staticcheck.jsonl) · [raw/brokenpkg/staticcheck.jsonl](raw/brokenpkg/staticcheck.jsonl)
+Evidence: [raw/root/aislop.json](raw/root/aislop.json) · [raw/brokenpkg/aislop.json](raw/brokenpkg/aislop.json) · [raw/root/go-vet.json](raw/root/go-vet.json) · [raw/root/staticcheck.jsonl](raw/root/staticcheck.jsonl) · [raw/brokenpkg/staticcheck.jsonl](raw/brokenpkg/staticcheck.jsonl)
 
 ## format — C
 

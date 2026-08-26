@@ -142,6 +142,7 @@ Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.jso
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | (packages/api, packages/web) |
 | eslint | ok | [repo-config] | 10.8.1 | (packages/web) |
 | oxlint | ok | [default-config] | 1.78.0 | (packages/api) |
 | oxlint | ok | [default-config] | 1.78.0 | stood down: lint graded by eslint (packages/web) |
@@ -152,7 +153,7 @@ Evidence: [raw/packages/api/jscpd-report.json](raw/packages/api/jscpd-report.jso
 - error `packages/api/src/const-assign.js:2` `eslint(no-const-assign)` — Unexpected re-assignment of `const` variable limit. (oxlint) [default-config]
 - error `packages/web/src/lint.js:2` `no-unused-vars` — 'unused' is assigned a value but never used. (eslint) [repo-config]
 
-Evidence: [raw/packages/web/eslint.json](raw/packages/web/eslint.json) · [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.json) · [raw/packages/web/oxlint.sarif.json](raw/packages/web/oxlint.sarif.json)
+Evidence: [raw/packages/api/aislop.json](raw/packages/api/aislop.json) · [raw/packages/web/aislop.json](raw/packages/web/aislop.json) · [raw/packages/web/eslint.json](raw/packages/web/eslint.json) · [raw/packages/api/oxlint.sarif.json](raw/packages/api/oxlint.sarif.json) · [raw/packages/web/oxlint.sarif.json](raw/packages/web/oxlint.sarif.json)
 
 ## format — B
 

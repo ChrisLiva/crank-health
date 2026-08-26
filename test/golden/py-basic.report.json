@@ -3,7 +3,7 @@
   "crankHealth": "0.12.0",
   "repo": {
     "path": "<repo>",
-    "commit": "b56bfa4385957a69ba6c188096dd29abd4eecf1b"
+    "commit": "115d9d5485a1af0d26655b36a218ba53c995f5ad"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -78,7 +78,7 @@
       "unit": "% of tokens duplicated"
     },
     "lint": {
-      "value": 6,
+      "value": 7,
       "denominator": 0.062,
       "unit": "weighted findings per KLOC"
     },
@@ -105,7 +105,7 @@
       "types": 1,
       "dead-code": 2,
       "complexity": 1,
-      "lint": 2,
+      "lint": 3,
       "format": 1
     }
   },
@@ -360,6 +360,22 @@
       ]
     },
     {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/aislop.json"
+      ]
+    },
+    {
       "tool": "ruff-lint",
       "category": "lint",
       "scope": "python",
@@ -430,7 +446,8 @@
       "message": "Unused import `os` (90% confidence)",
       "provenance": "default-config",
       "related": [
-        "02f45494e8b91de1"
+        "02f45494e8b91de1",
+        "e24cbf73f5273843"
       ]
     },
     {
@@ -470,6 +487,27 @@
         "7e7d79fc1bfb7e4d"
       ],
       "fixHint": "see https://docs.astral.sh/ruff/rules/unused-import"
+    },
+    {
+      "id": "e24cbf73f5273843",
+      "category": "lint",
+      "tool": "aislop",
+      "rule": "ai-slop/unused-import",
+      "severity": "warning",
+      "file": "dead.py",
+      "project": ".",
+      "range": {
+        "startLine": 1,
+        "startCol": 1,
+        "endLine": 1,
+        "endCol": 1
+      },
+      "message": "Imported symbol 'os' is never used",
+      "provenance": "default-config",
+      "related": [
+        "7e7d79fc1bfb7e4d"
+      ],
+      "fixHint": "Remove unused imports to keep the code clean"
     },
     {
       "id": "ed2b10e9d447ad4e",

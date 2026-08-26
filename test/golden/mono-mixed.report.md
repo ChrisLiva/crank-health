@@ -140,6 +140,7 @@ Evidence: [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json) · [raw/servi
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | (services/api, services/web) |
 | oxlint | ok | [default-config] | 1.78.0 | (services/web) |
 | react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected (services/web) |
 | ruff-lint | ok | [default-config] | 0.16.3 | (services/api) |
@@ -150,7 +151,7 @@ Evidence: [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json) · [raw/servi
   - fix: see https://docs.astral.sh/ruff/rules/undefined-name
 - error `services/web/src/dupe-keys.js:2` `eslint(no-dupe-keys)` — Duplicate key 'home' (oxlint) [default-config]
 
-Evidence: [raw/services/web/oxlint.sarif.json](raw/services/web/oxlint.sarif.json) · [raw/services/api/ruff-lint.json](raw/services/api/ruff-lint.json)
+Evidence: [raw/services/api/aislop.json](raw/services/api/aislop.json) · [raw/services/web/aislop.json](raw/services/web/aislop.json) · [raw/services/web/oxlint.sarif.json](raw/services/web/oxlint.sarif.json) · [raw/services/api/ruff-lint.json](raw/services/api/ruff-lint.json)
 
 ## format — A
 

@@ -150,31 +150,41 @@ describe('parseVetStream', () => {
  * sees: `go vet` exits 0 while reporting diagnostics, so the exit code — and
  * nothing else — separates "I found problems" from "I could not run".
  */
-describe('a scan whose go vet replays captured output', () => {
-  it('reads exit 0 with diagnostics as a completed run that reports no version', async () => {
-    const repo = await goSourceRepo()
-    try {
-      const scan = await scanReplaying(repo, {
-        stdout: await capturedFor(repo, 'go-vet-1.26.6.json'),
-      })
+/**
+ * Roomy: each of these scans runs the whole quick profile over the fixture,
+ * aislop's `npx` fetch included, and the 5 s default is not that.
+ */
+const SCAN_TIMEOUT_MS = 180_000
 
-      expect(scan.tools.filter((tool) => tool.tool === GO_VET_TOOL)).toEqual([
-        expect.objectContaining({ category: 'lint', state: 'ok', version: null }),
-      ])
-      expect(
-        scan.findings
-          .filter((finding) => finding.tool === GO_VET_TOOL)
-          .map((finding) => [finding.rule, finding.file, finding.range.startLine]),
-      ).toEqual([
-        ['printf', 'dirty/dirty.go', 10],
-        ['copylocks', 'dirty/dirty.go', 14],
-        ['copylocks', 'dirty/dirty.go', 15],
-        ['printf', 'main.go', 6],
-      ])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+describe('a scan whose go vet replays captured output', () => {
+  it(
+    'reads exit 0 with diagnostics as a completed run that reports no version',
+    async () => {
+      const repo = await goSourceRepo()
+      try {
+        const scan = await scanReplaying(repo, {
+          stdout: await capturedFor(repo, 'go-vet-1.26.6.json'),
+        })
+
+        expect(scan.tools.filter((tool) => tool.tool === GO_VET_TOOL)).toEqual([
+          expect.objectContaining({ category: 'lint', state: 'ok', version: null }),
+        ])
+        expect(
+          scan.findings
+            .filter((finding) => finding.tool === GO_VET_TOOL)
+            .map((finding) => [finding.rule, finding.file, finding.range.startLine]),
+        ).toEqual([
+          ['printf', 'dirty/dirty.go', 10],
+          ['copylocks', 'dirty/dirty.go', 14],
+          ['copylocks', 'dirty/dirty.go', 15],
+          ['printf', 'main.go', 6],
+        ])
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /**
    * A package that would not type-check takes the whole run down: `go vet`
@@ -183,23 +193,27 @@ describe('a scan whose go vet replays captured output', () => {
    * being that the same bytes parse into real findings, which the runner threw
    * away. `types` is staticcheck's to grade, and it still is.
    */
-  it('discards the partial stream when the run failed, and says which package failed', async () => {
-    const repo = await goSourceRepo()
-    try {
-      const stdout = await capturedFor(repo, 'go-vet-1.26.6.load-failed.stdout.json')
-      const stderr = await captured('go-vet-1.26.6.load-failed.stderr.txt')
-      const scan = await scanReplaying(repo, { stdout, stderr, exitCode: 1 })
+  it(
+    'discards the partial stream when the run failed, and says which package failed',
+    async () => {
+      const repo = await goSourceRepo()
+      try {
+        const stdout = await capturedFor(repo, 'go-vet-1.26.6.load-failed.stdout.json')
+        const stderr = await captured('go-vet-1.26.6.load-failed.stderr.txt')
+        const scan = await scanReplaying(repo, { stdout, stderr, exitCode: 1 })
 
-      expect(scan.tools.filter((tool) => tool.tool === GO_VET_TOOL)).toEqual([
-        expect.objectContaining({ state: 'error', reason: firstLine(stderr) }),
-      ])
-      expect(scan.findings.filter((finding) => finding.tool === GO_VET_TOOL)).toEqual([])
-      // The discard is proved, not assumed: those bytes do carry diagnostics.
-      expect(parseVetStream(stdout, repo).length).toBeGreaterThan(0)
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+        expect(scan.tools.filter((tool) => tool.tool === GO_VET_TOOL)).toEqual([
+          expect.objectContaining({ state: 'error', reason: firstLine(stderr) }),
+        ])
+        expect(scan.findings.filter((finding) => finding.tool === GO_VET_TOOL)).toEqual([])
+        // The discard is proved, not assumed: those bytes do carry diagnostics.
+        expect(parseVetStream(stdout, repo).length).toBeGreaterThan(0)
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 })
 
 /** The tree the captures describe: the files their `posn`s point at, committed. */

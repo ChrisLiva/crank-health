@@ -1,7 +1,7 @@
 export function evaluate(userInput) {
-  return eval(userInput);
+  const result = eval(userInput);
+  return String(result);
 }
-
 export function summarize(rows) {
   const out = [];
   for (const row of rows) {

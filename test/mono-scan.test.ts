@@ -287,6 +287,46 @@ describe('quick scan of the mono-js fixture', () => {
   })
 
   /**
+   * aislop walks a directory rather than taking a file list, so the unit it is
+   * asked about has to be the package: one row per package, neither of them
+   * repo-spanning, and each package's payload under its own raw path. The
+   * shared name would otherwise let the second package's scan overwrite the
+   * first's evidence.
+   */
+  it('asks aislop once per package, and nests each answer under its own path', () => {
+    expect(
+      scan.report.tools
+        .filter((tool) => tool.tool === 'aislop')
+        .map((tool) => [tool.project, tool.repoWide ?? false, tool.state]),
+    ).toEqual([
+      ['packages/api', false, 'ok'],
+      ['packages/web', false, 'ok'],
+    ])
+    expect(record('aislop', 'packages/api')?.raw).toEqual(['raw/packages/api/aislop.json'])
+    expect(record('aislop', 'packages/web')?.raw).toEqual(['raw/packages/web/aislop.json'])
+  })
+
+  /**
+   * The mirror aislop scanned is built from the project's inventory, and the
+   * inventory is what discovery already dropped the hidden file from, so the
+   * payload cannot name it. `summary.files` is 5 for both packages, not 5 and
+   * 4: `packages/web/eslint.config.js` is a `.js` file in web's inventory and
+   * aislop counts it.
+   */
+  it.each(['packages/api', 'packages/web'])(
+    'scans %s over a mirror the hidden directory is not in',
+    async (project) => {
+      const raw = await readFile(
+        join(scan.outputDir, 'raw', ...project.split('/'), 'aislop.json'),
+        'utf8',
+      )
+
+      expect(raw).not.toContain(MONO_JS_HIDDEN_FILE)
+      expect(JSON.parse(raw)).toMatchObject({ summary: { files: 5 }, diagnostics: [] })
+    },
+  )
+
+  /**
    * The file is in the tree the scan ran on and in none of the three artifacts:
    * no finding, no tool row, no file list names it. Discovery dropped it before
    * a single tool was planned, so nothing downstream had to know about it.

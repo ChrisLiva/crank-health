@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `b56bfa4385957a69ba6c188096dd29abd4eecf1b` · crank-health 0.12.0 · quick profile
+`<repo>` @ `115d9d5485a1af0d26655b36a218ba53c995f5ad` · crank-health 0.12.0 · quick profile
 
 Grades: security A · types F · dead code F · complexity D · duplication A · lint F · format C · test quality not assessed
 
@@ -25,14 +25,15 @@ Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json) · [raw/root/ty.git
 
 Verify: `npx crank-health --only types --fail-under A`
 
-### T2 — Remove 1 unused import, and 1 finding in lint at the same place
+### T2 — Remove 1 unused import, and 1 finding in lint and 1 finding in lint at the same place
 
 Grade impact: dead code · F → A
 
 - `dead.py` `vulture/unused-import` — Unused import `os` (90% confidence)
 - `dead.py:1` `F401` — `os` imported but unused
+- `dead.py` `ai-slop/unused-import` — Imported symbol 'os' is never used
 
-Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json) · [raw/root/vulture.txt](raw/root/vulture.txt)
+Evidence: [raw/root/aislop.json](raw/root/aislop.json) · [raw/root/ruff-lint.json](raw/root/ruff-lint.json) · [raw/root/vulture.txt](raw/root/vulture.txt)
 
 Verify: `npx crank-health --only dead-code --fail-under A`
 
@@ -58,4 +59,4 @@ Verify: `npx crank-health --only format --fail-under A`
 
 ---
 
-Full findings (7) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).
+Full findings (8) and every tool’s state: [report.json](report.json). Raw tool output: [raw/](raw/).

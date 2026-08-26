@@ -91,11 +91,11 @@ does: that category was answered for the repo, and the repo's answer is gated in
 
 ## Categories and tools
 
-Eight categories. 32 analyzers run in the quick profile, 8 more in `--deep`.
+Eight categories. 33 analyzers run in the quick profile, 8 more in `--deep`.
 
 | Category                | JS/TS                                            | Python                                                    | C#                                       | Go                                                         | Both                                                          |
 | ----------------------- | ------------------------------------------------ | --------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
-| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) | staticcheck (S/SA) · `go vet` · golangci-lint (repo-owned) |                                                               |
+| Lint                    | oxlint (default) · ESLint · Biome · react-doctor | `ruff check`                                              | `dotnet build` + NetAnalyzers (CA rules) | staticcheck (S/SA) · `go vet` · golangci-lint (repo-owned) | aislop                                                        |
 | Format                  | Prettier (default) · Biome                       | `ruff format --check`                                     | `dotnet format whitespace`               | gofmt                                                      |                                                               |
 | Types                   | tsc                                              | ty → Pyright when a virtualenv exists · mypy (repo-owned) | `dotnet build` (CS diagnostics)          | staticcheck (compile diagnostics)                          |                                                               |
 | Dead code               | fallow · knip                                    | vulture (≥90% confidence graded, 60% advisory)            | `roslynator find-symbol --unused`        | staticcheck U1000                                          |                                                               |
@@ -106,7 +106,7 @@ Eight categories. 32 analyzers run in the quick profile, 8 more in `--deep`.
 
 The build-backed C# categories — lint, types, complexity, dead code — need MSBuild, which executes a
 project's own build logic, so they run only under `--deep`; the quick profile grades C# format and
-duplication and defers the rest honestly.
+duplication, grades lint from the aislop findings that need no build, and defers the rest honestly.
 
 Go is the other way round: every quick-profile Go analyzer reads the code without running it, so a
 Go repo gets seven graded categories from the quick profile, and only `go test` (coverage as
@@ -374,7 +374,8 @@ written. This is a hard contract, tested on every fixture:
 - Every tool that wants to write beside your code is redirected: caches to a temp dir, jscpd's
   report to scratch, `.tsbuildinfo` and coverage data files and `__pycache__` and `.pytest_cache`
   suppressed outright. complexipy, whose cache directory cannot be disabled, is run against a copy
-  in scratch.
+  in scratch. aislop scans a mirror of the project's tracked files under scratch, next
+  to a config crank-health writes, so its `git` calls and config discovery never touch the repo.
 - Repo-mutating commands (`osv-scanner fix`, `trunk init`, `pre-commit install`, …) are never
   invoked.
 - Discovery is `git ls-files`-based, so `.gitignore` is respected — including by the tools that

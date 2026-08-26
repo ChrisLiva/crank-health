@@ -11,7 +11,7 @@
 | dead code | not assessed | not assessed — run `--deep` |
 | complexity | not assessed | not assessed — run `--deep` |
 | duplication | D — 18.4% of tokens duplicated | 18.4% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
-| lint | not assessed | not assessed — run `--deep` |
+| lint | A — 0 weighted findings per 0.19 KLOC | Nothing counted toward the grade. |
 | format | C — 1 of 8 files failing the formatter | 1 of 8 checked files fail the formatter (12.5%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
@@ -60,9 +60,15 @@ Not graded: not assessed — run `--deep`
 
 Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
-## lint — not assessed
+## lint — A
 
-Not graded: not assessed — run `--deep`
+Nothing counted toward the grade.
+
+| Tool | State | Config | Version | Notes |
+| --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | — |
+
+Evidence: [raw/root/aislop.json](raw/root/aislop.json)
 
 ## format — C
 

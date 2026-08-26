@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `1cb090abdb6af232c7f51dac1b38b5ec22c2e25f` · crank-health 0.12.0 · quick profile
+`<repo>` @ `ee198602b690ae80ec9418e9377f8fd590a7f303` · crank-health 0.12.0 · quick profile
 
 ## Grades
 
@@ -10,7 +10,7 @@
 | types | A — 0 weighted findings per 0.057 KLOC | Nothing counted toward the grade. |
 | dead code | A — 0 weighted findings per 0.057 KLOC | Nothing counted toward the grade. |
 | complexity | A — 0 of 5 functions over cognitive complexity 15 | 0 of 5 functions over cognitive complexity 15 (0.0%). 2 advisory findings did not count toward the grade. |
-| duplication | F — 47.0% of tokens duplicated | 47.0% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
+| duplication | F — 45.5% of tokens duplicated | 45.5% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade. |
 | lint | F — 5 weighted findings per 0.057 KLOC | 1 graded finding (1 error), weighted total 5 (error ×5, warning ×1, info ×0.2). |
 | format | A — 0 of 5 files failing the formatter | 0 of 5 checked files fail the formatter (0.0%). |
 | test quality | not assessed | not assessed — run `--deep` |
@@ -28,7 +28,7 @@
 ### Measurements
 
 - Complexity: 0 of 5 functions over cognitive complexity 15 (0.0%).
-- Duplication: 47.0% of tokens duplicated.
+- Duplication: 45.5% of tokens duplicated.
 - Format: 5 files checked by a formatter.
 
 ## security — D
@@ -107,7 +107,7 @@ Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/comp
 
 ## duplication — F
 
-47.0% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade.
+45.5% of tokens duplicated; the clone below is the evidence, not the grade. 1 advisory finding did not count toward the grade.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
@@ -126,6 +126,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | — |
 | oxlint | ok | [default-config] | 1.78.0 | — |
 | react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
 | ruff-lint | ok | [default-config] | 0.16.3 | — |
@@ -134,7 +135,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 - error `src/handler.js:2` `eslint(no-eval)` — eval can be harmful. (oxlint) [default-config]
 
-Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json) · [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
+Evidence: [raw/root/aislop.json](raw/root/aislop.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json) · [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 ## format — A
 

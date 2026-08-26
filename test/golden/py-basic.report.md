@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `b56bfa4385957a69ba6c188096dd29abd4eecf1b` · crank-health 0.12.0 · quick profile
+`<repo>` @ `115d9d5485a1af0d26655b36a218ba53c995f5ad` · crank-health 0.12.0 · quick profile
 
 ## Grades
 
@@ -11,7 +11,7 @@
 | dead code | F — 1 weighted finding per 0.062 KLOC | 1 graded finding (1 warning), weighted total 1 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade. |
 | complexity | D — 1 of 7 functions over cognitive complexity 15 | 1 of 7 functions over cognitive complexity 15 (14.3%). |
 | duplication | A — 0.0% of tokens duplicated | 0.0% of tokens duplicated. |
-| lint | F — 6 weighted findings per 0.062 KLOC | 2 graded findings (1 error, 1 warning), weighted total 6 (error ×5, warning ×1, info ×0.2). |
+| lint | F — 7 weighted findings per 0.062 KLOC | 3 graded findings (1 error, 2 warning), weighted total 7 (error ×5, warning ×1, info ×0.2). |
 | format | C — 1 of 6 files failing the formatter | 1 of 6 checked files fail the formatter (16.7%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
@@ -95,20 +95,23 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 ## lint — F
 
-2 graded findings (1 error, 1 warning), weighted total 6 (error ×5, warning ×1, info ×0.2).
+3 graded findings (1 error, 2 warning), weighted total 7 (error ×5, warning ×1, info ×0.2).
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | — |
 | ruff-lint | ok | [default-config] | 0.16.3 | — |
 
-**Findings** (2)
+**Findings** (3)
 
 - warning `dead.py:1` `F401` — `os` imported but unused (ruff-lint) [default-config]
   - fix: see https://docs.astral.sh/ruff/rules/unused-import
+- warning `dead.py` `ai-slop/unused-import` — Imported symbol 'os' is never used (aislop) [default-config]
+  - fix: Remove unused imports to keep the code clean
 - error `undefined_name.py:2` `F821` — Undefined name `missing_name` (ruff-lint) [default-config]
   - fix: see https://docs.astral.sh/ruff/rules/undefined-name
 
-Evidence: [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
+Evidence: [raw/root/aislop.json](raw/root/aislop.json) · [raw/root/ruff-lint.json](raw/root/ruff-lint.json)
 
 ## format — C
 

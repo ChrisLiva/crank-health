@@ -80,6 +80,12 @@ const goPrinting = (line: string): string => ['#!/bin/sh', `echo '${line}'`, 'ex
 /** A fake `gofmt` that lists nothing and exits 0 — a repo it finds well formatted. */
 const SILENT_GOFMT = '#!/bin/sh\nexit 0\n'
 
+/**
+ * Roomy: each of these scans runs the whole quick profile over the fixture,
+ * aislop's `npx` fetch included, and the 5 s default is not that.
+ */
+const SCAN_TIMEOUT_MS = 180_000
+
 describe('a Go repo scanned on a machine whose toolchain cannot grade it', () => {
   let fixture: FixtureRepo
 
@@ -100,51 +106,63 @@ describe('a Go repo scanned on a machine whose toolchain cannot grade it', () =>
    * on a non-Go record*, and no more: the same farm has no `uvx` either, so the
    * Python rows are legitimately not-available for their own reasons.
    */
-  it('degrades every Go tool with the install hint when there is no go on PATH', async () => {
-    const records = await recordsUnder(fixture, { gofmt: SILENT_GOFMT })
-    const tools = byTool(records)
+  it(
+    'degrades every Go tool with the install hint when there is no go on PATH',
+    async () => {
+      const records = await recordsUnder(fixture, { gofmt: SILENT_GOFMT })
+      const tools = byTool(records)
 
-    // Every record, not every name: three of them are staticcheck's.
-    expect(
-      records
-        .filter((record) => GO_TOOLS.includes(record.tool))
-        .map((record) => record.tool)
-        .toSorted(),
-    ).toEqual([...GO_TOOLS].toSorted())
-    for (const tool of GO_TOOLS) {
-      expect(tools.get(tool)).toEqual({ state: 'not-available', reason: INSTALL_HINT })
-    }
-    expect(tools.get('govulncheck')).toEqual({
-      state: 'not-available',
-      reason: GO_ABSENT_REASON,
-    })
-    const elsewhere = [...tools].filter(([tool]) => !GO_TOOLS.includes(tool))
-    expect(elsewhere.filter(([, row]) => row.reason === INSTALL_HINT)).toEqual([])
-  })
+      // Every record, not every name: three of them are staticcheck's.
+      expect(
+        records
+          .filter((record) => GO_TOOLS.includes(record.tool))
+          .map((record) => record.tool)
+          .toSorted(),
+      ).toEqual([...GO_TOOLS].toSorted())
+      for (const tool of GO_TOOLS) {
+        expect(tools.get(tool)).toEqual({ state: 'not-available', reason: INSTALL_HINT })
+      }
+      expect(tools.get('govulncheck')).toEqual({
+        state: 'not-available',
+        reason: GO_ABSENT_REASON,
+      })
+      const elsewhere = [...tools].filter(([tool]) => !GO_TOOLS.includes(tool))
+      expect(elsewhere.filter(([, row]) => row.reason === INSTALL_HINT)).toEqual([])
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
-  it('names both versions when the toolchain is below the floor', async () => {
-    const tools = await toolsUnder(fixture, {
-      go: goPrinting('go version go1.23.0 linux/amd64'),
-      gofmt: SILENT_GOFMT,
-    })
+  it(
+    'names both versions when the toolchain is below the floor',
+    async () => {
+      const tools = await toolsUnder(fixture, {
+        go: goPrinting('go version go1.23.0 linux/amd64'),
+        gofmt: SILENT_GOFMT,
+      })
 
-    for (const tool of GO_TOOLS) {
-      expect(tools.get(tool)?.state).toBe('not-available')
-      // The version found and the version needed: a hint without both is not
-      // actionable.
-      expect(tools.get(tool)?.reason).toContain('1.23')
-      expect(tools.get(tool)?.reason).toContain('1.25')
-    }
-  })
+      for (const tool of GO_TOOLS) {
+        expect(tools.get(tool)?.state).toBe('not-available')
+        // The version found and the version needed: a hint without both is not
+        // actionable.
+        expect(tools.get(tool)?.reason).toContain('1.23')
+        expect(tools.get(tool)?.reason).toContain('1.25')
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
-  it('quotes what it could not parse rather than guessing a version', async () => {
-    const tools = await toolsUnder(fixture, { go: goPrinting('gibberish'), gofmt: SILENT_GOFMT })
+  it(
+    'quotes what it could not parse rather than guessing a version',
+    async () => {
+      const tools = await toolsUnder(fixture, { go: goPrinting('gibberish'), gofmt: SILENT_GOFMT })
 
-    for (const tool of GO_TOOLS) {
-      expect(tools.get(tool)?.state).toBe('not-available')
-      expect(tools.get(tool)?.reason).toContain('gibberish')
-    }
-  })
+      for (const tool of GO_TOOLS) {
+        expect(tools.get(tool)?.state).toBe('not-available')
+        expect(tools.get(tool)?.reason).toContain('gibberish')
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /**
    * `gofmt` is a separate binary beside `go` (it lives in `GOROOT/bin`, which
@@ -152,13 +170,19 @@ describe('a Go repo scanned on a machine whose toolchain cannot grade it', () =>
    * formatter. The gate passes and the runner's own spawn is what fails — which
    * is the only way the report can name the binary that is actually missing.
    */
-  it('names gofmt itself when only the formatter is missing', async () => {
-    const tools = await toolsUnder(fixture, { go: goPrinting('go version go1.26.6 darwin/arm64') })
+  it(
+    'names gofmt itself when only the formatter is missing',
+    async () => {
+      const tools = await toolsUnder(fixture, {
+        go: goPrinting('go version go1.26.6 darwin/arm64'),
+      })
 
-    expect(tools.get('gofmt')?.state).toBe('not-available')
-    expect(tools.get('gofmt')?.reason).toContain('gofmt')
-    expect(tools.get('gofmt')?.reason).not.toBe(INSTALL_HINT)
-  })
+      expect(tools.get('gofmt')?.state).toBe('not-available')
+      expect(tools.get('gofmt')?.reason).toContain('gofmt')
+      expect(tools.get('gofmt')?.reason).not.toBe(INSTALL_HINT)
+    },
+    SCAN_TIMEOUT_MS,
+  )
 })
 
 /** Every tool record's state and reason, keyed by tool name. */

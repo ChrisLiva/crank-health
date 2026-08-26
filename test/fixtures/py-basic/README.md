@@ -9,7 +9,7 @@ Planted, one per category the Python adapter can reach without a repo config:
 | Category   | Where                | What                                                   |
 |------------|----------------------|--------------------------------------------------------|
 | lint       | `undefined_name.py`  | `F821` undefined name (pyflakes → graded)              |
-| lint       | `dead.py`            | `F401` unused import (pyflakes → graded)               |
+| lint       | `dead.py`            | `F401` unused import (pyflakes → graded); also aislop's `ai-slop/unused-import` on the same line |
 | types      | `undefined_name.py`  | ty `unresolved-reference` on the same name             |
 | format     | `unformatted.py`     | does not match ruff's default formatting               |
 | dead-code  | `dead.py`            | unused `import os` — vulture 90% → graded              |

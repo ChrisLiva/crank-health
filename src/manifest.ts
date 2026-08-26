@@ -24,6 +24,7 @@ const TOOL_MANIFEST = {
   // for scanner use. Releases daily, so this pin goes stale fast — bumping it
   // is a crank-health version bump with re-captured fixtures, per the header.
   'react-doctor': '0.9.12',
+  aislop: '0.14.1',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
