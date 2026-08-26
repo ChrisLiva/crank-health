@@ -2,7 +2,7 @@
 
 `<repo>` @ `1624281eaabc18eb08af09502955981d65aa1ca4` · crank-health 0.12.0 · quick profile
 
-Grades: security not assessed · types not assessed · dead code not assessed · complexity not assessed · duplication D · lint not assessed · format C · test quality not assessed
+Grades: security not assessed · types not assessed · dead code not assessed · complexity not assessed · duplication D · lint A · format C · test quality not assessed
 
 ## Ground rules
 

@@ -3,7 +3,7 @@
   "crankHealth": "0.12.0",
   "repo": {
     "path": "<repo>",
-    "commit": "1cb090abdb6af232c7f51dac1b38b5ec22c2e25f"
+    "commit": "ee198602b690ae80ec9418e9377f8fd590a7f303"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -73,7 +73,7 @@
       "unit": "functions over cognitive complexity 15"
     },
     "duplication": {
-      "value": 47.03389830508475,
+      "value": 45.49180327868852,
       "denominator": null,
       "unit": "% of tokens duplicated"
     },
@@ -94,7 +94,7 @@
       "functionsOverCeiling": 0
     },
     "duplication": {
-      "duplicationPercent": 47.03389830508475
+      "duplicationPercent": 45.49180327868852
     },
     "format": {
       "formattableFiles": 5
@@ -116,7 +116,7 @@
       "assessed": 5
     },
     "lines": {
-      "total": 139,
+      "total": 142,
       "assessed": 57
     },
     "unassessed": [
@@ -128,7 +128,7 @@
       {
         "extension": ".md",
         "files": 1,
-        "lines": 42
+        "lines": 45
       },
       {
         "extension": ".yml",
@@ -187,7 +187,7 @@
           "functionsOverCeiling": 0
         },
         "duplication": {
-          "duplicationPercent": 47.03389830508475
+          "duplicationPercent": 45.49180327868852
         },
         "format": {
           "formattableFiles": 5
@@ -448,6 +448,22 @@
       ]
     },
     {
+      "tool": "aislop",
+      "category": "lint",
+      "scope": "common",
+      "project": ".",
+      "execution": "ephemeral-pinned",
+      "provenance": "default-config",
+      "version": "0.14.1",
+      "pinned": "0.14.1",
+      "detection": null,
+      "state": "ok",
+      "reason": null,
+      "raw": [
+        "raw/root/aislop.json"
+      ]
+    },
+    {
       "tool": "oxlint",
       "category": "lint",
       "scope": "js-ts",
@@ -616,7 +632,7 @@
       "fixHint": "see https://bandit.readthedocs.io/en/1.9.4/plugins/b602_subprocess_popen_with_shell_equals_true.html"
     },
     {
-      "id": "d75f17f00a64cade",
+      "id": "2145aaa16ea07c7e",
       "category": "lint",
       "tool": "oxlint",
       "rule": "eslint(no-eval)",
@@ -625,9 +641,9 @@
       "project": ".",
       "range": {
         "startLine": 2,
-        "startCol": 10,
+        "startCol": 18,
         "endLine": 2,
-        "endCol": 14
+        "endCol": 22
       },
       "message": "eval can be harmful.",
       "provenance": "default-config"

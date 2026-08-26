@@ -88,6 +88,15 @@ const PLANTED = [
   },
   {
     category: 'lint',
+    tool: 'aislop',
+    rule: 'ai-slop/unused-import',
+    file: 'dead.py',
+    startLine: 1,
+    severity: 'warning',
+    gradeScope: true,
+  },
+  {
+    category: 'lint',
     tool: 'ruff-lint',
     rule: 'F821',
     file: 'undefined_name.py',
@@ -145,6 +154,7 @@ describe('quick scan of the py-basic fixture', () => {
       'vulture',
       'complexipy',
       'jscpd',
+      'aislop',
       'ruff-lint',
       'ruff-format',
     ])
@@ -241,6 +251,7 @@ describe('quick scan of the py-basic fixture', () => {
       // project that produced it — one project here, so `raw/root/`.
       const raw = (await readdir(join(outside, 'raw', 'root'))).toSorted()
       expect(GOLDEN_TOOLCHAIN ? raw : raw.filter(fromFetchableTool)).toEqual([
+        'aislop.json',
         'bandit.json',
         'complexipy.json',
         'complexipy.sarif.json',

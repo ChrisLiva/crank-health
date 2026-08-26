@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `7884bf13b6a45757e42ccadd6d59cf21fd559a20` · crank-health 0.12.0 · quick profile
+`<repo>` @ `ae26f855da3e9c5e066a3f5921243a54f49eb741` · crank-health 0.12.0 · quick profile
 
 ## Grades
 
@@ -11,7 +11,7 @@
 | dead code | D — 1 weighted finding per 0.1 KLOC | 1 graded finding (1 warning), weighted total 1 (error ×5, warning ×1, info ×0.2). |
 | complexity | D — 1 of 9 functions over cognitive complexity 15 | 1 of 9 functions over cognitive complexity 15 (11.1%). |
 | duplication | A — 0.0% of tokens duplicated | 0.0% of tokens duplicated. |
-| lint | F — 15 weighted findings per 0.1 KLOC | 3 graded findings (3 error), weighted total 15 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade. |
+| lint | F — 16 weighted findings per 0.1 KLOC | 4 graded findings (3 error, 1 warning), weighted total 16 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade. |
 | format | C — 1 of 9 files failing the formatter | 1 of 9 checked files fail the formatter (11.1%). |
 | test quality | not assessed | not assessed — run `--deep` |
 
@@ -84,24 +84,27 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 ## lint — F
 
-3 graded findings (3 error), weighted total 15 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade.
+4 graded findings (3 error, 1 warning), weighted total 16 (error ×5, warning ×1, info ×0.2). 1 advisory finding did not count toward the grade.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
+| aislop | ok | [default-config] | 0.14.1 | — |
 | oxlint | ok | [default-config] | 1.78.0 | — |
 | react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
 
-**Findings** (3)
+**Findings** (4)
 
 - error `src/const-assign.js:2` `eslint(no-const-assign)` — Unexpected re-assignment of `const` variable limit. (oxlint) [default-config]
 - error `src/dupe-keys.js:2` `eslint(no-dupe-keys)` — Duplicate key 'home' (oxlint) [default-config]
+- warning `src/unreachable.js:6` `ai-slop/unreachable-code` — Code after return/throw statement is unreachable (aislop) [default-config]
+  - fix: Remove the unreachable code or restructure the control flow
 - error `src/unreachable.js:6` `eslint(no-unreachable)` — Unreachable code. (oxlint) [default-config]
 
 **Advisory findings** (1) — reported, not counted toward the grade: 1 × `oxlint` `oxc(no-accumulating-spread)`.
 
 - warning `src/accumulate.js:2` `oxc(no-accumulating-spread)` — Do not spread accumulators in loops (oxlint) [default-config] [advisory]
 
-Evidence: [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
+Evidence: [raw/root/aislop.json](raw/root/aislop.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 ## format — C
 

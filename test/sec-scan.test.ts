@@ -248,12 +248,14 @@ describe('quick scan of the sec-basic fixture', () => {
   )
 
   /**
-   * jscpd's token percentage is the duplication grade (spec §3): 47% of tokens
-   * duplicated is well past the D band's 20%.
+   * jscpd's token percentage is the duplication grade (spec §3): 45% of tokens
+   * duplicated is well past the D band's 20%. `evaluate` in `src/handler.js`
+   * binds its result before returning it, which puts three more tokens in the
+   * denominator than the two-line version did.
    */
   it('grades duplication on jscpd’s token percentage, not on the clone count', () => {
     const report = parse(json)
-    expect(report.metrics.duplication?.['duplicationPercent']).toBeCloseTo(47.03, 1)
+    expect(report.metrics.duplication?.['duplicationPercent']).toBeCloseTo(45.49, 1)
     expect(report.categories.duplication).toEqual({ status: 'graded', grade: 'F' })
   })
 

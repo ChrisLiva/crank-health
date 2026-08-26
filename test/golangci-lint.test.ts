@@ -187,7 +187,10 @@ describe('a Go repo that owns golangci-lint', () => {
           exitCode: 1,
         })
 
+        // aislop is `complementary`, so a repo-owned lint owner never stands
+        // it down the way it stands the Go linters down.
         expect(toolRows(scan.tools, 'lint')).toEqual([
+          { tool: 'aislop', state: 'ok', reason: null },
           { tool: GO_VET_TOOL, state: 'ok', reason: 'stood down: lint graded by golangci-lint' },
           { tool: GOLANGCI_LINT_TOOL, state: 'ok', reason: null },
           {
@@ -234,6 +237,7 @@ describe('a Go repo that owns golangci-lint', () => {
         })
 
         expect(toolRows(scan.tools, 'lint')).toEqual([
+          { tool: 'aislop', state: 'ok', reason: null },
           { tool: GO_VET_TOOL, state: 'ok', reason: null },
           {
             tool: GOLANGCI_LINT_TOOL,

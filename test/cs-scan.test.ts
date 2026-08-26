@@ -61,12 +61,15 @@ const PLANTED = [
 ] as const
 
 /**
- * Every deep-only C# category — the build-backed trio, roslynator's dead-code,
- * and stryker-net's test-quality — so a quick scan defers all five. Stryker is
- * also `repoOwnedOnly` and cs-basic has no tools manifest, but quick mode never
- * asks: `deepOnly` alone decides the deferral.
+ * Every C# category no quick-profile runner reaches — the build-backed types
+ * and complexity, roslynator's dead-code, and stryker-net's test-quality — so a
+ * quick scan defers all four. Stryker is also `repoOwnedOnly` and cs-basic has
+ * no tools manifest, but quick mode never asks: `deepOnly` alone decides the
+ * deferral. `lint` is not here: aislop reads `.cs` files without a build, so a
+ * quick scan grades lint from its diagnostics while NetAnalyzers waits for
+ * `--deep`.
  */
-const DEFERRED: readonly Category[] = ['types', 'dead-code', 'complexity', 'lint', 'test-quality']
+const DEFERRED: readonly Category[] = ['types', 'dead-code', 'complexity', 'test-quality']
 
 describe('quick scan of the cs-basic fixture', () => {
   let fixture: FixtureRepo
@@ -164,8 +167,11 @@ describe('quick scan of the cs-basic fixture', () => {
     // Flips to `graded` when any of gitleaks/opengrep/osv-scanner is installed:
     // a security tool that ran and found nothing is an honest A.
     expect(report.categories.security?.status).toBe(GOLDEN_TOOLCHAIN ? 'not-assessed' : 'graded')
-    // Every remaining C# category has a runner now, and every one of those
-    // runners is deep-only — so a quick scan defers all five with one reason.
+    // aislop needs no build, so it grades lint on a C# project the quick
+    // profile reaches nothing else in; cs-basic has no ai-slop diagnostics.
+    expect(report.categories.lint).toEqual({ status: 'graded', grade: 'A' })
+    // Every remaining C# category's runners are all deep-only, so a quick scan
+    // defers those four with one reason.
     for (const category of DEFERRED) {
       expect(report.categories[category]).toEqual({
         status: 'not-assessed',
@@ -434,7 +440,8 @@ describe('quick scan of the mixed-cs fixture', () => {
   /**
    * Criterion 26's other half: every C# category behind a `deepOnly` runner is
    * deferred with the profile's reason — and the declared-but-fileless `js-ts`
-   * never plants a quick JS record here to contradict that.
+   * never plants a quick JS record here to contradict that. Lint is the one
+   * category a quick profile still grades on a C# project, from aislop.
    */
   it('defers the dotnet project’s deep categories with the quick-mode reason', () => {
     for (const category of DEFERRED) {
@@ -444,6 +451,7 @@ describe('quick scan of the mixed-cs fixture', () => {
       })
     }
     expect(categories('dotnet')).toMatchObject({
+      lint: { status: 'graded', grade: 'A' },
       format: { status: 'graded', grade: 'C' },
       duplication: { status: 'graded', grade: 'F' },
     })

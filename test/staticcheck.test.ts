@@ -289,81 +289,99 @@ async function tempTree(files: Readonly<Record<string, string>>): Promise<string
  * something, so reading it as a failure would turn every repo with a finding
  * into a repo crank-health could not grade.
  */
-describe('a scan whose staticcheck replays captured output', () => {
-  it('reads exit 1 with findings as a completed run, in all three categories', async () => {
-    const repo = await goSourceRepo()
-    try {
-      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
-      const records = scan.tools.filter((tool) => tool.tool === STATICCHECK_TOOL)
+/**
+ * Roomy: each of these scans runs the whole quick profile over the fixture,
+ * aislop's `npx` fetch included, and the 5 s default is not that.
+ */
+const SCAN_TIMEOUT_MS = 180_000
 
-      expect(records.map((tool) => [tool.category, tool.state])).toEqual([
-        ['types', 'ok'],
-        ['dead-code', 'ok'],
-        ['lint', 'ok'],
-      ])
-      expect(
-        scan.findings
-          .filter((finding) => finding.tool === STATICCHECK_TOOL)
-          .map((finding) => [finding.category, finding.rule]),
-      ).toEqual([
-        ['types', 'compile'],
-        ['dead-code', 'U1000'],
-        ['lint', 'S1002'],
-        ['lint', 'SA1006'],
-        ['lint', 'SA4006'],
-      ])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+describe('a scan whose staticcheck replays captured output', () => {
+  it(
+    'reads exit 1 with findings as a completed run, in all three categories',
+    async () => {
+      const repo = await goSourceRepo()
+      try {
+        const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
+        const records = scan.tools.filter((tool) => tool.tool === STATICCHECK_TOOL)
+
+        expect(records.map((tool) => [tool.category, tool.state])).toEqual([
+          ['types', 'ok'],
+          ['dead-code', 'ok'],
+          ['lint', 'ok'],
+        ])
+        expect(
+          scan.findings
+            .filter((finding) => finding.tool === STATICCHECK_TOOL)
+            .map((finding) => [finding.category, finding.rule]),
+        ).toEqual([
+          ['types', 'compile'],
+          ['dead-code', 'U1000'],
+          ['lint', 'S1002'],
+          ['lint', 'SA1006'],
+          ['lint', 'SA4006'],
+        ])
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /**
    * One process, one file of evidence: the three records cite the same staged
    * stream rather than three copies of it, which is the only thing a reader can
    * check "these three grades came from one analysis" against.
    */
-  it('stages the stream once and has all three records name it', async () => {
-    const repo = await goSourceRepo()
-    try {
-      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
-      const raw = scan.tools
-        .filter((tool) => tool.tool === STATICCHECK_TOOL)
-        .map((tool) => tool.raw)
+  it(
+    'stages the stream once and has all three records name it',
+    async () => {
+      const repo = await goSourceRepo()
+      try {
+        const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
+        const raw = scan.tools
+          .filter((tool) => tool.tool === STATICCHECK_TOOL)
+          .map((tool) => tool.raw)
 
-      expect(raw).toEqual([
-        ['raw/root/staticcheck.jsonl'],
-        ['raw/root/staticcheck.jsonl'],
-        ['raw/root/staticcheck.jsonl'],
-      ])
-      expect(scan.rawFiles.filter((file) => file.endsWith('staticcheck.jsonl'))).toEqual([
-        'raw/root/staticcheck.jsonl',
-      ])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+        expect(raw).toEqual([
+          ['raw/root/staticcheck.jsonl'],
+          ['raw/root/staticcheck.jsonl'],
+          ['raw/root/staticcheck.jsonl'],
+        ])
+        expect(scan.rawFiles.filter((file) => file.endsWith('staticcheck.jsonl'))).toEqual([
+          'raw/root/staticcheck.jsonl',
+        ])
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /** A module graph that would not load: three refusals, no findings, no grade. */
-  it('reports the refusal on every category when the module graph fails', async () => {
-    const repo = await goSourceRepo()
-    try {
-      const scan = await scanReplaying(
-        repo,
-        await capturedFor(repo, 'staticcheck-0.8.1.module-graph.jsonl'),
-      )
-      const records = scan.tools.filter((tool) => tool.tool === STATICCHECK_TOOL)
-
-      expect(records.map((tool) => tool.state)).toEqual(['error', 'error', 'error'])
-      for (const record of records) {
-        expect(record.reason).toContain(
-          'no required module provides package example.com/absent/pkg',
+  it(
+    'reports the refusal on every category when the module graph fails',
+    async () => {
+      const repo = await goSourceRepo()
+      try {
+        const scan = await scanReplaying(
+          repo,
+          await capturedFor(repo, 'staticcheck-0.8.1.module-graph.jsonl'),
         )
+        const records = scan.tools.filter((tool) => tool.tool === STATICCHECK_TOOL)
+
+        expect(records.map((tool) => tool.state)).toEqual(['error', 'error', 'error'])
+        for (const record of records) {
+          expect(record.reason).toContain(
+            'no required module provides package example.com/absent/pkg',
+          )
+        }
+        expect(scan.findings.filter((finding) => finding.tool === STATICCHECK_TOOL)).toEqual([])
+      } finally {
+        await rm(repo, { recursive: true, force: true })
       }
-      expect(scan.findings.filter((finding) => finding.tool === STATICCHECK_TOOL)).toEqual([])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /**
    * A cold module cache narrates its downloads on stderr and a warm one says
@@ -371,29 +389,33 @@ describe('a scan whose staticcheck replays captured output', () => {
    * way: `reason` is a `report.json` field, and a narration line reaching it is
    * both a wrong explanation and a cold/warm difference in the report.
    */
-  it('explains a silent failure from the error, not the module cache’s narration', async () => {
-    const repo = await goSourceRepo()
-    try {
-      const scan = await scanReplaying(
-        repo,
-        '',
-        'go: downloading honnef.co/go/tools v0.8.1\n' +
-          'go: downloading golang.org/x/tools v0.30.0\n' +
-          'staticcheck: fatal: could not load packages\n',
-      )
-      const reasons = scan.tools
-        .filter((tool) => tool.tool === STATICCHECK_TOOL)
-        .map((tool) => tool.reason)
+  it(
+    'explains a silent failure from the error, not the module cache’s narration',
+    async () => {
+      const repo = await goSourceRepo()
+      try {
+        const scan = await scanReplaying(
+          repo,
+          '',
+          'go: downloading honnef.co/go/tools v0.8.1\n' +
+            'go: downloading golang.org/x/tools v0.30.0\n' +
+            'staticcheck: fatal: could not load packages\n',
+        )
+        const reasons = scan.tools
+          .filter((tool) => tool.tool === STATICCHECK_TOOL)
+          .map((tool) => tool.reason)
 
-      expect(reasons).toEqual([
-        'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
-        'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
-        'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
-      ])
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+        expect(reasons).toEqual([
+          'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
+          'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
+          'staticcheck exited 1 with nothing to report: staticcheck: fatal: could not load packages',
+        ])
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /**
    * A repo that owns a `staticcheck.conf` is held to *its* rules, and the
@@ -401,29 +423,33 @@ describe('a scan whose staticcheck replays captured output', () => {
    * provenance off, and a run that stayed silent about it would be filed as
    * repo-config on the strength of a detection the findings did not come from.
    */
-  it('reports repo-config provenance where the repo owns a staticcheck.conf', async () => {
-    const repo = await goSourceRepo({ 'staticcheck.conf': 'checks = ["all"]\n' })
-    try {
-      const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
+  it(
+    'reports repo-config provenance where the repo owns a staticcheck.conf',
+    async () => {
+      const repo = await goSourceRepo({ 'staticcheck.conf': 'checks = ["all"]\n' })
+      try {
+        const scan = await scanReplaying(repo, await capturedFor(repo, 'staticcheck-0.8.1.jsonl'))
 
-      expect(
-        scan.tools
-          .filter((tool) => tool.tool === STATICCHECK_TOOL)
-          .map((tool) => [tool.provenance, tool.detection?.ownedVia]),
-      ).toEqual([
-        ['repo-config', 'staticcheck.conf'],
-        ['repo-config', 'staticcheck.conf'],
-        ['repo-config', 'staticcheck.conf'],
-      ])
-      expect(
-        scan.findings
-          .filter((finding) => finding.tool === STATICCHECK_TOOL)
-          .every((finding) => finding.provenance === 'repo-config'),
-      ).toBe(true)
-    } finally {
-      await rm(repo, { recursive: true, force: true })
-    }
-  })
+        expect(
+          scan.tools
+            .filter((tool) => tool.tool === STATICCHECK_TOOL)
+            .map((tool) => [tool.provenance, tool.detection?.ownedVia]),
+        ).toEqual([
+          ['repo-config', 'staticcheck.conf'],
+          ['repo-config', 'staticcheck.conf'],
+          ['repo-config', 'staticcheck.conf'],
+        ])
+        expect(
+          scan.findings
+            .filter((finding) => finding.tool === STATICCHECK_TOOL)
+            .every((finding) => finding.provenance === 'repo-config'),
+        ).toBe(true)
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    },
+    SCAN_TIMEOUT_MS,
+  )
 })
 
 /** The capture's bytes with `/repo` rewritten to the repo the fake `go` runs in. */

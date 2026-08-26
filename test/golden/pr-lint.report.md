@@ -39,6 +39,8 @@ Against `main`, merge-base `<short>`. 1 new finding (1 on lines this change touc
 
 | Tool | Scan | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- | --- |
+| aislop | base | ok | [default-config] | 0.14.1 | — |
+| aislop | head | ok | [default-config] | 0.14.1 | — |
 | oxlint | base | ok | [default-config] | 1.78.0 | — |
 | oxlint | head | ok | [default-config] | 1.78.0 | — |
 | react-doctor | base | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
@@ -49,7 +51,7 @@ Against `main`, merge-base `<short>`. 1 new finding (1 on lines this change touc
 - error `src/clean.js:3` `eslint(no-unreachable)` — Unreachable code. (oxlint) [default-config]
 - error `src/renamed.js:2` `eslint(no-dupe-keys)` — Duplicate key 'x' (oxlint) [default-config]
 
-Evidence: [raw/base/root/oxlint.sarif.json](raw/base/root/oxlint.sarif.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
+Evidence: [raw/base/root/aislop.json](raw/base/root/aislop.json) · [raw/root/aislop.json](raw/root/aislop.json) · [raw/base/root/oxlint.sarif.json](raw/base/root/oxlint.sarif.json) · [raw/root/oxlint.sarif.json](raw/root/oxlint.sarif.json)
 
 ## Reference
 
