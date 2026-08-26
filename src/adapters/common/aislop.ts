@@ -497,7 +497,9 @@ async function runAislop(ctx: RunContext): Promise<ToolResult> {
   const scannable = scannableOf(ctx.files)
   if (scannable.size === 0) {
     // See `opengrep.ts`: nothing scanned is a category with no evidence, never
-    // a clean bill.
+    // a clean bill. Only the repo-spanning unit reaches this branch: discovery
+    // (`discover.ts`, `partitionProjects`) keeps a project only when it holds a
+    // `languageOf` file, and `Language` is exactly `AISLOP_LANGUAGES`.
     return unavailable(
       'no JavaScript, TypeScript, Python, C# or Go files, so aislop assessed nothing',
     )
