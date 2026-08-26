@@ -3,12 +3,17 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse as parseYaml } from 'yaml'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { aislopRunner, generatedConfig } from '../src/adapters/common/aislop.ts'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { AISLOP_CONFIG_FILE, aislopRunner, generatedConfig } from '../src/adapters/common/aislop.ts'
 import { exists } from '../src/adapters/support.ts'
 import { inventoryOf, partitionProjects } from '../src/core/discover.ts'
 import type { DetectContext, Detection, RunContext, ToolResult } from '../src/core/types.ts'
+import { reportFindings } from '../src/render/json.ts'
+import type { HealthScanResult } from '../src/run.ts'
+import { runHealthScan } from '../src/run.ts'
 import { makeProject } from './factories.ts'
+import type { FixtureRepo } from './support/fixture.ts'
+import { createFixtureRepo } from './support/fixture.ts'
 
 /**
  * aislop — the `ai-slop` engine, run over a scratch mirror of one project.
@@ -543,4 +548,167 @@ describe('aislopRunner.run against a planted aislop', () => {
 
     expect(scoped.findings).toEqual(whole.findings)
   })
+})
+
+/** Roomy: the first scan of a suite may be fetching aislop through npx. */
+const SCAN_TIMEOUT_MS = 180_000
+
+/**
+ * The whole journey, from a repo that owns aislop to the row and the findings
+ * `report.json` carries. What the planted-binary describe above cannot reach is
+ * here: detection, the ephemeral fetch of the pinned 0.14.1, and the two lifts
+ * the repo's config asks for.
+ */
+describe('quick scan of a repo that owns aislop', () => {
+  let fixture: FixtureRepo
+  let scan: HealthScanResult
+
+  beforeAll(async () => {
+    fixture = await createFixtureRepo('js-aislop-owned')
+    scan = await runHealthScan({ path: fixture.root, only: ['lint'] })
+  }, SCAN_TIMEOUT_MS)
+
+  afterAll(async () => {
+    await fixture.remove()
+  })
+
+  /**
+   * `.aislop/config.yml` is under a dot directory, so `git ls-files`-based
+   * discovery never lists it: a detection built from `ctx.files.all` alone
+   * would report `detection: null` here, and `config+dependency` would lose
+   * its config half.
+   */
+  it('is owned by the config plus the dependency, and runs the pinned version', () => {
+    expect(scan.report.tools.find((tool) => tool.tool === 'aislop')).toMatchObject({
+      execution: 'ephemeral-pinned',
+      provenance: 'repo-config',
+      version: '0.14.1',
+      state: 'ok',
+      reason:
+        "engine selection is crank-health's; rules, exclude and include come from .aislop/config.yml",
+      detection: {
+        reason: 'config+dependency',
+        configFiles: ['.aislop/config.yml'],
+        ownedVia: '.aislop/config.yml',
+        installed: false,
+        version: null,
+      },
+    })
+  })
+
+  /**
+   * The fixture README's five planted rows minus the two the repo's config
+   * asks for: `ai-slop/todo-stub` is `off`, and `src/excluded.js` is excluded.
+   * Every survivor carries `repo-config`, because that config is what decided
+   * which rows there are.
+   */
+  it('grades the rows the repo’s own rules and excludes leave standing', () => {
+    expect(
+      reportFindings(scan.report)
+        .filter((finding) => finding.tool === 'aislop')
+        .map((finding) => [
+          finding.file,
+          finding.rule,
+          finding.severity,
+          finding.range.startLine,
+          finding.provenance,
+        ]),
+    ).toEqual([
+      ['src/index.js', 'ai-slop/duplicate-import', 'warning', 2, 'repo-config'],
+      ['src/index.js', 'ai-slop/hallucinated-import', 'error', 3, 'repo-config'],
+      ['src/index.js', 'ai-slop/swallowed-exception', 'error', 9, 'repo-config'],
+    ])
+    expect(scan.report.categories.lint.status).toBe('graded')
+  })
+
+  it('leaves the target repo clean', async () => {
+    expect(await fixture.status()).toBe('')
+  })
+})
+
+/**
+ * The same fixture with its own `.aislop/config.yml` rewritten, which is the
+ * only way to reach the two answers a run gives about a config it found: the
+ * repo turned the engine off, and the repo's file is not aislop config at all.
+ * The rewrite stays uncommitted on purpose, because detection reads the disk
+ * and the file is under a dot directory the inventory never lists either way.
+ */
+describe('quick scan of a repo whose aislop config says something else', () => {
+  const fixtures: FixtureRepo[] = []
+  let out: string
+
+  /** Rewrites a fresh fixture's config, then scans it for lint alone. */
+  async function scanWithConfig(
+    body: string,
+    options: { readonly out?: string } = {},
+  ): Promise<HealthScanResult> {
+    const fixture = await createFixtureRepo('js-aislop-owned')
+    fixtures.push(fixture)
+    await writeFile(join(fixture.root, AISLOP_CONFIG_FILE), body)
+    return runHealthScan({ path: fixture.root, only: ['lint'], ...options })
+  }
+
+  beforeEach(async () => {
+    out = await mkdtemp(join(tmpdir(), 'crank-aislop-out-'))
+  })
+
+  afterEach(async () => {
+    await Promise.all([
+      ...fixtures.splice(0).map((fixture) => fixture.remove()),
+      rm(out, { recursive: true, force: true }),
+    ])
+  })
+
+  /**
+   * A repo that turned the ai-slop engine off is graded on every other lint
+   * runner and on none of aislop's rows, and nothing about the run it did not
+   * ask for reaches the run directory.
+   */
+  it(
+    'declines the scan the repo turned off, and writes no evidence for it',
+    async () => {
+      const scan = await scanWithConfig('version: 1\nengines:\n  ai-slop: false\n', { out })
+
+      expect(scan.report.tools.find((tool) => tool.tool === 'aislop')).toMatchObject({
+        state: 'not-available',
+        reason: "repo's .aislop/config.yml disables aislop's ai-slop engine",
+        raw: [],
+      })
+      expect(await readdir(join(out, 'raw', 'root'))).not.toContain('aislop.json')
+    },
+    SCAN_TIMEOUT_MS,
+  )
+
+  /**
+   * A config the lift cannot validate is not half-read: the run measures with
+   * crank-health's defaults, says so in its reason, and every finding carries
+   * `default-config`, so all five of the fixture README's rows come back,
+   * `todo-stub` and the excluded file included.
+   */
+  it(
+    'measures with crank-health’s defaults when the repo’s config will not parse',
+    async () => {
+      const scan = await scanWithConfig('rules: {ai-slop/todo-stub: off\n')
+
+      expect(scan.report.tools.find((tool) => tool.tool === 'aislop')).toMatchObject({
+        state: 'ok',
+        provenance: 'default-config',
+        reason:
+          ".aislop/config.yml could not be read as aislop config; measured with crank-health's defaults",
+        detection: { reason: 'config+dependency' },
+      })
+      expect(
+        reportFindings(scan.report)
+          .filter((finding) => finding.tool === 'aislop')
+          .map((finding) => [finding.file, finding.rule, finding.provenance]),
+      ).toEqual([
+        ['src/excluded.js', 'ai-slop/swallowed-exception', 'default-config'],
+        ['src/index.js', 'ai-slop/duplicate-import', 'default-config'],
+        ['src/index.js', 'ai-slop/hallucinated-import', 'default-config'],
+        ['src/index.js', 'ai-slop/todo-stub', 'default-config'],
+        ['src/index.js', 'ai-slop/swallowed-exception', 'default-config'],
+      ])
+    },
+    SCAN_TIMEOUT_MS,
+  )
 })
