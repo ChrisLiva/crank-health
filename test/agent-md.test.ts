@@ -450,6 +450,44 @@ describe('cross-category duplicates', () => {
   })
 
   /**
+   * The suffix counts what the heading counts. An absorbed theme brings its
+   * advisory rows with it, and a suffix that counted them would restate, one
+   * clause later, the number the heading stopped printing. The second place
+   * carries no graded row, so nothing there links an advisory one to work
+   * somebody has to open the file for.
+   */
+  it('counts only the eligible rows of an absorbed theme in the suffix', () => {
+    const THERE = { file: 'src/b.ts', range: { startLine: 9, startCol: 1, endLine: 9, endCol: 2 } }
+    const report = makeReport({
+      categories: allGraded(),
+      findings: [
+        makeFinding({ id: 'lint', ...HERE }),
+        makeFinding({ id: 'lintadv', ...THERE, gradeScope: false }),
+        makeFinding({ id: 'type', category: 'types', tool: 'tsc', rule: 'TS2322', ...HERE }),
+        makeFinding({
+          id: 'typeadv',
+          category: 'types',
+          tool: 'tsc',
+          rule: 'TS2322',
+          gradeScope: false,
+          ...THERE,
+        }),
+      ],
+    })
+    const tasks = buildAgentTasks(report)
+    expect(tasks.map((task) => task.title)).toEqual([
+      'Fix 1 `TS2322` type error, and 1 finding in lint at the same place',
+    ])
+    // Both lint rows are still under it; only the count is of the eligible one.
+    expect(tasks[0]?.findings.map((finding) => finding.id)).toEqual([
+      'type',
+      'typeadv',
+      'lint',
+      'lintadv',
+    ])
+  })
+
+  /**
    * Overlap is not duplication. A theme spread over places another theme only
    * meets at one of them is its own work, and folding it in would hide the rest.
    */
@@ -618,6 +656,62 @@ describe('themed grouping', () => {
     expect(markdown).toContain('- `src/f0.ts` (1 finding)')
   })
 
+  /**
+   * A theme is minted by its eligible rows and then carries every row in the
+   * same files, advisory ones included. The counts are of the rows that earned
+   * the task; the rest are listed under their file, named advisory, and left out
+   * of both numbers — a task that says 26 where 4 count sends an agent looking
+   * for work the grade never asked for.
+   */
+  it('counts the eligible findings of a mixed theme and names the advisory ones', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), 'dead-code': { status: 'graded', grade: 'F' } },
+      findings: [
+        ...Array.from({ length: 4 }, (_, index) =>
+          unusedFile({ id: `g${index}`, file: `src/g${index}.ts` }),
+        ),
+        ...Array.from({ length: 21 }, (_, index) =>
+          unusedFile({ id: `a${index}`, file: 'src/models/api.ts', gradeScope: false }),
+        ),
+        unusedFile({ id: 'mixed', file: 'src/g0.ts', gradeScope: false }),
+      ],
+    })
+
+    const tasks = buildAgentTasks(report)
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]?.title).toBe('Remove 4 unused files')
+    // Every row is still in the task; only the counting changed.
+    expect(tasks[0]?.findings).toHaveLength(26)
+
+    const markdown = renderAgentMarkdown(report)
+    expect(markdown).toContain('4 findings across 5 files:')
+    expect(markdown).toContain('- `src/models/api.ts` (0 findings, 21 advisory)')
+    expect(markdown).toContain('- `src/g0.ts` (1 finding, 1 advisory)')
+    expect(markdown).toContain('- `src/g1.ts` (1 finding)')
+  })
+
+  /**
+   * The other side of the same rule. Duplication grades on jscpd's token
+   * percentage, so every one of its findings is advisory and the rows are what
+   * the letter rests on — counting `gradeScope` here would head a real task
+   * with "0 findings".
+   */
+  it('counts every finding of a duplication theme, where the metric is the grade', () => {
+    const report = duplicationGraded(
+      'F',
+      Array.from({ length: 12 }, (_, index) => clone(`src/d${index}.ts`)),
+    )
+
+    expect(buildAgentTasks(report).map((task) => task.title)).toEqual([
+      'De-duplicate 12 copied blocks',
+    ])
+
+    const markdown = renderAgentMarkdown(report)
+    expect(markdown).toContain('12 findings across 12 files:')
+    expect(markdown).toContain('- `src/d0.ts` (1 finding)')
+    expect(markdown).not.toContain(' advisory)')
+  })
+
   it('keeps different kinds of dead code apart', () => {
     const report = makeReport({
       categories: { ...allGraded(), 'dead-code': { status: 'graded', grade: 'F' } },
@@ -725,6 +819,17 @@ describe('security themes', () => {
     ])
   })
 })
+
+/** One `fallow/unused-file` row, graded unless the test says otherwise. */
+function unusedFile(overrides: Partial<Finding>): Finding {
+  return makeFinding({
+    category: 'dead-code',
+    tool: 'fallow-dead-code',
+    rule: 'fallow/unused-file',
+    message: 'File is never imported',
+    ...overrides,
+  })
+}
 
 const LOCKFILE = 'pnpm-lock.yaml'
 

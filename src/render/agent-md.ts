@@ -103,6 +103,15 @@ export interface AgentTask {
   readonly gradeImpact: string
   /** The findings this task covers, in report order. */
   readonly findings: readonly Finding[]
+  /**
+   * The findings of {@link findings} that earned the task — {@link eligible}
+   * resolved against this report. The title's count and the file list's count
+   * are of these; every other row is carried, named advisory beside its file,
+   * and left out of both numbers. A theme minted by 4 graded findings that
+   * advertises the 84 rows it swept up sends an agent looking for work no grade
+   * asked for.
+   */
+  readonly eligible: readonly Finding[]
   /** Run-directory-relative raw evidence from the tools that reported them. */
   readonly evidence: readonly string[]
   /** Argv tail of the Verify command — a real, parseable invocation. */
@@ -213,15 +222,18 @@ export function buildAgentTasks(
       .map((finding) => finding.id),
   )
   const measured = measuredCategories(report)
+  const isEligible: Eligible = (finding) => eligible(finding, graded, measured)
 
   const themes = mergeDuplicates(
     CATEGORIES.flatMap((category) =>
       themesOf(
         category,
         findings.filter((finding) => finding.category === category),
+        isEligible,
       ),
-    ).filter((theme) => isWork(theme, written, graded, measured)),
+    ).filter((theme) => isWork(theme, written, isEligible)),
     new Map(findings.map((finding, index) => [finding.id, index])),
+    isEligible,
   )
 
   return themes
@@ -235,7 +247,7 @@ export function buildAgentTasks(
         compare(a.key, b.key) ||
         compare(a.project ?? '', b.project ?? ''),
     )
-    .map((theme, index) => toTask(theme, index + 1, report, evidenceOf, touched))
+    .map((theme, index) => toTask(theme, index + 1, report, evidenceOf, touched, isEligible))
 }
 
 /* ------------------------------------------------------- grade movement */
@@ -397,6 +409,13 @@ function eligible(
 }
 
 /**
+ * {@link eligible} with one report's sets closed over: built once in
+ * {@link buildAgentTasks} and handed to everything that has to draw the same
+ * line, so which findings count is answered in one place rather than three.
+ */
+type Eligible = (finding: Finding) => boolean
+
+/**
  * The categories graded worse than A on a number a tool reported rather than on
  * findings that counted: `metrics` holds that number (jscpd's duplicated-token
  * percentage, fallow's functions over the ceiling, Stryker's mutation score),
@@ -446,10 +465,9 @@ function gradedWorseThanA(state: CategoryState | undefined): boolean {
 function isWork(
   theme: Theme,
   written: (finding: Finding) => boolean,
-  graded: ReadonlySet<string>,
-  measured: ReadonlySet<Category>,
+  isEligible: Eligible,
 ): boolean {
-  const rows = theme.findings.filter((finding) => eligible(finding, graded, measured))
+  const rows = theme.findings.filter(isEligible)
   if (rows.length === 0) return false
   if (rows.every((finding) => finding.package !== undefined)) return rows.some(hasFix)
   return rows.some((finding) => written(finding))
@@ -475,6 +493,7 @@ function isWork(
 function mergeDuplicates(
   themes: readonly Theme[],
   order: ReadonlyMap<string, number>,
+  isEligible: Eligible,
 ): readonly Theme[] {
   const canonical = themes.toSorted(
     (a, b) =>
@@ -499,7 +518,7 @@ function mergeDuplicates(
       if (merged === undefined) return theme
       return {
         ...theme,
-        title: `${theme.title}, and ${alsoHere(merged)} at the same place`,
+        title: `${theme.title}, and ${alsoHere(merged, isEligible)} at the same place`,
         // Back into the report's own order, so a merged task reads like every
         // other one and two runs cannot disagree about the list.
         findings: [theme, ...merged]
@@ -516,10 +535,16 @@ function mergeDuplicates(
  * merge added. The category goes after the noun because {@link CATEGORY_LABELS}
  * is not always a singular adjective ("types", "dead code"), and one spelling of
  * a category name across the renderers is worth more than a smoother sentence.
+ *
+ * Eligible rows only, the same count the heading it is appended to makes: a
+ * suffix that counted every row would restate, one clause later, the number
+ * {@link themeTitle} stopped printing. It cannot reach zero — an absorbed theme
+ * passed {@link isWork}, so it brought at least one eligible row with it.
  */
-function alsoHere(merged: readonly Theme[]): string {
+function alsoHere(merged: readonly Theme[], isEligible: Eligible): string {
   const counts = merged.map(
-    (theme) => `${plural(theme.findings.length, 'finding')} in ${CATEGORY_LABELS[theme.category]}`,
+    (theme) =>
+      `${plural(theme.findings.filter(isEligible).length, 'finding')} in ${CATEGORY_LABELS[theme.category]}`,
   )
   const last = counts.at(-1) ?? ''
   return counts.length < 2 ? last : `${counts.slice(0, -1).join(', ')} and ${last}`
@@ -751,6 +776,7 @@ function toTask(
   report: Report,
   evidenceOf: (finding: Finding) => readonly string[],
   touched: ReadonlySet<string>,
+  isEligible: Eligible,
 ): AgentTask {
   // The grade a task is about is its project's, where the project has one of its
   // own: a package's F is what its agent has to move, and the rollup's letter
@@ -771,6 +797,7 @@ function toTask(
     title: theme.title,
     gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
     findings: theme.findings,
+    eligible: theme.findings.filter(isEligible),
     evidence,
     verify: verifyArgv(theme.category, scopable(report, theme.category) ? graded?.path : undefined),
   }
@@ -817,7 +844,7 @@ interface Theme {
  * the grouping is the one it has always been, and the findings no project claims
  * group together as their own unnamed theme.
  */
-function themesOf(category: Category, findings: readonly Finding[]): Theme[] {
+function themesOf(category: Category, findings: readonly Finding[], isEligible: Eligible): Theme[] {
   const groups = new Map<
     string,
     { project: string | undefined; key: string; findings: Finding[] }
@@ -835,7 +862,7 @@ function themesOf(category: Category, findings: readonly Finding[]): Theme[] {
     category,
     project: group.project,
     key: group.key,
-    title: themeTitle(category, group.key, group.findings),
+    title: themeTitle(category, group.key, group.findings, isEligible),
     findings: group.findings,
   }))
 }
@@ -868,8 +895,21 @@ function themeKey(finding: Finding): string {
   }
 }
 
-function themeTitle(category: Category, key: string, findings: readonly Finding[]): string {
-  const count = findings.length
+/**
+ * The heading, counted. The number is of the theme's eligible rows, not of
+ * everything it swept up: a theme carries every finding in the files it names,
+ * and "Remove 26 unused files" over 4 that count is a heading an agent cannot
+ * act on. {@link Eligible} draws that line — in a measured category every row
+ * is eligible, so a duplication sweep still counts all of them.
+ */
+function themeTitle(
+  category: Category,
+  key: string,
+  findings: readonly Finding[],
+  isEligible: Eligible,
+): string {
+  const rows = findings.filter(isEligible)
+  const count = rows.length
   const first = findings[0]
   const rule = first?.rule ?? key
   switch (category) {
@@ -890,7 +930,7 @@ function themeTitle(category: Category, key: string, findings: readonly Finding[
     case 'duplication':
       return `De-duplicate ${plural(count, 'copied block')}`
     case 'format':
-      return `Format ${plural(fileCount(findings), 'file')}`
+      return `Format ${plural(fileCount(rows), 'file')}`
     case 'test-quality':
       return `Strengthen the tests covering \`${key}\` (${plural(count, 'mutation finding')})`
     default:
@@ -1042,7 +1082,7 @@ function taskHeading(task: AgentTask, named: boolean): string[] {
 
 /** A task's own work: the findings it covers, and the raw output behind them. */
 function taskBody(task: AgentTask): string[] {
-  const lines = [...findingBlock(task.findings)]
+  const lines = [...findingBlock(task.findings, task.eligible)]
   if (task.evidence.length > 0) {
     lines.push('', `Evidence: ${task.evidence.map((path) => `[${path}](${path})`).join(' · ')}`)
   }
@@ -1057,8 +1097,17 @@ function taskBody(task: AgentTask): string[] {
  * a count in place of twenty advisory ids is a number where the work is. Either
  * way the list stops at {@link FILE_LIST_LIMIT} entries and leaves the rest to
  * `report.json`.
+ *
+ * Which form is chosen counts every row, because every row is what the inline
+ * form would print: a theme of 4 eligible findings and 80 advisory ones is 84
+ * lines, and the aggregate exists for exactly that shape. What the aggregate
+ * *counts* is `eligible` — `4 findings across 15 files`, with each file's
+ * advisory rows named beside its own number rather than folded into it.
+ *
+ * @param counted the subset of `findings` the counts are of; see
+ * {@link AgentTask.eligible}
  */
-function findingBlock(findings: readonly Finding[]): string[] {
+function findingBlock(findings: readonly Finding[], counted: readonly Finding[]): string[] {
   if (findings.length <= INLINE_FINDING_LIMIT || fileCount(findings) === 1) {
     const lines = findings.slice(0, FILE_LIST_LIMIT).map((finding) => {
       const advisory = finding.gradeScope ? '' : ` ${ADVISORY_TAG}`
@@ -1071,16 +1120,27 @@ function findingBlock(findings: readonly Finding[]): string[] {
     }
     return lines
   }
-  const counts = new Map<string, number>()
-  for (const finding of findings) counts.set(finding.file, (counts.get(finding.file) ?? 0) + 1)
+  const ids = new Set(counted.map((finding) => finding.id))
+  const counts = new Map<string, { counted: number; advisory: number }>()
+  for (const finding of findings) {
+    const row = counts.get(finding.file) ?? { counted: 0, advisory: 0 }
+    if (ids.has(finding.id)) row.counted += 1
+    else row.advisory += 1
+    counts.set(finding.file, row)
+  }
   const files = [...counts].toSorted(([a], [b]) => compare(a, b))
   const lines = files
     .slice(0, FILE_LIST_LIMIT)
-    .map(([file, count]) => `- \`${file}\` (${plural(count, 'finding')})`)
+    // "advisory" is what the row is, not a noun to pluralise, and a file with
+    // none of them reads as it always has.
+    .map(
+      ([file, row]) =>
+        `- \`${file}\` (${plural(row.counted, 'finding')}${row.advisory === 0 ? '' : `, ${row.advisory} advisory`})`,
+    )
   if (files.length > FILE_LIST_LIMIT) {
     lines.push(`- … ${files.length - FILE_LIST_LIMIT} more files in \`report.json\`.`)
   }
-  return [`${plural(findings.length, 'finding')} across ${plural(files.length, 'file')}:`, ...lines]
+  return [`${plural(counted.length, 'finding')} across ${plural(files.length, 'file')}:`, ...lines]
 }
 
 function footer(report: Report, total: number, shown: number): string {
