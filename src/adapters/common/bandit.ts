@@ -42,12 +42,18 @@ import {
  * severity, so a duplicate cannot inflate it.
  *
  * **Grading tiers.** bandit's own severity is the split: `HIGH` and `MEDIUM`
- * count toward the grade, `LOW` is advisory. Its low tier is mostly
+ * can count toward the grade, `LOW` is advisory. Its low tier is mostly
  * "you imported subprocess" — true, and not a finding a repo should be graded
  * on. bandit reports a confidence alongside the severity, and its high tier at
  * anything below `HIGH` confidence is a guess worth reading, not a proven
- * problem: those become `warning`, still graded, never silenced. Only
- * `HIGH`/`HIGH` is an `error`.
+ * problem: those become `warning`. Only `HIGH`/`HIGH` is an `error`.
+ *
+ * **Confidence decides grading under the bundled config.** A repo that never
+ * chose bandit is graded on what bandit is sure of: `HIGH` severity, or a
+ * graded severity at `HIGH` confidence. A `MEDIUM`/`MEDIUM` finding, bandit's
+ * "probable insecure usage", is reported advisory instead, because an unowned
+ * tool grades correctness-class rules and a medium-confidence heuristic is not
+ * one. A repo that owns a bandit config is graded on every tier it selected.
  */
 
 export const BANDIT_TOOL = 'bandit'
@@ -287,9 +293,10 @@ export function parseBanditJson(stdout: string, repoRoot = ''): BanditIssue[] {
 }
 
 /**
- * bandit issues → the core's vocabulary, with the severity tiers of the file
- * comment applied through `gradeScope`. On the repo's own bandit config every
- * finding is graded: they selected these tests and are failing them.
+ * bandit issues → the core's vocabulary, with the severity and confidence
+ * tiers of the file comment applied through `gradeScope`. On the repo's own
+ * bandit config every finding is graded: they selected these tests and are
+ * failing them.
  */
 export function toPendingFindings(
   issues: readonly BanditIssue[],
@@ -317,7 +324,10 @@ export function toPendingFindings(
         },
         message: `${redactSecret(issue.testId, issue.message)} (${issue.severity.toLowerCase()} severity, ${issue.confidence.toLowerCase()} confidence)`,
         provenance: repoConfig ? ('repo-config' as const) : ('default-config' as const),
-        gradeScope: repoConfig || GRADED_SEVERITIES.has(severity),
+        gradeScope:
+          repoConfig ||
+          (GRADED_SEVERITIES.has(severity) &&
+            (issue.severity === 'HIGH' || issue.confidence === 'HIGH')),
         ...(issue.moreInfo === '' ? {} : { fixHint: `see ${issue.moreInfo}` }),
       }
     })

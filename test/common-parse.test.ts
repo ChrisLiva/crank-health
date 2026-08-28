@@ -388,6 +388,32 @@ describe('parseBanditJson', () => {
   })
 
   /**
+   * Under the bundled config bandit is graded on what it is sure of: `HIGH`
+   * severity, or a graded severity at `HIGH` confidence. `MEDIUM`/`MEDIUM` is
+   * bandit's "probable insecure usage", a heuristic the repo never opted into,
+   * so it is reported and not graded. The confidence match is exact, so `High`
+   * lands on the advisory side. A repo that owns a bandit config is graded on
+   * every tier it selected, medium confidence included.
+   */
+  it.each([
+    ['HIGH', 'HIGH', false, true],
+    ['HIGH', 'MEDIUM', false, true],
+    ['MEDIUM', 'HIGH', false, true],
+    ['MEDIUM', 'MEDIUM', false, false],
+    ['MEDIUM', 'High', false, false],
+    ['MEDIUM', 'MEDIUM', true, true],
+  ])(
+    'grades %s severity at %s confidence, repo config %s: %s',
+    (severity, confidence, repoConfig, graded) => {
+      const [finding] = toBanditFindings(
+        [banditIssue({ testId: 'B602', severity, confidence })],
+        repoConfig,
+      )
+      expect(finding?.gradeScope).toBe(graded)
+    },
+  )
+
+  /**
    * bandit's hardcoded-secret tests quote the literal they found, and a
    * finding's message is copied verbatim into `report.json`, `report.md` and
    * `agent.md`. A secrets finding that carries the secret has published it.
