@@ -47,9 +47,11 @@ describe('toDeadCodeFindings', () => {
     unusedExports: [{ file: 'src/util.ts', name: 'unusedHelper', line: 5, column: 16 }],
     unusedDependencies: ['left-pad'],
   }
+  /** What the project analyzed: the one unused file above, and a used one. */
+  const COVERED: ReadonlySet<string> = new Set(['src/dead.ts', 'src/util.ts'])
 
   it('grades unused exports, and anchors them on the symbol name', () => {
-    const finding = toDeadCodeFindings(report, false, false).find(
+    const finding = toDeadCodeFindings(report, false, false, COVERED).find(
       (candidate) => candidate.rule === 'fallow/unused-export',
     )
     expect(finding).toMatchObject({
@@ -62,7 +64,7 @@ describe('toDeadCodeFindings', () => {
   })
 
   it('grades unused files when fallow had an entry point to start from', () => {
-    const finding = toDeadCodeFindings(report, false, false).find(
+    const finding = toDeadCodeFindings(report, false, false, COVERED).find(
       (candidate) => candidate.rule === 'fallow/unused-file',
     )
     expect(finding).toMatchObject({ severity: 'warning', gradeScope: true, anchor: '' })
@@ -73,7 +75,7 @@ describe('toDeadCodeFindings', () => {
    * `main` would otherwise grade F for having no `main`.
    */
   it('keeps unused files advisory when fallow found no entry point at all', () => {
-    const findings = toDeadCodeFindings({ ...report, entryPoints: 0 }, false, false)
+    const findings = toDeadCodeFindings({ ...report, entryPoints: 0 }, false, false, COVERED)
     const file = findings.find((candidate) => candidate.rule === 'fallow/unused-file')
     expect(file?.gradeScope).toBe(false)
     expect(file?.message).toContain('advisory')
@@ -130,10 +132,12 @@ describe('toDeadCodeFindings', () => {
 
   it('tags provenance from whose config decided the result', () => {
     expect(
-      toDeadCodeFindings(report, true, false).every((f) => f.provenance === 'repo-config'),
+      toDeadCodeFindings(report, true, false, COVERED).every((f) => f.provenance === 'repo-config'),
     ).toBe(true)
     expect(
-      toDeadCodeFindings(report, false, false).every((f) => f.provenance === 'default-config'),
+      toDeadCodeFindings(report, false, false, COVERED).every(
+        (f) => f.provenance === 'default-config',
+      ),
     ).toBe(true)
   })
 
@@ -145,7 +149,7 @@ describe('toDeadCodeFindings', () => {
     const EXPORT = 'fallow/unused-export'
 
     it('reports the export finding ungraded, keeping severity and anchor', () => {
-      expect(ruled(toDeadCodeFindings(report, false, true), EXPORT)).toMatchObject({
+      expect(ruled(toDeadCodeFindings(report, false, true, COVERED), EXPORT)).toMatchObject({
         severity: 'warning',
         gradeScope: false,
         anchor: 'unusedHelper',
@@ -153,18 +157,20 @@ describe('toDeadCodeFindings', () => {
     })
 
     it('grades the export finding again when the repo owns a fallow config', () => {
-      expect(ruled(toDeadCodeFindings(report, true, true), EXPORT)?.gradeScope).toBe(true)
+      expect(ruled(toDeadCodeFindings(report, true, true, COVERED), EXPORT)?.gradeScope).toBe(true)
     })
 
     /** Being a library says nothing about whether a *file* is reachable. */
     it('still gates unused files on whether fallow found an entry point', () => {
-      expect(ruled(toDeadCodeFindings(report, false, true), 'fallow/unused-file')).toMatchObject({
+      expect(
+        ruled(toDeadCodeFindings(report, false, true, COVERED), 'fallow/unused-file'),
+      ).toMatchObject({
         severity: 'warning',
         gradeScope: true,
         anchor: '',
       })
       const noEntryPoint = ruled(
-        toDeadCodeFindings({ ...report, entryPoints: 0 }, false, true),
+        toDeadCodeFindings({ ...report, entryPoints: 0 }, false, true, COVERED),
         'fallow/unused-file',
       )
       expect(noEntryPoint?.gradeScope).toBe(false)

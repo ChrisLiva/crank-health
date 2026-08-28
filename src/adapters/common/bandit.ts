@@ -81,7 +81,7 @@ const SEVERITIES: Readonly<Record<string, Severity>> = {
   UNDEFINED: 'info',
 }
 
-/** Severities that count toward the grade; see the file comment. */
+/** Severities a finding must reach before confidence is even asked. */
 const GRADED_SEVERITIES: ReadonlySet<Severity> = new Set(['error', 'warning'])
 
 /**

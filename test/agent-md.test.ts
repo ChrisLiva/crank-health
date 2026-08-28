@@ -684,10 +684,46 @@ describe('themed grouping', () => {
     expect(tasks[0]?.findings).toHaveLength(26)
 
     const markdown = renderAgentMarkdown(report)
-    expect(markdown).toContain('4 findings across 5 files:')
-    expect(markdown).toContain('- `src/models/api.ts` (0 findings, 21 advisory)')
+    // Four files hold the four: the advisory-only file is not one of the files
+    // the number is across, and it sorts below the ones that are.
+    expect(markdown).toContain('4 findings across 4 files:')
     expect(markdown).toContain('- `src/g0.ts` (1 finding, 1 advisory)')
     expect(markdown).toContain('- `src/g1.ts` (1 finding)')
+    expect(markdown).toContain('- `src/models/api.ts` (0 findings, 21 advisory)')
+    expect(fileRows(markdown)).toEqual([
+      '- `src/g0.ts` (1 finding, 1 advisory)',
+      '- `src/g1.ts` (1 finding)',
+      '- `src/g2.ts` (1 finding)',
+      '- `src/g3.ts` (1 finding)',
+      '- `src/models/api.ts` (0 findings, 21 advisory)',
+    ])
+  })
+
+  /**
+   * The list is cut at {@link FILE_LIST_LIMIT}. Sorted by path alone, twenty
+   * advisory files spend the whole budget and the one file the headline counts
+   * lands behind the "… more files" line, leaving a task that names a number
+   * and then shows fifteen files holding none of it.
+   */
+  it('lists the file holding the counted work even when advisory files outnumber the limit', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), 'dead-code': { status: 'graded', grade: 'F' } },
+      findings: [
+        ...Array.from({ length: 20 }, (_, index) =>
+          unusedFile({
+            id: `a${index}`,
+            file: `src/a${String(index).padStart(2, '0')}.ts`,
+            gradeScope: false,
+          }),
+        ),
+        unusedFile({ id: 'graded', file: 'src/zz.ts' }),
+      ],
+    })
+
+    const markdown = renderAgentMarkdown(report)
+    expect(markdown).toContain('1 finding across 1 file:')
+    expect(fileRows(markdown)[0]).toBe('- `src/zz.ts` (1 finding)')
+    expect(markdown).toContain('- … 6 more files in `report.json`.')
   })
 
   /**
@@ -1240,9 +1276,14 @@ function unusedExports(files: readonly string[]): Report {
   })
 }
 
-/** The `- \`file\` (n findings)` rows a task rendered instead of its findings. */
+/**
+ * The `- \`file\` (n findings)` rows a task rendered instead of its findings,
+ * in the order printed, including the `, n advisory` clause a mixed file carries.
+ */
 function fileRows(markdown: string): string[] {
-  return markdown.split('\n').filter((line) => /^- `[^`]+` \(\d+ findings?\)$/.test(line))
+  return markdown
+    .split('\n')
+    .filter((line) => /^- `[^`]+` \(\d+ findings?(, \d+ advisory)?\)$/.test(line))
 }
 
 /** The `- \`file\` \`rule\` — message` lines a lockfile task rendered inline. */

@@ -394,11 +394,12 @@ describe('parseBanditJson', () => {
    * so it is reported and not graded. The confidence match is exact, so `High`
    * lands on the advisory side. A repo that owns a bandit config is graded on
    * every tier it selected, medium confidence included.
+   *
+   * The graded corners are the two tables above: `HIGH`/`HIGH` and
+   * `HIGH`/`MEDIUM` there, and `MEDIUM`/`HIGH` in the second. Only what the
+   * confidence gate demotes is left here.
    */
   it.each([
-    ['HIGH', 'HIGH', false, true],
-    ['HIGH', 'MEDIUM', false, true],
-    ['MEDIUM', 'HIGH', false, true],
     ['MEDIUM', 'MEDIUM', false, false],
     ['MEDIUM', 'High', false, false],
     ['MEDIUM', 'MEDIUM', true, true],

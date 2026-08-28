@@ -344,17 +344,16 @@ export function toDeadCodeFindings(
   report: FallowDeadCode,
   repoConfig: boolean,
   isLibrary: boolean,
-  analyzed?: ReadonlySet<string>,
+  analyzed: ReadonlySet<string>,
 ): PendingFinding[] {
   const provenance = repoConfig ? ('repo-config' as const) : ('default-config' as const)
-  // `analyzed` scopes the repo-wide report to one project. Omitted, the report
-  // is read on its own repo-wide terms and the entry-point guard is the whole
-  // story. Given, a project whose every analyzed file came back unused kept no
-  // used file, so no entry point reaches it. A project that analyzed nothing
-  // kept no used file either, and `runDeadCode` filters those findings away, so
-  // the guard demotes rather than grades whatever survives.
+  // `analyzed` scopes the repo-wide report to one project. A project whose every
+  // analyzed file came back unused kept no used file, so no entry point reaches
+  // it. A project that analyzed nothing kept no used file either, and
+  // `runDeadCode` filters those findings away, so the guard demotes rather than
+  // grades whatever survives. Required, so there is no call shape where the
+  // guard silently does not apply.
   const covered =
-    analyzed === undefined ||
     new Set(report.unusedFiles.filter((file) => analyzed.has(file))).size < analyzed.size
   const fileLevel = report.entryPoints > 0 && covered
 

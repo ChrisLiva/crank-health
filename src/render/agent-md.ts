@@ -1101,8 +1101,9 @@ function taskBody(task: AgentTask): string[] {
  * Which form is chosen counts every row, because every row is what the inline
  * form would print: a theme of 4 eligible findings and 80 advisory ones is 84
  * lines, and the aggregate exists for exactly that shape. What the aggregate
- * *counts* is `eligible` — `4 findings across 15 files`, with each file's
- * advisory rows named beside its own number rather than folded into it.
+ * *counts* is `eligible` — `4 findings across 4 files`, with each file's
+ * advisory rows named beside its own number rather than folded into it, and the
+ * files holding those 4 listed before the ones holding none.
  *
  * @param counted the subset of `findings` the counts are of; see
  * {@link AgentTask.eligible}
@@ -1128,7 +1129,14 @@ function findingBlock(findings: readonly Finding[], counted: readonly Finding[])
     else row.advisory += 1
     counts.set(finding.file, row)
   }
-  const files = [...counts].toSorted(([a], [b]) => compare(a, b))
+  // Files holding the counted work first, then the advisory-only ones, each
+  // group by path. The list is cut at `FILE_LIST_LIMIT`, and a path sort alone
+  // lets twenty advisory files spend the whole budget and push the one file the
+  // headline is counting behind the "… more files" line — a task that names a
+  // number and then shows fifteen files holding none of it.
+  const files = [...counts].toSorted(
+    ([a, one], [b, other]) => Number(other.counted > 0) - Number(one.counted > 0) || compare(a, b),
+  )
   const lines = files
     .slice(0, FILE_LIST_LIMIT)
     // "advisory" is what the row is, not a noun to pluralise, and a file with
@@ -1140,7 +1148,10 @@ function findingBlock(findings: readonly Finding[], counted: readonly Finding[])
   if (files.length > FILE_LIST_LIMIT) {
     lines.push(`- … ${files.length - FILE_LIST_LIMIT} more files in \`report.json\`.`)
   }
-  return [`${plural(counted.length, 'finding')} across ${plural(files.length, 'file')}:`, ...lines]
+  // The span is the counted findings' own: a file contributing nothing to the
+  // number is not one of the files that number is across.
+  const across = files.filter(([, row]) => row.counted > 0).length
+  return [`${plural(counted.length, 'finding')} across ${plural(across, 'file')}:`, ...lines]
 }
 
 function footer(report: Report, total: number, shown: number): string {
