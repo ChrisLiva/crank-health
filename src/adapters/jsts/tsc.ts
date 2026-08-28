@@ -13,7 +13,7 @@ import type {
 } from '../../core/types.ts'
 import { pinnedVersion } from '../../manifest.ts'
 import { byLocation, failed, firstLine, identify, repoRelative } from '../support.ts'
-import { detectNodeTool } from './node-package.ts'
+import { detectNodeTool, hasInstalledDependencies } from './node-package.ts'
 
 /**
  * tsc — the JS/TS type checker (spec "Categories and tools").
@@ -24,7 +24,10 @@ import { detectNodeTool } from './node-package.ts'
  *
  * 1. `tsconfig.json` present → their config decides what is checked, run with
  *    their installed TypeScript when there is one. Every diagnostic is graded:
- *    they wrote the strictness settings they are failing.
+ *    they wrote the strictness settings they are failing. The one exception is
+ *    a project with no install, where the "cannot find `@types/…`" diagnostics
+ *    stay advisory ({@link DEFAULT_ADVISORY_CODES}): nothing was there to
+ *    resolve them from.
  * 2. No `tsconfig.json`, but the repo has TypeScript sources → checking them is
  *    still meaningful, so the pinned TypeScript runs against a minimal
  *    {@link DEFAULT_TSCONFIG} materialized in the scratch dir. Missing-types
@@ -75,10 +78,18 @@ const DEFAULT_TSCONFIG = {
 /**
  * Diagnostics that are about the repo's *environment* rather than its code:
  * missing modules, missing declaration files, and globals with no ambient
- * types. On the repo's own config these are graded like anything else; on ours
- * they are advisory, because we chose the module resolution and the `lib`/
- * `types` set the repo never did — every one of these says "install a
- * `@types/*` package", which is a fact about `node_modules`, not about the code.
+ * types. Every one of them says "install a `@types/*` package", which is a
+ * fact about `node_modules`, not about the code.
+ *
+ * Two things have to hold before one counts toward the grade. The repo's own
+ * `tsconfig.json` has to have produced it, because under our bundled config we
+ * chose the module resolution and the `lib`/`types` set the repo never did.
+ * And the project has to have an install ({@link hasInstalledDependencies}),
+ * because a project whose dependencies are absent cannot resolve a declaration
+ * whatever its config says, so grading these would grade whether `npm install`
+ * ran. crank-health installs nothing into the target (spec §7), so it meets
+ * uninstalled projects routinely: a fresh clone, a CI job that scans before it
+ * installs, a fixture tree checked in as test input.
  */
 const DEFAULT_ADVISORY_CODES: ReadonlySet<string> = new Set([
   'TS2307', // Cannot find module '…' or its corresponding type declarations.
@@ -208,10 +219,15 @@ async function runTsc(ctx: RunContext): Promise<ToolResult> {
   // survived the first. A config that type-checks nothing (`"files": []`,
   // TS18002) reports only diagnostics of exactly that kind, and calling that
   // "zero type errors" is the lie this guard exists to prevent.
+  // Not a question detection already answered: detection reports whether
+  // TypeScript itself is installed, and what decides an environment-only
+  // diagnostic is whether any install exists to have supplied the declarations.
+  const dependenciesInstalled = await hasInstalledDependencies(ctx.repoRoot, ctx.project.path)
+
   const analyzed = new Set(ctx.files)
   const pending = toPendingFindings(
     parseDiagnostics(execution.stdout),
-    ownsConfig,
+    { repoConfig: ownsConfig, dependenciesInstalled },
     ctx.repoRoot,
   ).filter((finding) => analyzed.has(finding.file))
 
@@ -283,15 +299,24 @@ export function parseDiagnostics(stdout: string): TscDiagnostic[] {
   })
 }
 
+/** What decides whether an environment-only diagnostic counts toward the grade. */
+export interface TypeCheckScope {
+  /** The diagnostics came from the repo's own `tsconfig.json`, not our bundled one. */
+  readonly repoConfig: boolean
+  /** The project has a `node_modules`, so `@types/*` declarations could resolve. */
+  readonly dependenciesInstalled: boolean
+}
+
 /**
- * Diagnostics → the core's vocabulary. On the repo's own `tsconfig.json`
- * everything is graded; on ours the environment-only diagnostics stay advisory,
+ * Diagnostics → the core's vocabulary. An environment-only diagnostic,
  * recognized by code ({@link DEFAULT_ADVISORY_CODES}) or by wording
- * ({@link ADVISORY_MESSAGE}).
+ * ({@link ADVISORY_MESSAGE}), is graded only when the repo's own config
+ * produced it and the project has an install it could have resolved from.
+ * Every other diagnostic is graded under either config.
  */
 export function toPendingFindings(
   diagnostics: readonly TscDiagnostic[],
-  repoConfig: boolean,
+  scope: TypeCheckScope,
   repoRoot: string,
 ): PendingFinding[] {
   return diagnostics
@@ -308,9 +333,9 @@ export function toPendingFindings(
         endCol: diagnostic.column,
       },
       message: diagnostic.message,
-      provenance: repoConfig ? ('repo-config' as const) : ('default-config' as const),
+      provenance: scope.repoConfig ? ('repo-config' as const) : ('default-config' as const),
       gradeScope:
-        repoConfig ||
+        (scope.repoConfig && scope.dependenciesInstalled) ||
         (!DEFAULT_ADVISORY_CODES.has(diagnostic.code) &&
           !ADVISORY_MESSAGE.test(diagnostic.message)),
     }))

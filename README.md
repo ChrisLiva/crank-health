@@ -133,6 +133,14 @@ alone.
   of standing aside — counted only if no owner graded the category. A standby exists only where
   crank-health has a default of its own, which today means lint, format and types.
 
+Type declarations are the one place where owning the config is not enough. A `tsconfig.json` grades
+every diagnostic it produces, except in a project with no `node_modules`: "cannot find name
+`process`, try `npm i --save-dev @types/node`" reports an install that never ran rather than
+anything about the code, so those stay `[advisory]`. crank-health installs nothing into the target,
+so it meets uninstalled projects routinely, in a fresh clone, in a CI job that scans before it
+installs, or in a fixture tree checked in as test input. Once the project has an install and the
+declaration is still missing, the repo really did fail to declare it and the diagnostic is graded.
+
 Every finding carries `provenance: "repo-config" | "default-config"`, and whether it counted toward
 a grade is the list it is in — `findings[]` or `advisories[]`, see the schema below. When a default
 tool steps aside for a repo-owned one, `report.json` records that it did. A root

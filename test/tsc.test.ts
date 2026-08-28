@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { TypeCheckScope } from '../src/adapters/jsts/tsc.ts'
+import { hasInstalledDependencies } from '../src/adapters/jsts/node-package.ts'
 import { parseDiagnostics, toPendingFindings, tscRunner } from '../src/adapters/jsts/tsc.ts'
 import { partitionProjects, repoDetectContext } from '../src/core/discover.ts'
 import type { DetectContext, Detection } from '../src/core/types.ts'
@@ -86,10 +88,17 @@ describe('toPendingFindings', () => {
     { file: 'src/a.ts', line: 7, column: 1, level: 'error', code: 'TS2571', message: '' },
   ]
 
+  /** The repo's own tsconfig, in a project someone installed. */
+  const INSTALLED: TypeCheckScope = { repoConfig: true, dependenciesInstalled: true }
+  /** The repo's own tsconfig, in a project with no `node_modules`. */
+  const UNINSTALLED: TypeCheckScope = { repoConfig: true, dependenciesInstalled: false }
+  /** Our bundled tsconfig. We chose the `lib`/`types` set either way. */
+  const BUNDLED: TypeCheckScope = { repoConfig: false, dependenciesInstalled: true }
+
   /** Rule → `gradeScope`, so no assertion addresses a finding by position. */
-  const gradedByRule = (repoConfig: boolean): Map<string, boolean> =>
+  const gradedByRule = (scope: TypeCheckScope): Map<string, boolean> =>
     new Map(
-      toPendingFindings(diagnostics, repoConfig, '/repo').map((finding) => [
+      toPendingFindings(diagnostics, scope, '/repo').map((finding) => [
         finding.rule,
         finding.gradeScope,
       ]),
@@ -97,7 +106,7 @@ describe('toPendingFindings', () => {
 
   it('maps tsc levels onto the severity vocabulary', () => {
     const severities = new Map(
-      toPendingFindings(diagnostics, true, '/repo').map((finding) => [
+      toPendingFindings(diagnostics, INSTALLED, '/repo').map((finding) => [
         finding.rule,
         finding.severity,
       ]),
@@ -107,7 +116,7 @@ describe('toPendingFindings', () => {
   })
 
   it('grades everything when the diagnostics came from the repo’s own tsconfig', () => {
-    const findings = toPendingFindings(diagnostics, true, '/repo')
+    const findings = toPendingFindings(diagnostics, INSTALLED, '/repo')
     expect(findings.every((finding) => finding.gradeScope)).toBe(true)
     expect(findings.every((finding) => finding.provenance === 'repo-config')).toBe(true)
   })
@@ -121,7 +130,7 @@ describe('toPendingFindings', () => {
    */
   it('keeps environment-only diagnostics advisory under our own config', () => {
     const graded = new Map(
-      toPendingFindings(diagnostics, false, '/repo').map((finding) => [
+      toPendingFindings(diagnostics, BUNDLED, '/repo').map((finding) => [
         finding.rule,
         finding.gradeScope,
       ]),
@@ -130,7 +139,7 @@ describe('toPendingFindings', () => {
     expect(graded.get('TS2307')).toBe(false)
     expect(graded.get('TS2591')).toBe(false)
     expect(
-      toPendingFindings(diagnostics, false, '/repo').every(
+      toPendingFindings(diagnostics, BUNDLED, '/repo').every(
         (finding) => finding.provenance === 'default-config',
       ),
     ).toBe(true)
@@ -150,13 +159,48 @@ describe('toPendingFindings', () => {
    * grade on nothing but where a declaration file happens to live.
    */
   it('reads a missing @types package out of the message as well as the code', () => {
-    const graded = gradedByRule(false)
+    const graded = gradedByRule(BUNDLED)
     expect(graded.get('TS2592')).toBe(false)
     expect(graded.get('TS2345')).toBe(true)
   })
 
+  /**
+   * crank-health installs nothing into the target, so it meets projects whose
+   * dependencies are absent: a fresh clone, a CI job that scans before it
+   * installs, a fixture tree checked in as an eval input. There "cannot find
+   * name 'process'" reports the missing install and not the code, whoever
+   * wrote the tsconfig, and grading it puts a project at F for never having run
+   * `npm install`. The code's own errors survive: TS2322 and TS2345 need no
+   * `@types` package to be true. `provenance` still records whose config ran,
+   * which is why it is asserted apart from `gradeScope`.
+   */
+  it('keeps environment-only diagnostics advisory when nothing is installed', () => {
+    const graded = gradedByRule(UNINSTALLED)
+    expect(graded.get('TS2307')).toBe(false)
+    expect(graded.get('TS2591')).toBe(false)
+    expect(graded.get('TS2592')).toBe(false)
+    expect(graded.get('TS2322')).toBe(true)
+    expect(graded.get('TS2345')).toBe(true)
+    expect(
+      toPendingFindings(diagnostics, UNINSTALLED, '/repo').every(
+        (finding) => finding.provenance === 'repo-config',
+      ),
+    ).toBe(true)
+  })
+
+  /**
+   * The mirror case, and why the install is the question rather than the
+   * config alone: a repo that installed its dependencies and still cannot find
+   * `@types/node` never declared it, and that missing declaration is the
+   * repo's own defect to grade.
+   */
+  it('grades a missing @types package once the project has an install', () => {
+    expect(gradedByRule(INSTALLED).get('TS2591')).toBe(true)
+    expect(gradedByRule(INSTALLED).get('TS2592')).toBe(true)
+  })
+
   it('reads an empty message as ordinary code, not as an environment fact', () => {
-    expect(gradedByRule(false).get('TS2571')).toBe(true)
+    expect(gradedByRule(BUNDLED).get('TS2571')).toBe(true)
   })
 
   /**
@@ -171,20 +215,20 @@ describe('toPendingFindings', () => {
       environment.map((diagnostic) => ({ ...diagnostic, line })),
     )
     expect(
-      toPendingFindings(repeated, false, '/repo').map((finding) => finding.gradeScope),
+      toPendingFindings(repeated, BUNDLED, '/repo').map((finding) => finding.gradeScope),
     ).toEqual([false, false, false])
-    expect(toPendingFindings(diagnostics, false, '/repo')).toEqual(
-      toPendingFindings(diagnostics, false, '/repo'),
+    expect(toPendingFindings(diagnostics, BUNDLED, '/repo')).toEqual(
+      toPendingFindings(diagnostics, BUNDLED, '/repo'),
     )
   })
 
   it('sorts by location so identity never depends on tsc’s emission order', () => {
-    expect(toPendingFindings(diagnostics.toReversed(), true, '/repo')).toEqual(
-      toPendingFindings(diagnostics, true, '/repo'),
+    expect(toPendingFindings(diagnostics.toReversed(), INSTALLED, '/repo')).toEqual(
+      toPendingFindings(diagnostics, INSTALLED, '/repo'),
     )
-    expect(toPendingFindings(diagnostics, true, '/repo').map((f) => f.range.startLine)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
-    ])
+    expect(
+      toPendingFindings(diagnostics, INSTALLED, '/repo').map((f) => f.range.startLine),
+    ).toEqual([1, 2, 3, 4, 5, 6, 7])
   })
 })
 
@@ -340,3 +384,38 @@ function context(repoRoot: string, files: string[]): DetectContext {
     },
   })
 }
+
+/**
+ * The signal that decides whether a "cannot find `@types/…`" diagnostic is the
+ * repo's defect or an install that never ran. It asks about the directory, not
+ * about a binary in it, because npm hoists: the package that reaches
+ * `@types/node` through the workspace root owns no `node_modules` of its own.
+ */
+describe('hasInstalledDependencies', () => {
+  let repo: string
+
+  beforeEach(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'crank-install-'))
+  })
+
+  afterEach(async () => {
+    await rm(repo, { recursive: true, force: true })
+  })
+
+  it('is false when nothing in the chain was installed', async () => {
+    await mkdir(join(repo, 'packages', 'a'), { recursive: true })
+    expect(await hasInstalledDependencies(repo, 'packages/a')).toBe(false)
+    expect(await hasInstalledDependencies(repo, '.')).toBe(false)
+  })
+
+  it('sees the project’s own install', async () => {
+    await mkdir(join(repo, 'packages', 'a', 'node_modules'), { recursive: true })
+    expect(await hasInstalledDependencies(repo, 'packages/a')).toBe(true)
+  })
+
+  it('sees an install hoisted to an ancestor', async () => {
+    await mkdir(join(repo, 'packages', 'a'), { recursive: true })
+    await mkdir(join(repo, 'node_modules'), { recursive: true })
+    expect(await hasInstalledDependencies(repo, 'packages/a')).toBe(true)
+  })
+})

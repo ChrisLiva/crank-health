@@ -20,6 +20,9 @@ import { asRecord, asString, exists, readJson } from '../support.ts'
 /** The manifest that declares a Node project's dependencies and its config blocks. */
 const PACKAGE_JSON = 'package.json'
 
+/** Where npm puts what it installed. */
+const NODE_MODULES = 'node_modules'
+
 /** Manifest fields a tool can be declared in. `scripts` is deliberately absent. */
 const DEPENDENCY_FIELDS: readonly string[] = [
   'dependencies',
@@ -143,7 +146,7 @@ async function nearestInstall(
 }
 
 function binaryPath(repoRoot: string, directory: string, binName: string): string {
-  return join(repoRoot, directory, 'node_modules', '.bin', binName)
+  return join(repoRoot, directory, NODE_MODULES, '.bin', binName)
 }
 
 /**
@@ -159,7 +162,7 @@ async function installedVersion(
   const manifests = await Promise.all(
     ancestry.map((directory) =>
       readJson(
-        join(repoRoot, directory, 'node_modules', ...spec.packageName.split('/'), PACKAGE_JSON),
+        join(repoRoot, directory, NODE_MODULES, ...spec.packageName.split('/'), PACKAGE_JSON),
       ),
     ),
   )
@@ -186,6 +189,27 @@ export async function declaresDependency(
   return manifests.some((manifest) =>
     DEPENDENCY_FIELDS.some((field) => asRecord(manifest?.[field])?.[packageName] !== undefined),
   )
+}
+
+/**
+ * Whether the project — or any ancestor up to the repo root — has a
+ * `node_modules` at all, and so whether the declarations a `@types/*` package
+ * ships can resolve.
+ *
+ * The question is the directory's existence, not a binary inside it, which is
+ * what {@link detectNodeTool} asks about a named tool: a project reaches
+ * `@types/node` through a hoisted install while owning no `node_modules/.bin`
+ * entry of its own. Only the declarations decide whether "cannot find name
+ * 'process'" is a fact about the code or about an install that never ran.
+ */
+export async function hasInstalledDependencies(
+  repoRoot: string,
+  projectPath: string,
+): Promise<boolean> {
+  const present = await Promise.all(
+    ancestryOf(projectPath).map((directory) => exists(join(repoRoot, directory, NODE_MODULES))),
+  )
+  return present.includes(true)
 }
 
 /** Manifest fields that only a package with a published surface declares. */
