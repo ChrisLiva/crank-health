@@ -83,6 +83,51 @@ describe('toDeadCodeFindings', () => {
     ).toBe(true)
   })
 
+  /**
+   * The repo has entry points, but none of them reaches this project: every file
+   * the project analyzed came back unused. Reachability is answered repo-wide
+   * and the findings are then filtered to the project, so a fixture or a package
+   * no entry point imports would otherwise grade F for the whole tree's `main`.
+   * The guard is pinned to that shape, an all-unused analyzed set, not to a path.
+   */
+  it('keeps unused files advisory when every analyzed file of the project is unused', () => {
+    const allUnused = { ...report, unusedFiles: ['src/a.ts', 'src/b.ts'] }
+    const findings = toDeadCodeFindings(
+      allUnused,
+      false,
+      false,
+      new Set(['src/a.ts', 'src/b.ts']),
+    ).filter((candidate) => candidate.rule === 'fallow/unused-file')
+    expect(findings.map((finding) => finding.gradeScope)).toEqual([false, false])
+    expect(findings[0]?.message).toBe(
+      'File is never imported (advisory: no entry point reaches this project)',
+    )
+  })
+
+  it('grades unused files again as soon as the project keeps one used file', () => {
+    const allUnused = { ...report, unusedFiles: ['src/a.ts', 'src/b.ts'] }
+    const findings = toDeadCodeFindings(
+      allUnused,
+      false,
+      false,
+      new Set(['src/a.ts', 'src/b.ts', 'src/used.ts']),
+    ).filter((candidate) => candidate.rule === 'fallow/unused-file')
+    expect(findings.map((finding) => finding.gradeScope)).toEqual([true, true])
+    expect(findings[0]?.message).toBe('File is never imported from any entry point')
+  })
+
+  /**
+   * A project that analyzed nothing keeps no used file either, so the coverage
+   * guard demotes rather than grades. `runDeadCode` filters such findings out
+   * before they reach a report; the decision is pinned here so it is a choice
+   * rather than arithmetic.
+   */
+  it('keeps unused files advisory when the project analyzed no file at all', () => {
+    const finding = ruled(toDeadCodeFindings(report, false, false, new Set()), 'fallow/unused-file')
+    expect(finding?.gradeScope).toBe(false)
+    expect(finding?.message).toContain('no entry point reaches this project')
+  })
+
   it('tags provenance from whose config decided the result', () => {
     expect(
       toDeadCodeFindings(report, true, false).every((f) => f.provenance === 'repo-config'),

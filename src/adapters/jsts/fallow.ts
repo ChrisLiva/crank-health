@@ -122,7 +122,7 @@ async function runDeadCode(ctx: RunContext): Promise<ToolResult> {
       ctx.repoRoot,
       // A repo walk reports repo-relative paths already; what makes these this
       // project's findings is the filter.
-      toDeadCodeFindings(report, ctx.detection !== null, isLibrary).filter((finding) =>
+      toDeadCodeFindings(report, ctx.detection !== null, isLibrary, analyzed).filter((finding) =>
         analyzed.has(finding.file),
       ),
     ),
@@ -325,9 +325,14 @@ export function parseDeadCode(stdout: string): FallowDeadCode {
  *   outside the repo, so an unreferenced export is not evidence it is dead. A
  *   library that owns a fallow config has already said what its API is, so it
  *   is graded again.
- * - **unused files** are graded only when fallow found at least one entry
- *   point. With zero entry points every file is trivially unreachable, and a
- *   library or a fixture with no `main` would grade F for having no `main`.
+ * - **unused files** are graded only when two things hold: fallow found at
+ *   least one entry point, and this project keeps a file some entry point
+ *   reaches. With zero entry points every file is trivially unreachable. The
+ *   walk is repo-wide and its findings are then filtered to one project, so
+ *   entry points that all live elsewhere leave every file of a fixture or a
+ *   package nothing imports looking unused, and it would grade F for the repo's
+ *   `main` rather than for its own dead code. Either way the finding is still
+ *   reported, and its message says which guard demoted it.
  * - **unused dependencies** are dependency hygiene rather than dead code, and
  *   the false-positive rate without per-framework plugins is high, so they are
  *   parsed but never turned into findings at all.
@@ -339,9 +344,21 @@ export function toDeadCodeFindings(
   report: FallowDeadCode,
   repoConfig: boolean,
   isLibrary: boolean,
+  analyzed?: ReadonlySet<string>,
 ): PendingFinding[] {
   const provenance = repoConfig ? ('repo-config' as const) : ('default-config' as const)
-  const fileLevel = report.entryPoints > 0
+  // `analyzed` scopes the repo-wide report to one project. Omitted, the report
+  // is read on its own repo-wide terms and the entry-point guard is the whole
+  // story. Given, a project whose every analyzed file came back unused kept no
+  // used file, so no entry point reaches it. A project that analyzed nothing
+  // kept no used file either, and `runDeadCode` filters those findings away, so
+  // the guard demotes rather than grades whatever survives.
+  const covered =
+    analyzed === undefined ||
+    new Set(report.unusedFiles.filter((file) => analyzed.has(file))).size < analyzed.size
+  const fileLevel = report.entryPoints > 0 && covered
+
+  const unusedFileMessage = messageForUnusedFile(fileLevel, report.entryPoints)
 
   const files = report.unusedFiles.map((file) => ({
     category: 'dead-code' as const,
@@ -350,9 +367,7 @@ export function toDeadCodeFindings(
     severity: 'warning' as const,
     file,
     range: { startLine: 1, startCol: 1, endLine: 1, endCol: 1 },
-    message: fileLevel
-      ? 'File is never imported from any entry point'
-      : 'File is never imported (advisory: fallow found no entry point to start from)',
+    message: unusedFileMessage,
     provenance,
     gradeScope: fileLevel,
     anchor: '',
@@ -377,6 +392,15 @@ export function toDeadCodeFindings(
   }))
 
   return [...files, ...exports].toSorted(byLocation)
+}
+
+/** Which of the two guards in {@link toDeadCodeFindings} demoted a file. */
+function messageForUnusedFile(fileLevel: boolean, entryPoints: number): string {
+  if (fileLevel) return 'File is never imported from any entry point'
+  if (entryPoints === 0) {
+    return 'File is never imported (advisory: fallow found no entry point to start from)'
+  }
+  return 'File is never imported (advisory: no entry point reaches this project)'
 }
 
 /** The parts of `fallow health --complexity --file-scores --format json` we report on. */
