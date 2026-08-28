@@ -247,9 +247,20 @@ export function buildAgentTasks(
  *
  * **The formula is the grading table's own.** Take the category's findings, take
  * the theme's out, and re-run the same function `core/grade.ts` graded it with,
- * over the same numbers `report.gradeBasis` records it was divided by: the KLOC
- * a density was per, the file count a share was of, the percentage a tool
+ * over the same numbers `gradeBasis` records it was divided by: the KLOC a
+ * density was per, the file count a share was of, the percentage a tool
  * reported. The answer is `rank(today) - rank(then)`, in letters.
+ *
+ * **Whose grade, and whose findings.** A theme in a package that holds a grade
+ * of its own is measured against that package: its letter, its basis, its
+ * findings — the same three numbers `core/run.ts` graded it from, and the same
+ * letter the task's own `Grade impact:` line prints ({@link toTask}). Measured
+ * against the rollup instead, a theme in a package graded F over 0.1 KLOC scored
+ * on the whole tree's KLOC and lost its place to work that cannot move a letter.
+ * Where the package has no grade of its own — `not-assessed(repo-scoped)`, a
+ * secrets scan only the repo could answer — the rollup is the honest reading,
+ * and a single-project report has no per-project grade to read at all
+ * ({@link namedProject}), so its ranking is the one it has always had.
  *
  * Two of the shapes cannot be re-run from a finding list, because their
  * numerator never was one — complexity counts functions and duplication is a
@@ -258,9 +269,12 @@ export function buildAgentTasks(
  * report carries; it is an estimate, and it is stated as one here rather than
  * dressed up as arithmetic.
  *
- * **No recorded basis, no claim.** A category the report records no arithmetic
- * for scores zero rather than a guessed denominator, so a report from before
+ * **No recorded basis, no claim.** A category no arithmetic is recorded for
+ * scores zero rather than a guessed denominator, so a report from before
  * `gradeBasis` existed ranks by spec §10's fixed order exactly as it always did.
+ * The rule holds per project too: a package graded a letter whose basis its
+ * `projects[]` entry does not carry scores zero, rather than borrowing the
+ * rollup's denominator to claim a movement that package's grade never came from.
  */
 function gradeMovement(report: Report): (theme: Theme) => number {
   const all = reportFindings(report)
@@ -274,23 +288,43 @@ function gradeMovement(report: Report): (theme: Theme) => number {
   }
 }
 
-/** Letters between the category's grade today and its grade with `theme` fixed. */
+/**
+ * Letters between the category's grade today and its grade with `theme` fixed.
+ *
+ * State, basis and findings are read from one place or the other, never mixed:
+ * the rollup's denominator over a package's findings divides one measurement by
+ * another's, and the answer would be a letter neither of them holds.
+ *
+ * @param all every finding in the report; narrowed here to the ones the grade
+ * being measured was computed over.
+ */
 function ranksGained(report: Report, theme: Theme, all: readonly Finding[]): number {
-  const state = report.categories[theme.category]
-  const basis = report.gradeBasis[theme.category]
+  const graded = gradedProject(report, theme)
+  const source = graded ?? report
+  const state = source.categories[theme.category]
+  // Optional on the read: `projects[].gradeBasis` is additive, so a report
+  // written before it existed carries none — and a basis the report does not
+  // record scores zero, never the other scope's denominator.
+  const basis = source.gradeBasis?.[theme.category]
   if (state.status !== 'graded' || basis === undefined) return 0
-  const after = gradeWithout(theme, basis, all)
+  const scope = graded === undefined ? all : all.filter((row) => row.project === graded.path)
+  const after = gradeWithout(theme, basis, scope)
   return after === undefined ? 0 : gradeRank(state.grade) - gradeRank(after)
 }
 
-/** The grade the theme's category would hold with the theme's findings gone. */
+/**
+ * The grade the theme's category would hold with the theme's findings gone.
+ *
+ * @param scope the findings the grade was computed over — the project's, or the
+ * whole report's; see {@link ranksGained}.
+ */
 function gradeWithout(
   theme: Theme,
   basis: ReportGradeBasis,
-  all: readonly Finding[],
+  scope: readonly Finding[],
 ): Grade | undefined {
   const category = theme.category
-  const mine = all.filter((finding) => finding.category === category)
+  const mine = scope.filter((finding) => finding.category === category)
   const resolved = new Set(theme.findings.map((finding) => finding.id))
   const left = mine.filter((finding) => !resolved.has(finding.id))
   // What is left of the measurement, where the measurement is not a list of

@@ -215,6 +215,69 @@ describe('ranking by grade movement', () => {
     expect(report.gradeBasis).toEqual({})
     expect(buildAgentTasks(report).map((task) => task.category)).toEqual(['security', 'lint'])
   })
+
+  /**
+   * A package's own F is the grade its task prints and the grade its agent has
+   * to move, so it is the grade the movement is measured against — over that
+   * package's findings, which are the ones its letter was computed from. The
+   * rollup's A over the whole tree's KLOC is a different measurement, and
+   * ranking by it put a package graded F behind work that cannot move a letter
+   * at all.
+   *
+   * Three themes, one of each reading:
+   * - `packages/api` lints F on 0.1 KLOC of its own — one theme is all of it, so
+   *   fixing it is F → A, four letters. Measured against the rollup's 100 KLOC,
+   *   or against the repo's lint findings rather than the package's, it moves
+   *   nothing and sorts last.
+   * - `packages/web` grades dead code F and records no arithmetic for it. No
+   *   recorded basis, no claim: it scores zero rather than borrowing the
+   *   rollup's denominator to print a movement the project cannot own.
+   * - `packages/web`'s own lint is the A → A work, behind both.
+   */
+  it('measures a theme against its own project’s grade and findings', () => {
+    const inApi = { file: 'packages/api/api/main.py', project: 'packages/api' }
+    const inWeb = { file: 'packages/web/src/a.ts', project: 'packages/web' }
+    const report = makeReport({
+      categories: allGraded(),
+      gradeBasis: {
+        lint: { value: 25, denominator: 100, unit: 'weighted findings per KLOC' },
+        'dead-code': { value: 1, denominator: 100, unit: 'weighted findings per KLOC' },
+      },
+      projects: [
+        makeProjectScan({
+          project: projectAt('packages/api'),
+          categories: { ...allGraded(), lint: { status: 'graded', grade: 'F' } },
+          gradeBasis: { lint: { value: 10, denominator: 0.1, unit: 'weighted findings per KLOC' } },
+        }),
+        makeProjectScan({
+          project: projectAt('packages/web'),
+          categories: { ...allGraded(), 'dead-code': { status: 'graded', grade: 'F' } },
+          gradeBasis: {},
+        }),
+      ],
+      findings: [
+        makeFinding({ id: 'a1', rule: 'no-shadow', severity: 'error', ...inApi, ...atLine(1) }),
+        makeFinding({ id: 'a2', rule: 'no-shadow', severity: 'error', ...inApi, ...atLine(9) }),
+        makeFinding({ id: 'w1', rule: 'no-eval', severity: 'error', ...inWeb, ...atLine(1) }),
+        makeFinding({ id: 'w2', rule: 'no-eval', severity: 'error', ...inWeb, ...atLine(9) }),
+        makeFinding({ id: 'w3', rule: 'no-eval', severity: 'error', ...inWeb, ...atLine(17) }),
+        makeFinding({
+          id: 'd',
+          category: 'dead-code',
+          tool: 'knip',
+          rule: 'knip/unused-exports',
+          ...inWeb,
+          ...atLine(25),
+        }),
+      ],
+    })
+    const tasks = buildAgentTasks(report)
+    expect(tasks.map((task) => [task.project, task.category, task.gradeImpact])).toEqual([
+      ['packages/api', 'lint', 'lint · F → A'],
+      ['packages/web', 'dead-code', 'dead code · F → A'],
+      ['packages/web', 'lint', 'lint · A → A'],
+    ])
+  })
 })
 
 /** One high-severity bandit finding's identity. */
