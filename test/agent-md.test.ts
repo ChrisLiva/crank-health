@@ -687,16 +687,42 @@ describe('themed grouping', () => {
     // Four files hold the four: the advisory-only file is not one of the files
     // the number is across, and it sorts below the ones that are.
     expect(markdown).toContain('4 findings across 4 files:')
-    expect(markdown).toContain('- `src/g0.ts` (1 finding, 1 advisory)')
+    expect(markdown).toContain('- `src/g0.ts` (1 finding, 1 uncounted)')
     expect(markdown).toContain('- `src/g1.ts` (1 finding)')
-    expect(markdown).toContain('- `src/models/api.ts` (0 findings, 21 advisory)')
+    expect(markdown).toContain('- `src/models/api.ts` (0 findings, 21 uncounted)')
     expect(fileRows(markdown)).toEqual([
-      '- `src/g0.ts` (1 finding, 1 advisory)',
+      '- `src/g0.ts` (1 finding, 1 uncounted)',
       '- `src/g1.ts` (1 finding)',
       '- `src/g2.ts` (1 finding)',
       '- `src/g3.ts` (1 finding)',
-      '- `src/models/api.ts` (0 findings, 21 advisory)',
+      '- `src/models/api.ts` (0 findings, 21 uncounted)',
     ])
+  })
+
+  /**
+   * The two words answer different questions, and a measured category is where
+   * they come apart: `[advisory]` is `gradeScope` (this row did not count toward
+   * the letter), `uncounted` is `eligible` (this row is not what the task
+   * counts). Every clone here is both advisory and counted.
+   */
+  it('marks a clone advisory inline and counts it in the aggregate', () => {
+    const rows = (count: number): string[] =>
+      renderAgentMarkdown(
+        duplicationGraded(
+          'F',
+          Array.from({ length: count }, (_, index) => clone(`src/d${index}.ts`)),
+        ),
+      ).split('\n')
+
+    // Four rows: the inline form, every finding row tagged advisory. Filtered
+    // on the rule, because the ground rules explain the tag using the tag.
+    const inline = rows(4).filter((line) => line.includes('jscpd/duplicate-block'))
+    expect(inline).toHaveLength(4)
+    expect(inline.every((line) => line.endsWith('[advisory]'))).toBe(true)
+    // Twelve: the aggregate form, every row counted and none of them uncounted.
+    expect(fileRows(rows(12).join('\n'))).toHaveLength(12)
+    expect(rows(12).join('\n')).toContain('12 findings across 12 files:')
+    expect(fileRows(rows(12).join('\n')).filter((row) => row.includes('uncounted'))).toEqual([])
   })
 
   /**
@@ -745,7 +771,12 @@ describe('themed grouping', () => {
     const markdown = renderAgentMarkdown(report)
     expect(markdown).toContain('12 findings across 12 files:')
     expect(markdown).toContain('- `src/d0.ts` (1 finding)')
-    expect(markdown).not.toContain(' advisory)')
+    // Every clone is eligible, so no file row carries the uncounted clause, even
+    // though each row is `gradeScope: false` and the inline form tags those
+    // advisory. Asserted on the rows themselves: the ground rules explain the
+    // clause with an example of it.
+    expect(fileRows(markdown).filter((row) => row.includes('uncounted'))).toEqual([])
+    expect(fileRows(markdown)).toHaveLength(12)
   })
 
   it('keeps different kinds of dead code apart', () => {
@@ -1278,12 +1309,12 @@ function unusedExports(files: readonly string[]): Report {
 
 /**
  * The `- \`file\` (n findings)` rows a task rendered instead of its findings,
- * in the order printed, including the `, n advisory` clause a mixed file carries.
+ * in the order printed, including the `, n uncounted` clause a mixed file carries.
  */
 function fileRows(markdown: string): string[] {
   return markdown
     .split('\n')
-    .filter((line) => /^- `[^`]+` \(\d+ findings?(, \d+ advisory)?\)$/.test(line))
+    .filter((line) => /^- `[^`]+` \(\d+ findings?(, \d+ uncounted)?\)$/.test(line))
 }
 
 /** The `- \`file\` \`rule\` — message` lines a lockfile task rendered inline. */

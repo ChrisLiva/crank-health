@@ -1027,6 +1027,7 @@ function gradesLine(report: Report): string {
 const GROUND_RULES = `## Ground rules
 
 - Findings marked ${ADVISORY_TAG} did not count toward the grade. Fix one only when the fix is obvious and behaviour-preserving.
+- A file row reading \`(2 findings, 9 uncounted)\` has 9 rows this task’s own count leaves out. They are in \`report.json\`, and they are not what the task is measured on.
 - Change only what a task asks for. No wholesale reformatting, renaming or restructuring — a sweep hides the fix inside it.
 - Suppressing a finding (disable comment, \`any\`, ignore entry) is not fixing it. If a rule is wrong for this repo, change the repo’s config and say so.
 - Verify before you call a task done: run its Verify command and read the grade it prints.
@@ -1099,11 +1100,20 @@ function taskBody(task: AgentTask): string[] {
  * `report.json`.
  *
  * Which form is chosen counts every row, because every row is what the inline
- * form would print: a theme of 4 eligible findings and 80 advisory ones is 84
+ * form would print: a theme of 4 eligible findings and 80 ineligible ones is 84
  * lines, and the aggregate exists for exactly that shape. What the aggregate
  * *counts* is `eligible` — `4 findings across 4 files`, with each file's
- * advisory rows named beside its own number rather than folded into it, and the
+ * uncounted rows named beside its own number rather than folded into it, and the
  * files holding those 4 listed before the ones holding none.
+ *
+ * **"Uncounted", not "advisory", and the two are different questions.**
+ * {@link ADVISORY_TAG} marks a row that did not count toward the *letter*, which
+ * is `gradeScope`. This column counts rows {@link eligible} leaves out of the
+ * *task*. In a measured category they are opposites: duplication grades on
+ * jscpd's percentage, so every clone is `gradeScope: false` and tagged advisory
+ * inline, while every one of them is eligible and counted here. One word for
+ * both would have to be false in one of the two places, and which place a reader
+ * landed in would depend on nothing but how many rows the theme has.
  *
  * @param counted the subset of `findings` the counts are of; see
  * {@link AgentTask.eligible}
@@ -1122,11 +1132,11 @@ function findingBlock(findings: readonly Finding[], counted: readonly Finding[])
     return lines
   }
   const ids = new Set(counted.map((finding) => finding.id))
-  const counts = new Map<string, { counted: number; advisory: number }>()
+  const counts = new Map<string, { counted: number; uncounted: number }>()
   for (const finding of findings) {
-    const row = counts.get(finding.file) ?? { counted: 0, advisory: 0 }
+    const row = counts.get(finding.file) ?? { counted: 0, uncounted: 0 }
     if (ids.has(finding.id)) row.counted += 1
-    else row.advisory += 1
+    else row.uncounted += 1
     counts.set(finding.file, row)
   }
   // Files holding the counted work first, then the advisory-only ones, each
@@ -1139,11 +1149,11 @@ function findingBlock(findings: readonly Finding[], counted: readonly Finding[])
   )
   const lines = files
     .slice(0, FILE_LIST_LIMIT)
-    // "advisory" is what the row is, not a noun to pluralise, and a file with
+    // "uncounted" is what the row is, not a noun to pluralise, and a file with
     // none of them reads as it always has.
     .map(
       ([file, row]) =>
-        `- \`${file}\` (${plural(row.counted, 'finding')}${row.advisory === 0 ? '' : `, ${row.advisory} advisory`})`,
+        `- \`${file}\` (${plural(row.counted, 'finding')}${row.uncounted === 0 ? '' : `, ${row.uncounted} uncounted`})`,
     )
   if (files.length > FILE_LIST_LIMIT) {
     lines.push(`- … ${files.length - FILE_LIST_LIMIT} more files in \`report.json\`.`)
