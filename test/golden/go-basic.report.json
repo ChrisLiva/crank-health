@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.14.0",
+  "crankHealth": "0.15.0",
   "repo": {
     "path": "<repo>",
     "commit": "c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0"
@@ -180,6 +180,43 @@
           "reason": "not assessed — run `--deep`"
         }
       },
+      "gradeBasis": {
+        "security": {
+          "value": 1,
+          "denominator": null,
+          "unit": "graded findings"
+        },
+        "types": {
+          "value": 0,
+          "denominator": 0.123,
+          "unit": "weighted findings per KLOC"
+        },
+        "dead-code": {
+          "value": 1,
+          "denominator": 0.123,
+          "unit": "weighted findings per KLOC"
+        },
+        "complexity": {
+          "value": 1,
+          "denominator": 7,
+          "unit": "functions over cognitive complexity 15"
+        },
+        "duplication": {
+          "value": 19.813519813519815,
+          "denominator": null,
+          "unit": "% of tokens duplicated"
+        },
+        "lint": {
+          "value": 3,
+          "denominator": 0.123,
+          "unit": "weighted findings per KLOC"
+        },
+        "format": {
+          "value": 1,
+          "denominator": 6,
+          "unit": "files failing the formatter"
+        }
+      },
       "metrics": {
         "complexity": {
           "functionsTotal": 7,
@@ -234,6 +271,38 @@
         "test-quality": {
           "status": "not-assessed",
           "reason": "not assessed — run `--deep`"
+        }
+      },
+      "gradeBasis": {
+        "types": {
+          "value": 5,
+          "denominator": 0.006,
+          "unit": "weighted findings per KLOC"
+        },
+        "dead-code": {
+          "value": 0,
+          "denominator": 0.006,
+          "unit": "weighted findings per KLOC"
+        },
+        "complexity": {
+          "value": 0,
+          "denominator": 1,
+          "unit": "functions over cognitive complexity 15"
+        },
+        "duplication": {
+          "value": 0,
+          "denominator": null,
+          "unit": "% of tokens duplicated"
+        },
+        "lint": {
+          "value": 0,
+          "denominator": 0.006,
+          "unit": "weighted findings per KLOC"
+        },
+        "format": {
+          "value": 0,
+          "denominator": 1,
+          "unit": "files failing the formatter"
         }
       },
       "metrics": {

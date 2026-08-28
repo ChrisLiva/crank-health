@@ -141,6 +141,20 @@ so it meets uninstalled projects routinely, in a fresh clone, in a CI job that s
 installs, or in a fixture tree checked in as test input. Once the project has an install and the
 declaration is still missing, the repo really did fail to declare it and the diagnostic is graded.
 
+Two more rules turn on whether the default tool had anything to anchor on. fallow answers
+reachability for the whole tree in one walk, and crank-health then filters that walk's findings to
+each project, so a package no entry point reaches keeps every file it analyzed in the unused list.
+An unused file therefore grades only where fallow found an entry point repo-wide _and_ the project
+kept at least one used file. A fixture or a package nothing imports keeps its rows in
+`advisories[]`, worded `no entry point reaches this project`, instead of grading dead code F for a
+`main` its `package.json` never declared.
+
+bandit draws the same line by confidence. Under the bundled config a finding grades on HIGH
+severity or on HIGH confidence, so a `shell=True` subprocess call still counts, while bandit's
+"probable insecure usage" at medium severity and medium confidence is reported advisory. A
+medium-confidence heuristic is not a correctness-class rule. A repo that owns a bandit config
+grades every tier it selected, unchanged.
+
 Every finding carries `provenance: "repo-config" | "default-config"`, and whether it counted toward
 a grade is the list it is in — `findings[]` or `advisories[]`, see the schema below. When a default
 tool steps aside for a repo-owned one, `report.json` records that it did. A root
@@ -275,7 +289,7 @@ the selection `scopedTo` names — and `projects[]` answers the same questions p
 | `metrics`                                            | The tool-reported numbers behind the ratio grades — function counts, duplicated-token %, mutation score.  |
 | `languages`                                          | Findings per language per category.                                                                       |
 | `coverage`                                           | How much of the tree the grades are about — see below.                                                    |
-| `projects[]`                                         | Per project: path, manifests, languages, all eight states, metrics, and the toolchain that project owns.  |
+| `projects[]`                                         | Per project: path, manifests, languages, all eight states, `gradeBasis`, metrics, and the tools it owns.  |
 | `rootShell`                                          | Present when the repo root holds no source of its own — a workspace shell has nothing to grade.           |
 | `tools[]`                                            | One record per (tool × project) run: state, provenance, the version that ran, detection, raw evidence.    |
 | `findings[]`                                         | The findings that counted toward a grade, in report order.                                                |
@@ -348,7 +362,8 @@ exactly those terms. Each graded category carries `{value, denominator, unit}` �
 "weighted findings per KLOC"}` — so a reader can redo the sum. `denominator` is `null` for the
 shapes that normalize nothing: security counts findings outright, and duplication and mutation score
 are percentages the tool computed itself. A `not-assessed` category has no entry, because it divided
-nothing.
+nothing. Every entry in `projects[]` carries a `gradeBasis` of its own, computed on that project's
+KLOC and file counts, and that is the arithmetic `agent.md` ranks a task's grade movement against.
 
 **`coverage` is the denominator annotation.** Every density grade divides by the _assessed_ KLOC and
 every ratio grade by an assessed file or function count, so a repo can be graded A across the board

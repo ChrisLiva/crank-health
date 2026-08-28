@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.14.0",
+  "crankHealth": "0.15.0",
   "repo": {
     "path": "<repo>",
     "commit": "1624281eaabc18eb08af09502955981d65aa1ca4"
@@ -150,6 +150,23 @@
         "test-quality": {
           "status": "not-assessed",
           "reason": "not assessed — run `--deep`"
+        }
+      },
+      "gradeBasis": {
+        "duplication": {
+          "value": 18.38235294117647,
+          "denominator": null,
+          "unit": "% of tokens duplicated"
+        },
+        "lint": {
+          "value": 0,
+          "denominator": 0.191,
+          "unit": "weighted findings per KLOC"
+        },
+        "format": {
+          "value": 1,
+          "denominator": 8,
+          "unit": "files failing the formatter"
         }
       },
       "metrics": {

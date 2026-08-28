@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.14.0",
+  "crankHealth": "0.15.0",
   "repo": {
     "path": "<repo>",
     "commit": "ee198602b690ae80ec9418e9377f8fd590a7f303"
@@ -179,6 +179,43 @@
         "test-quality": {
           "status": "not-assessed",
           "reason": "not assessed — run `--deep`"
+        }
+      },
+      "gradeBasis": {
+        "security": {
+          "value": 5,
+          "denominator": null,
+          "unit": "graded findings"
+        },
+        "types": {
+          "value": 0,
+          "denominator": 0.057,
+          "unit": "weighted findings per KLOC"
+        },
+        "dead-code": {
+          "value": 0,
+          "denominator": 0.057,
+          "unit": "weighted findings per KLOC"
+        },
+        "complexity": {
+          "value": 0,
+          "denominator": 5,
+          "unit": "functions over cognitive complexity 15"
+        },
+        "duplication": {
+          "value": 45.49180327868852,
+          "denominator": null,
+          "unit": "% of tokens duplicated"
+        },
+        "lint": {
+          "value": 5,
+          "denominator": 0.057,
+          "unit": "weighted findings per KLOC"
+        },
+        "format": {
+          "value": 0,
+          "denominator": 5,
+          "unit": "files failing the formatter"
         }
       },
       "metrics": {

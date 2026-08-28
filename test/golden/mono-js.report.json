@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.14.0",
+  "crankHealth": "0.15.0",
   "repo": {
     "path": "<repo>",
     "commit": "acbb91a96406d62565ed52fa2009a8581e16b023"
@@ -168,6 +168,33 @@
           "reason": "not assessed — run `--deep`"
         }
       },
+      "gradeBasis": {
+        "dead-code": {
+          "value": 0,
+          "denominator": 0.033,
+          "unit": "weighted findings per KLOC"
+        },
+        "complexity": {
+          "value": 0,
+          "denominator": 7,
+          "unit": "functions over cognitive complexity 15"
+        },
+        "duplication": {
+          "value": 0,
+          "denominator": null,
+          "unit": "% of tokens duplicated"
+        },
+        "lint": {
+          "value": 5,
+          "denominator": 0.033,
+          "unit": "weighted findings per KLOC"
+        },
+        "format": {
+          "value": 1,
+          "denominator": 5,
+          "unit": "files failing the formatter"
+        }
+      },
       "metrics": {
         "complexity": {
           "functionsTotal": 7,
@@ -232,6 +259,33 @@
         "test-quality": {
           "status": "not-assessed",
           "reason": "not assessed — run `--deep`"
+        }
+      },
+      "gradeBasis": {
+        "dead-code": {
+          "value": 0,
+          "denominator": 0.224,
+          "unit": "weighted findings per KLOC"
+        },
+        "complexity": {
+          "value": 0,
+          "denominator": 12,
+          "unit": "functions over cognitive complexity 15"
+        },
+        "duplication": {
+          "value": 0,
+          "denominator": null,
+          "unit": "% of tokens duplicated"
+        },
+        "lint": {
+          "value": 5,
+          "denominator": 0.224,
+          "unit": "weighted findings per KLOC"
+        },
+        "format": {
+          "value": 0,
+          "denominator": 5,
+          "unit": "files failing the formatter"
         }
       },
       "metrics": {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.14.0",
+  "crankHealth": "0.15.0",
   "repo": {
     "path": "<repo>",
     "commit": "<sha>"
@@ -107,6 +107,13 @@
         "test-quality": {
           "status": "not-assessed",
           "reason": "not selected by --only"
+        }
+      },
+      "gradeBasis": {
+        "lint": {
+          "value": 10,
+          "denominator": 0.012,
+          "unit": "weighted findings per KLOC"
         }
       },
       "metrics": {},
