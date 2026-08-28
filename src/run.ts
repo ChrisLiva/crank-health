@@ -578,14 +578,11 @@ export async function gradeProjects(
       ),
       metrics,
     }
-    scans.push({
-      project,
-      // Sequential: each project's KLOC is its own read of its own files, and
-      // the file reads inside are already pooled.
-      // eslint-disable-next-line no-await-in-loop
-      categories: (await gradeAll(repo.repoRoot, scope)).categories,
-      metrics,
-    })
+    // Sequential: each project's KLOC is its own read of its own files, and
+    // the file reads inside are already pooled.
+    // eslint-disable-next-line no-await-in-loop
+    const { categories, basis } = await gradeAll(repo.repoRoot, scope)
+    scans.push({ project, categories, gradeBasis: basis, metrics })
   }
   return scans
 }

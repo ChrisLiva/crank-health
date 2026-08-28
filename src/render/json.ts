@@ -278,6 +278,12 @@ export interface ReportProject {
   readonly languages: readonly Language[]
   /** All eight states, always — the same contract the rollup keeps (spec §8). */
   readonly categories: Readonly<Record<Category, CategoryState>>
+  /**
+   * The arithmetic behind this project's graded categories, on its own
+   * denominators — the rollup's {@link Report.gradeBasis} said for one package.
+   * Only the categories this project graded appear.
+   */
+  readonly gradeBasis: Readonly<Partial<Record<Category, ReportGradeBasis>>>
   readonly metrics: Readonly<Partial<Record<Category, ToolMetrics>>>
   /** Every tool this project owns, and what made it own it. */
   readonly toolchain: readonly ReportProjectTool[]
@@ -386,6 +392,8 @@ export interface ResolvedRun {
 export interface ProjectScan {
   readonly project: Project
   readonly categories: Readonly<Record<Category, CategoryState>>
+  /** The arithmetic behind this project's graded ones; see {@link ReportGradeBasis}. */
+  readonly gradeBasis: Readonly<Partial<Record<Category, ReportGradeBasis>>>
   readonly metrics: Readonly<Record<Category, ToolMetrics>>
 }
 
@@ -533,6 +541,7 @@ function toReportProject(scan: ProjectScan, runs: readonly ResolvedRun[]): Repor
     manifests: scan.project.manifests.toSorted(compare),
     languages: LANGUAGES.filter((language) => scan.project.languages.includes(language)),
     categories: orderedCategories(scan.categories),
+    gradeBasis: orderedGradeBasis(scan.gradeBasis),
     metrics: orderedMetrics(scan.metrics),
     toolchain: runs.flatMap(({ record, side }) => {
       const detection = record.detection

@@ -67,6 +67,28 @@ describe('gradeProjects', () => {
   it('grades density on each project’s own KLOC', () => {
     expect(categories('packages/web').lint).toEqual({ status: 'graded', grade: 'F' })
     expect(categories('packages/api').lint).toEqual({ status: 'graded', grade: 'A' })
+    // The basis carries the same two denominators, so a reader can redo either
+    // sum without knowing the repo's line count.
+    expect(gradeBasis('packages/web').lint).toEqual({
+      value: 1,
+      denominator: 0.02,
+      unit: 'weighted findings per KLOC',
+    })
+    expect(gradeBasis('packages/api').lint).toEqual({
+      value: 1,
+      denominator: 2,
+      unit: 'weighted findings per KLOC',
+    })
+  })
+
+  /** Every letter is explained, and nothing that has no letter is. */
+  it('carries a basis for each project’s graded categories and no others', () => {
+    for (const project of graded) {
+      const explained = CATEGORIES.filter(
+        (category) => project.categories[category].status === 'graded',
+      )
+      expect(Object.keys(project.gradeBasis).toSorted()).toEqual(explained.toSorted())
+    }
   })
 
   /**
@@ -114,9 +136,17 @@ describe('gradeProjects', () => {
   })
 
   function categories(path: string): ProjectScan['categories'] {
+    return scanAt(path).categories
+  }
+
+  function gradeBasis(path: string): ProjectScan['gradeBasis'] {
+    return scanAt(path).gradeBasis
+  }
+
+  function scanAt(path: string): ProjectScan {
     const found = graded.find((project) => project.project.path === path)
     if (found === undefined) throw new Error(`no project ${path}`)
-    return found.categories
+    return found
   }
 })
 

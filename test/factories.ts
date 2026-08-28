@@ -76,6 +76,7 @@ export function makeProjectScan(overrides: Partial<ProjectScan> = {}): ProjectSc
   return {
     project: makeProject(),
     categories: allNotAssessed(),
+    gradeBasis: {},
     metrics: noMetrics(),
     ...overrides,
   }

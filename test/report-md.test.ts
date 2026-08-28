@@ -697,6 +697,7 @@ describe('renderReportMarkdown projects', () => {
       manifests: ['package.json'],
       languages: ['js-ts'],
       categories: golden.categories,
+      gradeBasis: golden.gradeBasis,
       metrics: golden.metrics,
       toolchain: [],
     }
