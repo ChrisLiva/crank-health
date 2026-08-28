@@ -142,7 +142,7 @@ async function runGolangciLint(ctx: RunContext): Promise<ToolResult> {
 /**
  * `--output.json.path stdout` → findings.
  *
- * The stream is a JSON document *and then some prose*: v2.12.2 prints the
+ * The stream is a JSON document *and then some prose*: v2.13.2 prints the
  * report on one line and follows it with the human summary it always prints
  * (`2 issues:` / `* staticcheck: 1`), so `JSON.parse` over the whole stream
  * fails and would silently cost every finding. The document is therefore found
@@ -158,7 +158,7 @@ async function runGolangciLint(ctx: RunContext): Promise<ToolResult> {
  * (`core/grade.ts` reads severity, not counts, for its worst grades).
  *
  * @param projectDir absolute directory the run happened in: `Pos.Filename` is
- * relative to it (v2.12.2 prints an absolute path only for a file outside it)
+ * relative to it (v2.13.2 prints an absolute path only for a file outside it)
  */
 export function parseGolangciJson(
   stdout: string,
@@ -179,7 +179,7 @@ export function parseGolangciJson(
  *
  * The whole stream is tried first — a future release that stops appending its
  * summary is then read by the plain path — and then each line on its own,
- * because that is the shape v2.12.2 produces: one line of JSON, then prose. A
+ * because that is the shape v2.13.2 produces: one line of JSON, then prose. A
  * document is recognized by carrying `Issues`, so a summary line that happened
  * to parse as JSON cannot stand in for the report.
  */

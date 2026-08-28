@@ -12,13 +12,13 @@ import { COMPLEXITY_CEILING } from '../src/core/grade.ts'
  *
  * Both captures are real output against `test/fixtures/js-basic`.
  */
-const HEALTH = fileURLToPath(new URL('./captured/fallow-health-3.17.0.json', import.meta.url))
+const HEALTH = fileURLToPath(new URL('./captured/fallow-health-3.20.0.json', import.meta.url))
 const FTA = fileURLToPath(new URL('./captured/fta-3.0.1.json', import.meta.url))
 
 describe('parseHealth', () => {
   it('reads the function count and the per-function findings from real output', async () => {
     const report = parseHealth(await readFile(HEALTH, 'utf8'))
-    expect(report.version).toBe('3.17.0')
+    expect(report.version).toBe('3.20.0')
     expect(report.functionsAnalyzed).toBe(9)
     // The denominator has to be splittable by file: a project is graded on the
     // functions in its own files, not on everything the walk reached.
@@ -45,7 +45,7 @@ describe('parseHealth', () => {
   it('marks only the functions over the cognitive ceiling, not every finding', () => {
     const document = JSON.stringify({
       kind: 'health',
-      version: '3.17.0',
+      version: '3.20.0',
       summary: { functions_analyzed: 4, max_cognitive_threshold: 15 },
       findings: [
         { path: 'a.ts', name: 'cognitive', line: 1, col: 1, cognitive: 29, cyclomatic: 3 },
@@ -67,7 +67,7 @@ describe('parseHealth', () => {
 
 describe('toHealthFindings', () => {
   const report = {
-    version: '3.17.0',
+    version: '3.20.0',
     functionsAnalyzed: 9,
     fileScores: [
       { file: 'src/complex.js', functionCount: 5 },

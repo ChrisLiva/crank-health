@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -176,8 +176,8 @@ describe('quick scan of the js-basic fixture', () => {
       state: 'ok',
       execution: 'ephemeral-pinned',
       provenance: 'default-config',
-      version: '0.14.1',
-      pinned: '0.14.1',
+      version: '0.15.0',
+      pinned: '0.15.0',
       detection: null,
       raw: ['raw/root/aislop.json'],
     })
@@ -318,7 +318,9 @@ describe('quick scan of the js-basic fixture', () => {
   it('leaves the target repo clean: the run directory ignores itself', async () => {
     expect(await fixture.status()).toBe('')
     expect(basename(scan.outputDir)).toMatch(RUN_DIRNAME_PATTERN)
-    expect(dirname(scan.outputDir)).toBe(join(fixture.root, '.codebase-health'))
+    // The run directory sits under the physical root `resolveRepoRoot` returns,
+    // which on macOS is `/private/var/…` for a `/var/…` tmpdir.
+    expect(dirname(scan.outputDir)).toBe(join(await realpath(fixture.root), '.codebase-health'))
     expect(await readdir(scan.outputDir)).toContain('report.json')
   })
 
@@ -688,7 +690,7 @@ describe('quick scan of a repo that owns oxlint but has not installed it', () =>
           tool: 'oxlint',
           execution: 'ephemeral-pinned',
           provenance: 'repo-config',
-          version: '1.78.0',
+          version: '1.80.0',
           state: 'ok',
           detection: {
             reason: 'config+dependency',

@@ -17,7 +17,7 @@ import { dotnetExecOptions, sdkGate } from './dotnet-project.ts'
  * only RCS1213 out of the shared build: grading C# dead code on a strictly
  * narrower question would make the same letter mean two different things.
  *
- * Two probed facts (0.13.1 on SDK 10.0.203) shape the wrapper:
+ * Two probed facts (1.0.0 on SDK 10.0.203) shape the wrapper:
  *
  * - The output is plain text with **no locations at any verbosity** (confirmed
  *   against `FindSymbolCommand`'s source: it prints kind + display name only).

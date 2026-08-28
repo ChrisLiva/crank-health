@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { parseBiomeReport, toPendingFindings } from '../src/adapters/jsts/biome.ts'
 
 /** Captured raw stdout from the pinned Biome, run against `test/fixtures/js-multi-tool`. */
-const LINT = fileURLToPath(new URL('./captured/biome-lint-2.5.9.txt', import.meta.url))
-const FORMAT = fileURLToPath(new URL('./captured/biome-format-2.5.9.txt', import.meta.url))
+const LINT = fileURLToPath(new URL('./captured/biome-lint-2.5.11.txt', import.meta.url))
+const FORMAT = fileURLToPath(new URL('./captured/biome-format-2.5.11.txt', import.meta.url))
 
 describe('parseBiomeReport', () => {
   it('reads category, severity, message and range from real lint output', async () => {

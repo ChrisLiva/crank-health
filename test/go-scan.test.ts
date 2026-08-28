@@ -320,7 +320,7 @@ describe.runIf(HAVE_GO)('quick scan of the go-basic fixture', () => {
         .filter((tool) => tool.tool === 'gosec')
         .map((tool) => [tool.project, tool.state, tool.version]),
     ).toEqual([
-      ['.', 'ok', 'v2.28.0'],
+      ['.', 'ok', 'v2.29.0'],
       ['brokenpkg', 'error', null],
     ])
     // The repo-scoped scanners still have their say — a Go repo scanned by

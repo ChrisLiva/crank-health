@@ -12,7 +12,7 @@ import type { RunContext } from '../src/core/types.ts'
 
 /**
  * Roslynator's `find-symbol --unused` output is plain text with no locations at
- * any verbosity (verified against the 0.13.1 CLI and its `FindSymbolCommand`
+ * any verbosity (verified against the 1.0.0 CLI and its `FindSymbolCommand`
  * source), so the contract has two halves: the symbol-line parse over captured
  * bytes, and the declaration search that places each symbol — sound because an
  * unreferenced symbol's only occurrence in the analyzed sources *is* its
@@ -21,7 +21,7 @@ import type { RunContext } from '../src/core/types.ts'
  * The capture is real output against a scratch project with a planted
  * unreferenced public method and an unused private field.
  */
-const CAPTURED = fileURLToPath(new URL('./captured/roslynator-0.13.1.txt', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/roslynator-1.0.0.txt', import.meta.url))
 
 describe('parseRoslynatorSymbols', () => {
   it('reads kind, display, name and containing type from real output', async () => {
@@ -175,14 +175,14 @@ describe('roslynatorFailure', () => {
    * 10.0.203), it is deliberately not an offline marker, and it must be a loud
    * error quoting our pin — never empty stdout read as zero dead code.
    */
-  it('reports an unresolvable pin as an error quoting roslynator.dotnet.cli@0.13.1', async () => {
+  it('reports an unresolvable pin as an error quoting roslynator.dotnet.cli@1.0.0', async () => {
     const stderr = await readFile(
       fileURLToPath(new URL('./captured/dnx-unresolved-pin-10.0.203.stderr.txt', import.meta.url)),
       'utf8',
     )
     const failure = roslynatorFailure({ stdout: '', stderr, exitCode: 1 })
     expect(failure?.state).toBe('error')
-    expect(failure?.reason).toContain('roslynator.dotnet.cli@0.13.1')
+    expect(failure?.reason).toContain('roslynator.dotnet.cli@1.0.0')
     expect(failure?.reason).toContain('is not found in NuGet feeds')
   })
 

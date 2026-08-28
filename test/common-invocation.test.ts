@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { execa } from 'execa'
@@ -221,7 +221,7 @@ describe('jscpd and Go', () => {
   })
 
   it('measures duplicated Go under src/ and never the copy under vendor/', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-go-'))
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'crank-jscpd-go-')))
     try {
       const root = join(base, 'repo')
       const scratch = join(base, 'scratch')
@@ -814,7 +814,7 @@ describe('duplication excludes inherited from the repo’s own configs', () => {
    * measured like anything else.
    */
   it('leaves a clone inside a biome-excluded gen/ unmeasured, and says which config did it', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'crank-jscpd-excludes-'))
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'crank-jscpd-excludes-')))
     try {
       const fixture = join(import.meta.dirname, 'fixtures', 'sec-basic', 'src')
       const [handler, report] = await Promise.all([

@@ -1,6 +1,6 @@
 {
   "name": "crank-health",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Deterministic codebase health grades for JS/TS and Python repos",
   "type": "module",
   "license": "MIT",
@@ -37,11 +37,11 @@
     "yaml": "2.9.0"
   },
   "devDependencies": {
-    "@types/node": "26.1.2",
-    "oxlint": "1.78.0",
+    "@types/node": "26.4.0",
+    "oxlint": "1.80.0",
     "prettier": "3.9.6",
     "tsdown": "0.22.14",
     "typescript": "7.0.2",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

@@ -1,6 +1,6 @@
 # Fix plan
 
-`<repo>` @ `<sha>` · crank-health 0.12.0 · quick profile · PR vs `main` (merge-base `<short>`)
+`<repo>` @ `<sha>` · crank-health 0.13.0 · quick profile · PR vs `main` (merge-base `<short>`)
 
 Grades: security not assessed · types not assessed · dead code not assessed · complexity not assessed · duplication not assessed · lint F · format not assessed · test quality not assessed
 

@@ -6,20 +6,10 @@
       "tool": {
         "driver": {
           "name": "oxlint",
-          "version": "1.78.0",
-          "semanticVersion": "1.78.0",
+          "version": "1.80.0",
+          "semanticVersion": "1.80.0",
           "informationUri": "https://oxc.rs/docs/guide/usage/linter.html",
           "rules": [
-            {
-              "id": "eslint(no-const-assign)",
-              "name": "no-const-assign",
-              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-const-assign.html",
-              "properties": {
-                "category": "correctness",
-                "plugin": "eslint",
-                "fix": "none"
-              }
-            },
             {
               "id": "eslint(no-unreachable)",
               "name": "no-unreachable",
@@ -34,6 +24,16 @@
               "id": "eslint(no-dupe-keys)",
               "name": "no-dupe-keys",
               "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-dupe-keys.html",
+              "properties": {
+                "category": "correctness",
+                "plugin": "eslint",
+                "fix": "none"
+              }
+            },
+            {
+              "id": "eslint(no-const-assign)",
+              "name": "no-const-assign",
+              "helpUri": "https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-const-assign.html",
               "properties": {
                 "category": "correctness",
                 "plugin": "eslint",
@@ -56,11 +56,6 @@
       "artifacts": [
         {
           "location": {
-            "uri": "src/const-assign.js"
-          }
-        },
-        {
-          "location": {
             "uri": "src/unreachable.js"
           }
         },
@@ -71,38 +66,19 @@
         },
         {
           "location": {
+            "uri": "src/const-assign.js"
+          }
+        },
+        {
+          "location": {
             "uri": "src/accumulate.js"
           }
         }
       ],
       "results": [
         {
-          "ruleId": "eslint(no-const-assign)",
-          "ruleIndex": 0,
-          "level": "error",
-          "message": {
-            "text": "Unexpected re-assignment of `const` variable limit."
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "src/const-assign.js",
-                  "index": 0
-                },
-                "region": {
-                  "startLine": 2,
-                  "startColumn": 9,
-                  "endLine": 2,
-                  "endColumn": 14
-                }
-              }
-            }
-          ]
-        },
-        {
           "ruleId": "eslint(no-unreachable)",
-          "ruleIndex": 1,
+          "ruleIndex": 0,
           "level": "error",
           "message": {
             "text": "Unreachable code."
@@ -112,7 +88,7 @@
               "physicalLocation": {
                 "artifactLocation": {
                   "uri": "src/unreachable.js",
-                  "index": 1
+                  "index": 0
                 },
                 "region": {
                   "startLine": 6,
@@ -126,7 +102,7 @@
         },
         {
           "ruleId": "eslint(no-dupe-keys)",
-          "ruleIndex": 2,
+          "ruleIndex": 1,
           "level": "error",
           "message": {
             "text": "Duplicate key 'home'"
@@ -136,13 +112,37 @@
               "physicalLocation": {
                 "artifactLocation": {
                   "uri": "src/dupe-keys.js",
-                  "index": 2
+                  "index": 1
                 },
                 "region": {
                   "startLine": 2,
                   "startColumn": 3,
                   "endLine": 2,
                   "endColumn": 7
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "eslint(no-const-assign)",
+          "ruleIndex": 2,
+          "level": "error",
+          "message": {
+            "text": "Unexpected re-assignment of `const` variable limit."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/const-assign.js",
+                  "index": 2
+                },
+                "region": {
+                  "startLine": 2,
+                  "startColumn": 9,
+                  "endLine": 2,
+                  "endColumn": 14
                 }
               }
             }

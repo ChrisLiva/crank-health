@@ -16,7 +16,7 @@ import { parseGitlab, toPendingFindings as toTyFindings } from '../src/adapters/
  * Captures are real output against `test/fixtures/py-basic` (ty) and
  * `test/fixtures/py-venv` (pyright), with the repo root rewritten to `/repo`.
  */
-const TY = fileURLToPath(new URL('./captured/ty-0.0.72.gitlab.json', import.meta.url))
+const TY = fileURLToPath(new URL('./captured/ty-0.0.75.gitlab.json', import.meta.url))
 const PYRIGHT = fileURLToPath(new URL('./captured/pyright-1.1.411.json', import.meta.url))
 
 describe('parseGitlab', () => {

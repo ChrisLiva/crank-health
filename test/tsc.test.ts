@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -288,7 +288,7 @@ describe('a tsconfig.json that type-checks nothing', () => {
   let repo: string
 
   beforeEach(async () => {
-    repo = await mkdtemp(join(tmpdir(), 'crank-tsc-empty-'))
+    repo = await realpath(await mkdtemp(join(tmpdir(), 'crank-tsc-empty-')))
     await mkdir(join(repo, 'src'), { recursive: true })
     await writeFile(join(repo, 'src', 'a.ts'), 'export const answer: string = 42\n')
   })

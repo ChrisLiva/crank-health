@@ -13,7 +13,7 @@ import { pathFarm } from './support/path-farm.ts'
  * it flagged.
  *
  * The capture is a real `go run
- * github.com/securego/gosec/v2/cmd/gosec@v2.28.0 -fmt=json ./...` over a
+ * github.com/securego/gosec/v2/cmd/gosec@v2.29.0 -fmt=json ./...` over a
  * throwaway `go-basic`-shaped tree carrying a planted hardcoded credential
  * (G101) and a weak random source (G404). Two bytes were rewritten before it
  * was checked in: the absolute tree root became `/repo`, and every `code`
@@ -22,7 +22,7 @@ import { pathFarm } from './support/path-farm.ts'
  * quoted in a `code` window would be a credential checked in.
  */
 
-const CAPTURE = fileURLToPath(new URL('./captured/gosec-2.28.0.json', import.meta.url))
+const CAPTURE = fileURLToPath(new URL('./captured/gosec-2.29.0.json', import.meta.url))
 
 /** The root the capture was sanitized to. */
 const REPO = '/repo'
@@ -283,7 +283,7 @@ describe('the gosec runner', () => {
   it('reads exit 0 with an empty envelope as a completed clean run', async () => {
     const result = await runAgainst(CLEAN, 0)
 
-    expect(result).toMatchObject({ state: 'ok', findings: [], toolVersion: 'v2.28.0' })
+    expect(result).toMatchObject({ state: 'ok', findings: [], toolVersion: 'v2.29.0' })
   })
 
   it('reads exit 1 with issues as a completed run with findings', async () => {

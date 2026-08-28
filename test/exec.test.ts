@@ -74,7 +74,7 @@ describe('ephemeralCommand', () => {
   it('pins an exact version — never a bare name, never @latest', () => {
     expect(ephemeralCommand('oxlint', ['--format', 'sarif'])).toEqual({
       command: 'npx',
-      args: ['--yes', 'oxlint@1.78.0', '--format', 'sarif'],
+      args: ['--yes', 'oxlint@1.80.0', '--format', 'sarif'],
       ephemeral: 'npx',
     })
   })
@@ -84,7 +84,7 @@ describe('uvxCommand', () => {
   it('pins an exact version of a Python tool the same way', () => {
     expect(uvxCommand('ruff', ['check'])).toEqual({
       command: 'uvx',
-      args: ['--quiet', 'ruff@0.16.3', 'check'],
+      args: ['--quiet', 'ruff@0.16.5', 'check'],
       ephemeral: 'uvx',
     })
   })
@@ -93,7 +93,7 @@ describe('uvxCommand', () => {
   it('names the command explicitly when it differs from the distribution', () => {
     expect(uvxCommand('ruff', ['--version'], 'ruff-lsp')).toEqual({
       command: 'uvx',
-      args: ['--quiet', '--from', 'ruff==0.16.3', 'ruff-lsp', '--version'],
+      args: ['--quiet', '--from', 'ruff==0.16.5', 'ruff-lsp', '--version'],
       ephemeral: 'uvx',
     })
   })
@@ -139,7 +139,7 @@ describe('dnxCommand', () => {
       command: 'dnx',
       args: [
         '-y',
-        'roslynator.dotnet.cli@0.13.1',
+        'roslynator.dotnet.cli@1.0.0',
         '--source',
         'https://api.nuget.org/v3/index.json',
         '-v',
@@ -178,25 +178,25 @@ describe('dnx classification', () => {
     expect(
       await offline(
         'error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json',
-        'roslynator.dotnet.cli@0.13.1',
+        'roslynator.dotnet.cli@1.0.0',
         'dnx',
       ),
     ).toEqual({
       state: 'not-available',
       reason:
-        'could not fetch roslynator.dotnet.cli@0.13.1: no network and nothing in the ' +
+        'could not fetch roslynator.dotnet.cli@1.0.0: no network and nothing in the ' +
         'NuGet cache — run crank-health once with network access to warm the cache',
     })
-    expect(await offline('ENOTFOUND', 'oxlint@1.78.0', 'npx')).toEqual({
+    expect(await offline('ENOTFOUND', 'oxlint@1.80.0', 'npx')).toEqual({
       state: 'not-available',
       reason:
-        'could not fetch oxlint@1.78.0: no network and nothing in the ' +
+        'could not fetch oxlint@1.80.0: no network and nothing in the ' +
         'npm cache — run crank-health once with network access to warm the cache',
     })
-    expect(await offline('failed to fetch', 'ruff@0.16.3', 'uvx')).toEqual({
+    expect(await offline('failed to fetch', 'ruff@0.16.5', 'uvx')).toEqual({
       state: 'not-available',
       reason:
-        'could not fetch ruff@0.16.3: no network and nothing in the ' +
+        'could not fetch ruff@0.16.5: no network and nothing in the ' +
         'uv cache — run crank-health once with network access to warm the cache',
     })
   })

@@ -14,11 +14,11 @@ Planted in `main.go`, both reported by the default linter set:
 | `staticcheck` | `main.go`, `Describe`    | `if verbose == true` → `S1002: should omit comparison …`    |
 | `unused`      | `main.go`, `unusedHelper` | a function called from nowhere → `func unusedHelper is unused` |
 
-`test/captured/golangci-lint-2.12.2.json` is a real
-`go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run
+`test/captured/golangci-lint-2.13.2.json` is a real
+`go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run
 --output.json.path stdout` over a throwaway copy of this tree; re-capture it the
 same way when either the pin or this file's plants change. Those bytes carry no
-absolute path — v2.12.2 reports `Pos.Filename` relative to the directory it ran
+absolute path — v2.13.2 reports `Pos.Filename` relative to the directory it ran
 in — so there was nothing to sanitize.
 
 `test/golangci-lint.test.ts` carries the machine-readable half of the table

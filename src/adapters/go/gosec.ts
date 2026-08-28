@@ -40,7 +40,7 @@ import { execGo, withGoGate, withoutFetchNarration } from './go-toolchain.ts'
  * B105–B107 messages — there is nothing to redact in the message.
  *
  * There is no `-quiet`: under it a clean tree with a package that would not
- * load prints *nothing at all* and exits 0 (probed on v2.28.0), which would
+ * load prints *nothing at all* and exits 0 (probed on v2.29.0), which would
  * make a refused analysis indistinguishable from a clean one. Without it the
  * envelope always prints, and the exit code stops being the whole story.
  */
@@ -116,7 +116,7 @@ async function runGosec(ctx: RunContext): Promise<ToolResult> {
 
   // **The exit code is not the failure signal here.** gosec exits 1 for a run
   // that found issues *and* for a run whose packages would not load (probed on
-  // v2.28.0), so what happened is read off the envelope: no issues and a
+  // v2.29.0), so what happened is read off the envelope: no issues and a
   // non-empty `Golang errors` map is an analysis that never happened, and
   // grading a `security` category off it would be the flattering A spec §3
   // forbids. Issues beside load errors is a partial analysis, and partial beats
@@ -174,7 +174,7 @@ function isGosecEnvelope(stdout: string): boolean {
  * `-fmt=json` stdout → what the run said.
  *
  * Every field is read by name. `line` and `column` arrive as *strings*
- * (probed on v2.28.0 — `"line": "5"`), `file` is absolute, and `code` is the
+ * (probed on v2.29.0 — `"line": "5"`), `file` is absolute, and `code` is the
  * three-line source window that this parser is careful never to carry forward:
  * a finding is a place and a rule, and the line itself is in the repo where the
  * reader can look at it.

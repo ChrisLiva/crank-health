@@ -2,9 +2,9 @@
 
 A repo that owns aislop: `.aislop/config.yml` plus a `devDependencies` entry,
 neither of them installed, so a scan lifts the config's `rules` and `exclude`
-and runs the pinned 0.14.1 ephemerally.
+and runs the pinned 0.15.0 ephemerally.
 
-Planted, as aislop 0.14.1's `ai-slop` engine reports them:
+Planted, as aislop 0.15.0's `ai-slop` engine reports them:
 
 | Category | Where                    | What                                              |
 |----------|--------------------------|---------------------------------------------------|
@@ -15,7 +15,7 @@ Planted, as aislop 0.14.1's `ai-slop` engine reports them:
 | lint     | `src/excluded.js:4`      | `ai-slop/swallowed-exception`, error: excluded by the repo's config |
 
 The config turns `ai-slop/todo-stub` off and excludes `src/excluded.js`, so a
-scan of this fixture reports three of the five rows. `test/captured/aislop-0.14.1.json`
+scan of this fixture reports three of the five rows. `test/captured/aislop-0.15.0.json`
 was taken over the same two files under the generated config with neither lift
 applied, so the capture holds all five and the parse tests see every severity
 tier.

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,9 +23,9 @@ import { pathFarm } from './support/path-farm.ts'
  * tool that stands crank-health's defaults down.
  *
  * The capture is a real `go run
- * github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2 run
+ * github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run
  * --output.json.path stdout` over a throwaway copy of `test/fixtures/go-owned`.
- * Nothing in those bytes was rewritten: v2.12.2 reports `Pos.Filename` relative
+ * Nothing in those bytes was rewritten: v2.13.2 reports `Pos.Filename` relative
  * to the directory it ran in, so the capture quotes no absolute path at all.
  */
 
@@ -35,12 +35,12 @@ function captured(name: string): Promise<string> {
   return readFile(fileURLToPath(new URL(`./captured/${name}`, import.meta.url)), 'utf8')
 }
 
-const CAPTURE = 'golangci-lint-2.12.2.json'
+const CAPTURE = 'golangci-lint-2.13.2.json'
 
 describe('parseGolangciJson', () => {
   /**
    * Every `Issues` entry, once, with its linter as the rule and its `Pos` as
-   * the place — read off bytes whose stdout is *not* a JSON document: v2.12.2
+   * the place — read off bytes whose stdout is *not* a JSON document: v2.13.2
    * appends its human summary (`2 issues:` …) after the document, so a parser
    * that handed the whole stream to `JSON.parse` would report nothing at all.
    */
@@ -220,7 +220,7 @@ describe('a Go repo that owns golangci-lint', () => {
   )
 
   /**
-   * The owner could not speak — a v2 binary handed a v1 config exits 6 having
+   * The owner could not speak — a v2 binary handed a v1 config exits 3 having
    * printed no report — so the standbys are promoted and grade `lint` on
    * crank-health's defaults. Never a crash, never a flattering grade, and the
    * report says whose config the grade came from.
@@ -233,7 +233,7 @@ describe('a Go repo that owns golangci-lint', () => {
         const scan = await scanReplaying(fixture, {
           stdout: '',
           stderr: CONFIG_REJECTED,
-          exitCode: 6,
+          exitCode: 3,
         })
 
         expect(toolRows(scan.tools, 'lint')).toEqual([
@@ -242,7 +242,7 @@ describe('a Go repo that owns golangci-lint', () => {
           {
             tool: GOLANGCI_LINT_TOOL,
             state: 'error',
-            reason: `golangci-lint exited 6 with nothing to report: ${CONFIG_REJECTED.split('\n')[0]}`,
+            reason: `golangci-lint exited 3 with nothing to report: ${CONFIG_REJECTED.split('\n')[0]}`,
           },
           { tool: STATICCHECK_TOOL, state: 'ok', reason: null },
         ])
@@ -266,9 +266,13 @@ describe('a Go repo that owns golangci-lint', () => {
 /** Roomy: the run drives a real `npx jscpd` over the fixture. */
 const SCAN_TIMEOUT_MS = 180_000
 
-/** What a v2.12.2 binary says about a config written for v1. */
+/** What a v2.13.2 binary says about a config written for v1. */
 const CONFIG_REJECTED =
-  'Error: can\'t load config: unsupported version of the configuration: ""\nFailed executing command with error: can\'t load config\n'
+  'Error: can\'t load config: unsupported version of the configuration: "" See ' +
+  'https://golangci-lint.run/docs/product/migration-guide for migration instructions\n' +
+  "The command is terminated due to an error: can't load config: unsupported version of the " +
+  'configuration: "" See https://golangci-lint.run/docs/product/migration-guide for migration ' +
+  'instructions\n'
 
 /** One category's tool records, in report order, as tool/state/reason triples. */
 function toolRows(
@@ -303,7 +307,14 @@ async function scanReplaying(
   readonly warnings: readonly string[]
   readonly findings: ReturnType<typeof reportFindings>
 }> {
-  const staticcheck = (await captured('staticcheck-0.8.1.jsonl')).replaceAll(REPO, fixture.root)
+  // A real staticcheck reports physical paths, and `resolveRepoRoot` relativizes
+  // against the physical root: on macOS `tmpdir()` is a symlink into
+  // `/private`, so a replay rewritten to the logical root would place every
+  // finding outside the repo.
+  const staticcheck = (await captured('staticcheck-0.8.1.jsonl')).replaceAll(
+    REPO,
+    await realpath(fixture.root),
+  )
   const farm = await pathFarm({
     go: goDispatching([
       { match: '*staticcheck*', stdout: staticcheck, exitCode: 1 },

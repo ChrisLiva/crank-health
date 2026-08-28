@@ -14,8 +14,8 @@ import {
  * py-basic`. Only the repo root was rewritten to `/repo`, so the recordings are
  * not tied to the machine that made them.
  */
-const LINT = fileURLToPath(new URL('./captured/ruff-lint-0.16.3.json', import.meta.url))
-const FORMAT = fileURLToPath(new URL('./captured/ruff-format-0.16.3.json', import.meta.url))
+const LINT = fileURLToPath(new URL('./captured/ruff-lint-0.16.5.json', import.meta.url))
+const FORMAT = fileURLToPath(new URL('./captured/ruff-format-0.16.5.json', import.meta.url))
 
 describe('parseRuffJson', () => {
   it('reads code, range, message and rule documentation from real check output', async () => {

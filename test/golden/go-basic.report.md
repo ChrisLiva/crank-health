@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0` · crank-health 0.12.0 · quick profile
+`<repo>` @ `c6b2ce11ad8d7de03a6e6e6aa092c789e3b5d7d0` · crank-health 0.13.0 · quick profile
 
 ## Grades
 
@@ -67,11 +67,11 @@ This project declares no tool of its own: it was analyzed on crank-health’s de
 | --- | --- | --- | --- | --- |
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
-| gosec | ok | [default-config] | v2.28.0 | (repo root) |
-| gosec | error | [default-config] | — (pinned v2.28.0) | ./broken.go:5:9: cannot use "forty-two" (untyped string constant) as int value in return statement (brokenpkg) |
+| gosec | ok | [default-config] | v2.29.0 | (repo root) |
+| gosec | error | [default-config] | — (pinned v2.29.0) | ./broken.go:5:9: cannot use "forty-two" (untyped string constant) as int value in return statement (brokenpkg) |
 | govulncheck | ok | [default-config] | v1.7.0 | govulncheck analyzed nothing in brokenpkg (exit 1): govulncheck: loading packages:  |
-| opengrep | not available | [default-config] | — (pinned 1.26.0) | no JavaScript, TypeScript or Python files, so opengrep assessed nothing |
-| osv-scanner | not available | [default-config] | — (pinned 2.5.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| opengrep | not available | [default-config] | — (pinned 1.28.0) | no JavaScript, TypeScript or Python files, so opengrep assessed nothing |
+| osv-scanner | not available | [default-config] | — (pinned 2.5.1) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
 **Findings** (1)
@@ -125,7 +125,7 @@ Evidence: [raw/root/gocognit.json](raw/root/gocognit.json) · [raw/brokenpkg/goc
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.15 | (repo root, brokenpkg) |
+| jscpd | ok | [default-config] | 5.0.16 | (repo root, brokenpkg) |
 
 **Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
@@ -140,7 +140,7 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json) · [raw/broke
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| aislop | ok | [default-config] | 0.14.1 | (repo root, brokenpkg) |
+| aislop | ok | [default-config] | 0.15.0 | (repo root, brokenpkg) |
 | go-vet | ok | [default-config] | — (pinned 1.25) | (repo root) |
 | go-vet | error | [default-config] | — (pinned 1.25) | # example.com/go-basic/brokenpkg (brokenpkg) |
 | staticcheck | ok | [default-config] | v0.8.1 | (repo root, brokenpkg) |

@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `ae26f855da3e9c5e066a3f5921243a54f49eb741` · crank-health 0.12.0 · quick profile
+`<repo>` @ `ae26f855da3e9c5e066a3f5921243a54f49eb741` · crank-health 0.13.0 · quick profile
 
 ## Grades
 
@@ -30,8 +30,8 @@ Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or se
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
-| opengrep | not available | [default-config] | — (pinned 1.26.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
-| osv-scanner | not available | [default-config] | — (pinned 2.5.0) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
+| opengrep | not available | [default-config] | — (pinned 1.28.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
+| osv-scanner | not available | [default-config] | — (pinned 2.5.1) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
 | zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
 ## types — not assessed
@@ -48,8 +48,8 @@ Not graded: no tsconfig.json and no TypeScript sources — nothing owns the type
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-dead-code | ok | [default-config] | 3.17.0 | — |
-| knip | ok | [default-config] | 6.32.2 | — |
+| fallow-dead-code | ok | [default-config] | 3.20.0 | — |
+| knip | ok | [default-config] | 6.32.3 | — |
 
 **Findings** (1)
 
@@ -63,7 +63,7 @@ Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [r
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-health | ok | [default-config] | 3.17.0 | — |
+| fallow-health | ok | [default-config] | 3.20.0 | — |
 | fta | ok | [default-config] | 3.0.1 | — |
 
 **Findings** (1)
@@ -78,7 +78,7 @@ Evidence: [raw/root/fallow-health.json](raw/root/fallow-health.json) · [raw/roo
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.15 | — |
+| jscpd | ok | [default-config] | 5.0.16 | — |
 
 Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
@@ -88,8 +88,8 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| aislop | ok | [default-config] | 0.14.1 | — |
-| oxlint | ok | [default-config] | 1.78.0 | — |
+| aislop | ok | [default-config] | 0.15.0 | — |
+| oxlint | ok | [default-config] | 1.80.0 | — |
 | react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
 
 **Findings** (4)

@@ -11,20 +11,20 @@
  * bump and it must come with re-captured parse fixtures under `test/captured/`.
  */
 const TOOL_MANIFEST = {
-  oxlint: '1.78.0',
-  eslint: '10.8.1',
-  '@biomejs/biome': '2.5.9',
+  oxlint: '1.80.0',
+  eslint: '10.9.1',
+  '@biomejs/biome': '2.5.11',
   prettier: '3.9.6',
   typescript: '7.0.2',
-  fallow: '3.17.0',
-  knip: '6.32.2',
+  fallow: '3.20.0',
+  knip: '6.32.3',
   'fta-cli': '3.0.1',
-  jscpd: '5.0.15',
+  jscpd: '5.0.16',
   // Modified-MIT license: forbids ML-training use and hosted resale, accepted
   // for scanner use. Releases daily, so this pin goes stale fast — bumping it
   // is a crank-health version bump with re-captured fixtures, per the header.
   'react-doctor': '0.9.12',
-  aislop: '0.14.1',
+  aislop: '0.15.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -36,8 +36,8 @@ const TOOL_MANIFEST = {
  * here and its parser is tested against captured bytes.
  */
 const PYTHON_TOOL_MANIFEST = {
-  ruff: '0.16.3',
-  ty: '0.0.72',
+  ruff: '0.16.5',
+  ty: '0.0.75',
   pyright: '1.1.411',
   mypy: '2.3.1',
   vulture: '2.16',
@@ -54,7 +54,7 @@ const PYTHON_TOOL_MANIFEST = {
  */
 const DOTNET_TOOL_MANIFEST = {
   'microsoft.codeanalysis.netanalyzers': '10.0.400',
-  'roslynator.dotnet.cli': '0.13.1',
+  'roslynator.dotnet.cli': '1.0.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -70,8 +70,8 @@ const DOTNET_TOOL_MANIFEST = {
  */
 const GO_TOOL_MANIFEST = {
   'github.com/go-gremlins/gremlins/cmd/gremlins': 'v0.6.0',
-  'github.com/golangci/golangci-lint/v2/cmd/golangci-lint': 'v2.12.2',
-  'github.com/securego/gosec/v2/cmd/gosec': 'v2.28.0',
+  'github.com/golangci/golangci-lint/v2/cmd/golangci-lint': 'v2.13.2',
+  'github.com/securego/gosec/v2/cmd/gosec': 'v2.29.0',
   'github.com/uudashr/gocognit/cmd/gocognit': 'v1.2.1',
   'golang.org/x/vuln/cmd/govulncheck': 'v1.7.0',
   'honnef.co/go/tools/cmd/staticcheck': 'v0.8.1',
@@ -103,8 +103,8 @@ const GO_TOOL_MANIFEST = {
 const SYSTEM_TOOL_MANIFEST = {
   dotnet: '10.0.203',
   gitleaks: '8.30.1',
-  opengrep: '1.26.0',
-  'osv-scanner': '2.5.0',
+  opengrep: '1.28.0',
+  'osv-scanner': '2.5.1',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -171,7 +171,7 @@ export function pinnedVersion(tool: PinnedTool): string {
 }
 
 /**
- * The `name@version` spec for an ephemeral install, e.g. `oxlint@1.78.0`.
+ * The `name@version` spec for an ephemeral install, e.g. `oxlint@1.80.0`.
  * Pass this to `npx --yes`, never a bare name.
  */
 export function pinnedSpec(tool: PinnedTool): string {
@@ -198,7 +198,7 @@ export function pinnedPythonVersion(tool: PinnedPythonTool): string {
 }
 
 /**
- * The `name@version` spec `uvx` resolves, e.g. `ruff@0.16.3`. `uvx` reads the
+ * The `name@version` spec `uvx` resolves, e.g. `ruff@0.16.5`. `uvx` reads the
  * `@` form as an exact pin; the `==` form is only needed when the command name
  * differs from the distribution name (see
  * {@link import('./core/exec.ts').uvxCommand}).
@@ -213,7 +213,7 @@ export function pinnedDotnetVersion(tool: PinnedDotnetTool): string {
 }
 
 /**
- * The `id@version` spec `dnx` resolves, e.g. `roslynator.dotnet.cli@0.12.0`.
+ * The `id@version` spec `dnx` resolves, e.g. `roslynator.dotnet.cli@1.0.0`.
  * `dnx` reads the `@` form as an exact pin (see
  * {@link import('./core/exec.ts').dnxCommand}).
  */

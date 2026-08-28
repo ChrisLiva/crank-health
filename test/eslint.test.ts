@@ -13,7 +13,7 @@ import { makeProject } from './factories.ts'
  * ts-owned`. Only the repo root was rewritten to `/repo`, so the checked-in
  * recording is not tied to the machine that made it.
  */
-const CAPTURED = fileURLToPath(new URL('./captured/eslint-10.8.1.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/eslint-10.9.1.json', import.meta.url))
 
 describe('parseEslintJson', () => {
   it('reads rule id, numeric severity, message and range from real output', async () => {

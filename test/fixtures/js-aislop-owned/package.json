@@ -5,6 +5,6 @@
   "main": "src/index.js",
   "dependencies": {},
   "devDependencies": {
-    "aislop": "0.14.1"
+    "aislop": "0.15.0"
   }
 }
