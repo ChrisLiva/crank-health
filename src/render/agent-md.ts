@@ -795,12 +795,21 @@ function toTask(
     ...(theme.project === undefined ? {} : { project: theme.project }),
     directlyActionable: isDirect(theme, touched),
     title: theme.title,
-    gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${current} → ${TARGET_GRADE}`,
+    gradeImpact: `${CATEGORY_LABELS[theme.category]} · ${gradeArrow(current)}`,
     findings: theme.findings,
     eligible: theme.findings.filter(isEligible),
     evidence,
     verify: verifyArgv(theme.category, scopable(report, theme.category) ? graded?.path : undefined),
   }
+}
+
+/**
+ * `F → A` names the letter the work is worth. A category already at the target
+ * has no letter to gain, and `A → A` reads as a movement that is not there:
+ * the task is work below the grade's threshold, and the line says so.
+ */
+function gradeArrow(current: string): string {
+  return current === TARGET_GRADE ? `already ${TARGET_GRADE}` : `${current} → ${TARGET_GRADE}`
 }
 
 /**
@@ -1031,7 +1040,7 @@ const GROUND_RULES = `## Ground rules
 - Change only what a task asks for. No wholesale reformatting, renaming or restructuring — a sweep hides the fix inside it.
 - Suppressing a finding (disable comment, \`any\`, ignore entry) is not fixing it. If a rule is wrong for this repo, change the repo’s config and say so.
 - Verify before you call a task done: run its Verify command and read the grade it prints.
-- A task’s grade impact is its whole category: \`security · F → A\` means security reaches A once every security task is done, not this one alone.`
+- A task’s grade impact is its whole category: \`security · F → A\` means security reaches A once every security task is done, not this one alone. \`lint · already A\` is work the letter does not depend on.`
 
 const PR_GROUND_RULES = `- This is a PR delta: the tasks below are what *this change* introduced. Findings that were already there are not yours to fix here.
 - Findings marked ${TOUCHED_TAG} are on lines this change touched — fix those first. A new finding without the marker was caused from elsewhere in the change; it is still a regression.`
@@ -1155,13 +1164,29 @@ function findingBlock(findings: readonly Finding[], counted: readonly Finding[])
       ([file, row]) =>
         `- \`${file}\` (${plural(row.counted, 'finding')}${row.uncounted === 0 ? '' : `, ${row.uncounted} uncounted`})`,
     )
-  if (files.length > FILE_LIST_LIMIT) {
-    lines.push(`- … ${files.length - FILE_LIST_LIMIT} more files in \`report.json\`.`)
-  }
+  const cut = files.slice(FILE_LIST_LIMIT)
+  if (cut.length > 0) lines.push(overflowLine(cut))
   // The span is the counted findings' own: a file contributing nothing to the
   // number is not one of the files that number is across.
   const across = files.filter(([, row]) => row.counted > 0).length
   return [`${plural(counted.length, 'finding')} across ${plural(across, 'file')}:`, ...lines]
+}
+
+/**
+ * The line standing in for the files past {@link FILE_LIST_LIMIT}. The headline
+ * spans only the files holding counted work, so this line counts those the
+ * same way and names the uncounted-only files apart: one number for both read
+ * `27 findings across 23 files` and then `… 60 more files`, which is 75 files
+ * for a task that spans 23 — crank-health's own scan printed exactly that.
+ */
+function overflowLine(cut: readonly (readonly [string, { counted: number }])[]): string {
+  const withWork = cut.filter(([, row]) => row.counted > 0).length
+  const uncountedOnly = cut.length - withWork
+  if (uncountedOnly === 0) return `- … ${plural(withWork, 'more file')} in \`report.json\`.`
+  if (withWork === 0) {
+    return `- … ${plural(uncountedOnly, 'more file')} holding only uncounted rows, in \`report.json\`.`
+  }
+  return `- … ${plural(withWork, 'more file')} with findings, and ${uncountedOnly} holding only uncounted rows, in \`report.json\`.`
 }
 
 function footer(report: Report, total: number, shown: number): string {

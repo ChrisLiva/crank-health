@@ -232,7 +232,7 @@ describe('ranking by grade movement', () => {
    * - `packages/web` grades dead code F and records no arithmetic for it. No
    *   recorded basis, no claim: it scores zero rather than borrowing the
    *   rollup's denominator to print a movement the project cannot own.
-   * - `packages/web`'s own lint is the A → A work, behind both.
+   * - `packages/web`'s own lint is already A, behind both.
    */
   it('measures a theme against its own project’s grade and findings', () => {
     const inApi = { file: 'packages/api/api/main.py', project: 'packages/api' }
@@ -275,7 +275,7 @@ describe('ranking by grade movement', () => {
     expect(tasks.map((task) => [task.project, task.category, task.gradeImpact])).toEqual([
       ['packages/api', 'lint', 'lint · F → A'],
       ['packages/web', 'dead-code', 'dead code · F → A'],
-      ['packages/web', 'lint', 'lint · A → A'],
+      ['packages/web', 'lint', 'lint · already A'],
     ])
   })
 })
@@ -303,7 +303,7 @@ describe('what counts as a task', () => {
       findings: [makeFinding({ id: 'a' })],
     })
     expect(buildAgentTasks(report).map((task) => [task.category, task.gradeImpact])).toEqual([
-      ['lint', 'lint · A → A'],
+      ['lint', 'lint · already A'],
     ])
   })
 
@@ -749,7 +749,40 @@ describe('themed grouping', () => {
     const markdown = renderAgentMarkdown(report)
     expect(markdown).toContain('1 finding across 1 file:')
     expect(fileRows(markdown)[0]).toBe('- `src/zz.ts` (1 finding)')
-    expect(markdown).toContain('- … 6 more files in `report.json`.')
+    expect(markdown).toContain('- … 6 more files holding only uncounted rows, in `report.json`.')
+  })
+
+  /**
+   * The overflow line counts the way the headline does. `27 findings across 23
+   * files` followed by `… 60 more files` is what crank-health printed of its
+   * own tree: fifteen files shown, eight more holding counted work, and
+   * fifty-two holding only advisory rows, all summed into one number that made
+   * the task look three times its size.
+   */
+  it('counts the cut files with work apart from those holding only uncounted rows', () => {
+    const report = makeReport({
+      categories: { ...allGraded(), 'dead-code': { status: 'graded', grade: 'F' } },
+      findings: [
+        ...Array.from({ length: 20 }, (_, index) =>
+          unusedFile({ id: `g${index}`, file: `src/g${String(index).padStart(2, '0')}.ts` }),
+        ),
+        ...Array.from({ length: 20 }, (_, index) =>
+          unusedFile({
+            id: `a${index}`,
+            file: `src/a${String(index).padStart(2, '0')}.ts`,
+            gradeScope: false,
+          }),
+        ),
+      ],
+    })
+
+    const markdown = renderAgentMarkdown(report)
+    expect(markdown).toContain('20 findings across 20 files:')
+    expect(fileRows(markdown)).toHaveLength(15)
+    expect(fileRows(markdown).every((row) => row.startsWith('- `src/g'))).toBe(true)
+    expect(markdown).toContain(
+      '- … 5 more files with findings, and 20 holding only uncounted rows, in `report.json`.',
+    )
   })
 
   /**

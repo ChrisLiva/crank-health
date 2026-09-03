@@ -11,7 +11,7 @@ Grades: security A · types F · dead code F · complexity D · duplication A ·
 - Change only what a task asks for. No wholesale reformatting, renaming or restructuring — a sweep hides the fix inside it.
 - Suppressing a finding (disable comment, `any`, ignore entry) is not fixing it. If a rule is wrong for this repo, change the repo’s config and say so.
 - Verify before you call a task done: run its Verify command and read the grade it prints.
-- A task’s grade impact is its whole category: `security · F → A` means security reaches A once every security task is done, not this one alone.
+- A task’s grade impact is its whole category: `security · F → A` means security reaches A once every security task is done, not this one alone. `lint · already A` is work the letter does not depend on.
 
 ## Tasks
 

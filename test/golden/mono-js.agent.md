@@ -13,7 +13,7 @@ Grades: security not assessed · types not assessed · dead code A · complexity
 - Change only what a task asks for. No wholesale reformatting, renaming or restructuring — a sweep hides the fix inside it.
 - Suppressing a finding (disable comment, `any`, ignore entry) is not fixing it. If a rule is wrong for this repo, change the repo’s config and say so.
 - Verify before you call a task done: run its Verify command and read the grade it prints.
-- A task’s grade impact is its whole category: `security · F → A` means security reaches A once every security task is done, not this one alone.
+- A task’s grade impact is its whole category: `security · F → A` means security reaches A once every security task is done, not this one alone. `lint · already A` is work the letter does not depend on.
 
 ## Tasks
 
@@ -57,7 +57,7 @@ Verify: `npx crank-health --only format --project packages/api --fail-under A`
 
 Project: packages/api
 
-Grade impact: duplication · A → A
+Grade impact: duplication · already A
 
 - `packages/api/src/shared.js:1` `jscpd/duplicate-block` — 11 lines (124 tokens) duplicated from packages/web/src/shared.js:1-11 [advisory]
 

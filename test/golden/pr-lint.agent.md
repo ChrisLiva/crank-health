@@ -13,7 +13,7 @@ This change: 1 new finding (1 on lines it touched), 1 resolved, 1 unchanged.
 - Change only what a task asks for. No wholesale reformatting, renaming or restructuring — a sweep hides the fix inside it.
 - Suppressing a finding (disable comment, `any`, ignore entry) is not fixing it. If a rule is wrong for this repo, change the repo’s config and say so.
 - Verify before you call a task done: run its Verify command and read the grade it prints.
-- A task’s grade impact is its whole category: `security · F → A` means security reaches A once every security task is done, not this one alone.
+- A task’s grade impact is its whole category: `security · F → A` means security reaches A once every security task is done, not this one alone. `lint · already A` is work the letter does not depend on.
 - This is a PR delta: the tasks below are what *this change* introduced. Findings that were already there are not yours to fix here.
 - Findings marked [in-diff] are on lines this change touched — fix those first. A new finding without the marker was caused from elsewhere in the change; it is still a regression.
 
