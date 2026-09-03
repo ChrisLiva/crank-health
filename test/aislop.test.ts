@@ -40,7 +40,7 @@ describe('aislopRunner', () => {
       tool: 'aislop',
       category: 'lint',
       complementary: true,
-      pinnedVersion: '0.15.0',
+      pinnedVersion: '0.16.0',
       languages: ['js-ts', 'python', 'go', 'csharp'],
     })
     expect(Object.keys(aislopRunner).toSorted()).toEqual([
@@ -91,7 +91,7 @@ describe('aislopRunner.detect', () => {
     aislopRunner.detect(context(files, path))
 
   it('names both halves when the repo declares aislop and configures it', async () => {
-    await write('package.json', '{"devDependencies":{"aislop":"0.15.0"}}')
+    await write('package.json', '{"devDependencies":{"aislop":"0.16.0"}}')
     await write('.aislop/config.yml', 'version: 1\n')
 
     expect(await detect(['package.json', 'src/a.js'], '.')).toStrictEqual({
@@ -119,7 +119,7 @@ describe('aislopRunner.detect', () => {
 
   /** `peerDependencies` is one of the four blocks `detectNodeTool` reads. */
   it('is owned by a peerDependencies entry, named at the manifest', async () => {
-    await write('package.json', '{"peerDependencies":{"aislop":"0.15.0"}}')
+    await write('package.json', '{"peerDependencies":{"aislop":"0.16.0"}}')
 
     expect(await detect(['package.json', 'src/a.js'], '.')).toMatchObject({
       reason: 'dependency',
@@ -150,12 +150,12 @@ describe('aislopRunner.detect', () => {
   })
 
   it('reports the installed binary and its version off the disk', async () => {
-    await write('package.json', '{"devDependencies":{"aislop":"0.15.0"}}')
+    await write('package.json', '{"devDependencies":{"aislop":"0.16.0"}}')
     await write('node_modules/.bin/aislop', '#!/bin/sh\nexit 0\n', 0o755)
-    await write('node_modules/aislop/package.json', '{"version":"0.15.0"}')
+    await write('node_modules/aislop/package.json', '{"version":"0.16.0"}')
 
     const detection = await detect(['package.json', 'src/a.js'], '.')
-    expect(detection).toMatchObject({ reason: 'dependency', installed: true, version: '0.15.0' })
+    expect(detection).toMatchObject({ reason: 'dependency', installed: true, version: '0.16.0' })
     expect(detection?.binPath?.endsWith(join('node_modules', '.bin', 'aislop'))).toBe(true)
   })
 
@@ -164,9 +164,9 @@ describe('aislopRunner.detect', () => {
    * binary that would leave a mark gets no chance to.
    */
   it('never runs the binary it found', async () => {
-    await write('package.json', '{"devDependencies":{"aislop":"0.15.0"}}')
+    await write('package.json', '{"devDependencies":{"aislop":"0.16.0"}}')
     await write('node_modules/.bin/aislop', '#!/bin/sh\ntouch "$(dirname "$0")/SPAWNED"\n', 0o755)
-    await write('node_modules/aislop/package.json', '{"version":"0.15.0"}')
+    await write('node_modules/aislop/package.json', '{"version":"0.16.0"}')
 
     await detect(['package.json', 'src/a.js'], '.')
     expect(await exists(join(root, 'node_modules', '.bin', 'SPAWNED'))).toBe(false)
@@ -269,7 +269,7 @@ describe('aislopRunner.run before it runs anything', () => {
 })
 
 /** Real `aislop scan --json` output over the js-aislop-owned fixture. */
-const CAPTURED = fileURLToPath(new URL('./captured/aislop-0.15.0.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/aislop-0.16.0.json', import.meta.url))
 
 /**
  * The invocation and every way the process can end, against a planted aislop
@@ -294,7 +294,7 @@ describe('aislopRunner.run against a planted aislop', () => {
     scratch = await mkdtemp(join(tmpdir(), 'crank-aislop-scratch-'))
     binPath = join(root, 'node_modules', '.bin', 'aislop')
     await mkdir(dirname(binPath), { recursive: true })
-    await writeFile(join(root, 'package.json'), '{"devDependencies":{"aislop":"0.15.0"}}')
+    await writeFile(join(root, 'package.json'), '{"devDependencies":{"aislop":"0.16.0"}}')
     // The real fixture sources, so the anchors read the lines the capture names.
     await cp(FIXTURE_SRC, join(root, 'src'), { recursive: true })
   })
@@ -358,7 +358,7 @@ describe('aislopRunner.run against a planted aislop', () => {
       'ai-slop/swallowed-exception',
     ])
     expect(result.findings.every((finding) => finding.tool === 'aislop')).toBe(true)
-    expect(result.toolVersion).toBe('0.15.0')
+    expect(result.toolVersion).toBe('0.16.0')
     expect(result.configOwned).toBe(false)
     expect(result.rawFiles.map((file) => basename(file))).toEqual(['aislop.json'])
     // The payload reaches `raw/` unaltered, but for the trailing newline execa
@@ -556,7 +556,7 @@ const SCAN_TIMEOUT_MS = 180_000
 /**
  * The whole journey, from a repo that owns aislop to the row and the findings
  * `report.json` carries. What the planted-binary describe above cannot reach is
- * here: detection, the ephemeral fetch of the pinned 0.15.0, and the two lifts
+ * here: detection, the ephemeral fetch of the pinned 0.16.0, and the two lifts
  * the repo's config asks for.
  */
 describe('quick scan of a repo that owns aislop', () => {
@@ -582,7 +582,7 @@ describe('quick scan of a repo that owns aislop', () => {
     expect(scan.report.tools.find((tool) => tool.tool === 'aislop')).toMatchObject({
       execution: 'ephemeral-pinned',
       provenance: 'repo-config',
-      version: '0.15.0',
+      version: '0.16.0',
       state: 'ok',
       reason:
         "engine selection is crank-health's; rules, exclude and include come from .aislop/config.yml",

@@ -18,6 +18,7 @@
       },
       "format": "javascript",
       "fragment": "export function summarize(rows) {\n  const out = [];\n  for (const row of rows) {\n    if (row.active && row.score > 10) {\n      out.push({ id: row.id, score: row.score * 2, label: row.label.trim() });\n    } else if (row.score > 5) {\n      out.push({ id: row.id, score: row.score, label: row.label.trim() });\n    }\n  }\n  return out;\n}",
+      "isNew": false,
       "lines": 11,
       "secondFile": {
         "end": 11,
@@ -38,7 +39,7 @@
     }
   ],
   "statistics": {
-    "detectionDate": "2026-08-28T13:07:10.144Z",
+    "detectionDate": "2026-09-03T17:04:12.793Z",
     "formats": {
       "javascript": {
         "clones": 1,

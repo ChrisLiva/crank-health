@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `ee198602b690ae80ec9418e9377f8fd590a7f303` · crank-health 0.15.1 · quick profile
+`<repo>` @ `ee198602b690ae80ec9418e9377f8fd590a7f303` · crank-health 0.16.0 · quick profile
 
 ## Grades
 
@@ -40,9 +40,9 @@
 | bandit | ok | [default-config] | 1.9.4 | — |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
-| opengrep | not available | [default-config] | — (pinned 1.28.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
+| opengrep | not available | [default-config] | — (pinned 1.29.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected |
 | osv-scanner | not available | [default-config] | — (pinned 2.5.1) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
-| zizmor | ok | [default-config] | 1.29.0 | — |
+| zizmor | ok | [default-config] | 1.30.0 | — |
 
 **Findings** (5)
 
@@ -72,7 +72,7 @@ Nothing counted toward the grade.
 | --- | --- | --- | --- | --- |
 | pyright | not available | [default-config] | — (pinned 1.1.411) | standing down: this project has no virtualenv, so ty type-checks it |
 | tsc | not available | [default-config] | — (pinned 7.0.2) | no tsconfig.json and no TypeScript sources — nothing owns the types category |
-| ty | ok | [default-config] | 0.0.75 | — |
+| ty | ok | [default-config] | 0.0.78 | — |
 
 Evidence: [raw/root/ty.gitlab.json](raw/root/ty.gitlab.json)
 
@@ -82,8 +82,8 @@ Nothing counted toward the grade.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-dead-code | ok | [default-config] | 3.20.0 | — |
-| knip | ok | [default-config] | 6.32.3 | — |
+| fallow-dead-code | ok | [default-config] | 3.22.0 | — |
+| knip | ok | [default-config] | 6.34.0 | — |
 | vulture | ok | [default-config] | 2.16 | — |
 
 Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [raw/root/fallow-dead-code.stderr.txt](raw/root/fallow-dead-code.stderr.txt) · [raw/root/knip.json](raw/root/knip.json)
@@ -95,7 +95,7 @@ Evidence: [raw/root/fallow-dead-code.json](raw/root/fallow-dead-code.json) · [r
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | complexipy | ok | [default-config] | 7.0.1 | — |
-| fallow-health | ok | [default-config] | 3.20.0 | — |
+| fallow-health | ok | [default-config] | 3.22.0 | — |
 | fta | ok | [default-config] | 3.0.1 | — |
 
 **Advisory findings** (2) — reported, not counted toward the grade: 2 × `fallow-health` `fallow/complexity`.
@@ -111,7 +111,7 @@ Evidence: [raw/root/complexipy.json](raw/root/complexipy.json) · [raw/root/comp
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.16 | — |
+| jscpd | ok | [default-config] | 5.1.2 | — |
 
 **Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
@@ -126,10 +126,10 @@ Evidence: [raw/root/jscpd-report.json](raw/root/jscpd-report.json)
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| aislop | ok | [default-config] | 0.15.0 | — |
-| oxlint | ok | [default-config] | 1.80.0 | — |
-| react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected |
-| ruff-lint | ok | [default-config] | 0.16.5 | — |
+| aislop | ok | [default-config] | 0.16.0 | — |
+| oxlint | ok | [default-config] | 1.81.0 | — |
+| react-doctor | not available | [default-config] | — (pinned 0.9.13) | no React dependency detected |
+| ruff-lint | ok | [default-config] | 0.16.6 | — |
 
 **Findings** (1)
 
@@ -144,7 +144,7 @@ Evidence: [raw/root/aislop.json](raw/root/aislop.json) · [raw/root/oxlint.sarif
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | prettier | ok | [default-config] | 3.9.6 | — |
-| ruff-format | ok | [default-config] | 0.16.5 | — |
+| ruff-format | ok | [default-config] | 0.16.6 | — |
 
 Evidence: [raw/root/ruff-format.json](raw/root/ruff-format.json)
 

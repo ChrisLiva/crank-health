@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "mode": "full",
   "reactDetected": true,
-  "version": "0.9.12",
+  "version": "0.9.13",
   "ok": true,
   "directory": "/Users/chris/crank-analysis/test/fixtures/js-react",
   "diff": null,
@@ -35,6 +35,12 @@
         "hasReactCompilerLintPlugin": false,
         "hasTanStackQuery": false,
         "hasI18nLibrary": false,
+        "hasRadixUi": false,
+        "hasBaseUi": false,
+        "hasReactAriaComponents": false,
+        "hasTanstackTable": false,
+        "hasTanstackVirtual": false,
+        "hasTanstackForm": false,
         "tanstackQueryVersion": null,
         "styledComponentsVersion": null,
         "valtioVersion": null,
@@ -61,6 +67,7 @@
         "shopifyFlashListMajorVersion": null,
         "hasReanimated": false,
         "reanimatedVersion": null,
+        "hasShadcnUi": false,
         "isPreES2023Target": false,
         "isStaticExport": false,
         "sourceFileCount": 3
@@ -136,7 +143,7 @@
       "analyzedFileCount": 3,
       "complete": true,
       "scannedFileCount": 3,
-      "elapsedMilliseconds": 17004.15025
+      "elapsedMilliseconds": 1259.53575
     }
   ],
   "diagnostics": [
@@ -208,6 +215,6 @@
     "score": null,
     "scoreLabel": null
   },
-  "elapsedMilliseconds": 17010.07125,
+  "elapsedMilliseconds": 1266.166,
   "error": null
 }

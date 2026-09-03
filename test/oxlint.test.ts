@@ -13,13 +13,13 @@ import type { DetectContext } from '../src/core/types.ts'
  * real oxlint output; regenerate it whenever the manifest pins a new version.
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/oxlint-1.80.0.sarif.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/oxlint-1.81.0.sarif.json', import.meta.url))
 
 describe('parseSarif', () => {
   it('reads rule id, category, level, message and range from real output', async () => {
     const report = parseSarif(await readFile(CAPTURED, 'utf8'))
 
-    expect(report.version).toBe('1.80.0')
+    expect(report.version).toBe('1.81.0')
     // Document order, exactly as captured — oxlint lints files in parallel, so
     // this order is not meaningful; `toPendingFindings` is what sorts it.
     expect(report.results).toEqual([
@@ -33,17 +33,6 @@ describe('parseSarif', () => {
         startCol: 3,
         endLine: 6,
         endCol: 24,
-      },
-      {
-        ruleId: 'eslint(no-dupe-keys)',
-        ruleCategory: 'correctness',
-        level: 'error',
-        message: "Duplicate key 'home'",
-        file: 'src/dupe-keys.js',
-        startLine: 2,
-        startCol: 3,
-        endLine: 2,
-        endCol: 7,
       },
       {
         ruleId: 'eslint(no-const-assign)',
@@ -66,6 +55,17 @@ describe('parseSarif', () => {
         startCol: 7,
         endLine: 2,
         endCol: 10,
+      },
+      {
+        ruleId: 'eslint(no-dupe-keys)',
+        ruleCategory: 'correctness',
+        level: 'error',
+        message: "Duplicate key 'home'",
+        file: 'src/dupe-keys.js',
+        startLine: 2,
+        startCol: 3,
+        endLine: 2,
+        endCol: 7,
       },
     ])
   })

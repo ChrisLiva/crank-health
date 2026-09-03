@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `1624281eaabc18eb08af09502955981d65aa1ca4` · crank-health 0.15.1 · quick profile
+`<repo>` @ `1624281eaabc18eb08af09502955981d65aa1ca4` · crank-health 0.16.0 · quick profile
 
 ## Grades
 
@@ -29,9 +29,9 @@ Not graded: gitleaks is not on PATH — install it (brew install gitleaks, or se
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | govulncheck | not available | [default-config] | — (pinned v1.7.0) | no go.mod in this repo, so govulncheck assessed no Go dependencies |
-| opengrep | not available | [default-config] | — (pinned 1.28.0) | no JavaScript, TypeScript or Python files, so opengrep assessed nothing |
+| opengrep | not available | [default-config] | — (pinned 1.29.0) | no JavaScript, TypeScript or Python files, so opengrep assessed nothing |
 | osv-scanner | not available | [default-config] | — (pinned 2.5.1) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
-| zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
+| zizmor | not available | [default-config] | — (pinned 1.30.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
 ## types — not assessed
 
@@ -51,7 +51,7 @@ Not graded: not assessed — run `--deep`
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.16 | — |
+| jscpd | ok | [default-config] | 5.1.2 | — |
 
 **Advisory findings** (1) — reported, not counted toward the grade: 1 × `jscpd` `jscpd/duplicate-block`.
 
@@ -66,7 +66,7 @@ Nothing counted toward the grade.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| aislop | ok | [default-config] | 0.15.0 | — |
+| aislop | ok | [default-config] | 0.16.0 | — |
 
 Evidence: [raw/root/aislop.json](raw/root/aislop.json)
 

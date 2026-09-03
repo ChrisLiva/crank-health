@@ -23,7 +23,7 @@ import {
  * all advisory. Re-capture it when the pin moves.
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/react-doctor-0.9.12.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/react-doctor-0.9.13.json', import.meta.url))
 
 const captured = (): Promise<string> => readFile(CAPTURED, 'utf8')
 

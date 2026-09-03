@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1",
-  "cliVersion": "0.15.0",
-  "version": "0.15.0",
+  "cliVersion": "0.16.0",
+  "version": "0.16.0",
   "score": 56,
   "label": "Needs Work",
   "scoreable": true,
@@ -15,7 +15,7 @@
     "ai-slop": {
       "issues": 5,
       "skipped": false,
-      "elapsed": 19.98837500000002
+      "elapsed": 17.708416999999997
     }
   },
   "engineDefinitions": {
@@ -200,6 +200,6 @@
     "warnings": 1,
     "fixable": 1,
     "files": 2,
-    "elapsed": "21ms"
+    "elapsed": "18ms"
   }
 }

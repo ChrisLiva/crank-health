@@ -12,12 +12,12 @@ import type { RunContext } from '../src/core/types.ts'
 import { makeProject } from './factories.ts'
 
 /**
- * coverage.py wrapper: the captured `coverage json` a real 7.15.4 run produced,
+ * coverage.py wrapper: the captured `coverage json` a real 7.16.0 run produced,
  * and the rule that coverage is context — advisory findings in a PR, a metric
  * always, and never a grade (spec §3 grades test quality on mutation score).
  */
 
-const CAPTURED = fileURLToPath(new URL('./captured/coverage-7.15.4.json', import.meta.url))
+const CAPTURED = fileURLToPath(new URL('./captured/coverage-7.16.0.json', import.meta.url))
 
 const CONTEXT: RunContext = {
   repoRoot: '/repo',

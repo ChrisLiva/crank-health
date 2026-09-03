@@ -59,7 +59,7 @@ export async function systemToolVersion(
   const execution = await execTool(systemCommand(spec.binary, spec.versionArgs), { cwd, timeoutMs })
   if (execution.failure !== undefined) return undefined
   const line = firstLine(execution.stdout) || firstLine(execution.stderr)
-  // gitleaks prints `8.30.1`, opengrep `1.28.0`, osv-scanner
+  // gitleaks prints `8.30.1`, opengrep `1.29.0`, osv-scanner
   // `osv-scanner version: 2.4.0` — take the first dotted number either way.
   return /\d+\.\d+\.\d+\S*/.exec(line)?.[0]
 }

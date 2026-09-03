@@ -231,6 +231,52 @@
               "verbatim_path": "/repo/.github/workflows/ci.yml"
             }
           },
+          "annotation": "this step",
+          "route": {
+            "route": [
+              {
+                "Key": "jobs"
+              },
+              {
+                "Key": "build"
+              },
+              {
+                "Key": "steps"
+              },
+              {
+                "Index": 0
+              }
+            ]
+          },
+          "feature_kind": "Normal",
+          "kind": "Hidden"
+        },
+        "concrete": {
+          "location": {
+            "start_point": {
+              "row": 7,
+              "column": 8
+            },
+            "end_point": {
+              "row": 9,
+              "column": 56
+            },
+            "offset_span": {
+              "start": 97,
+              "end": 193
+            }
+          },
+          "feature": "uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}",
+          "comments": []
+        }
+      },
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "verbatim_path": "/repo/.github/workflows/ci.yml"
+            }
+          },
           "annotation": "action is not pinned to a hash (required by blanket policy)",
           "route": {
             "route": [

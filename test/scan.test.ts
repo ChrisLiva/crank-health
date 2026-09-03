@@ -176,8 +176,8 @@ describe('quick scan of the js-basic fixture', () => {
       state: 'ok',
       execution: 'ephemeral-pinned',
       provenance: 'default-config',
-      version: '0.15.0',
-      pinned: '0.15.0',
+      version: '0.16.0',
+      pinned: '0.16.0',
       detection: null,
       raw: ['raw/root/aislop.json'],
     })
@@ -222,7 +222,7 @@ describe('quick scan of the js-basic fixture', () => {
       state: 'not-available',
       reason: 'no React dependency detected',
       version: null,
-      pinned: '0.9.12',
+      pinned: '0.9.13',
       execution: 'ephemeral-pinned',
       provenance: 'default-config',
       raw: [],
@@ -690,7 +690,7 @@ describe('quick scan of a repo that owns oxlint but has not installed it', () =>
           tool: 'oxlint',
           execution: 'ephemeral-pinned',
           provenance: 'repo-config',
-          version: '1.80.0',
+          version: '1.81.0',
           state: 'ok',
           detection: {
             reason: 'config+dependency',

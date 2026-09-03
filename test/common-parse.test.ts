@@ -125,7 +125,7 @@ describe('parseGitleaksReport', () => {
 
 describe('parseOpengrepJson', () => {
   it('reads rule, range, severity and message from real scan output', async () => {
-    expect(parseOpengrepJson(await read('opengrep-1.28.0.json'))).toEqual([
+    expect(parseOpengrepJson(await read('opengrep-1.29.0.json'))).toEqual([
       {
         rule: 'python-subprocess-shell-true',
         file: '/repo/src/config.py',
@@ -169,7 +169,7 @@ describe('parseOpengrepJson', () => {
   it('maps ERROR/WARNING/INFO onto our severities and grades them all', async () => {
     const findings = toOpengrepFindings(
       [
-        ...parseOpengrepJson(await read('opengrep-1.28.0.json')),
+        ...parseOpengrepJson(await read('opengrep-1.29.0.json')),
         // The capture holds only ERROR matches, so the other two tiers are
         // built here — the mapping is what this test is about.
         {
@@ -208,7 +208,7 @@ describe('parseOpengrepJson', () => {
 
 describe('parseZizmorJson', () => {
   it('reads audit, severity, route and one-based location from real output', async () => {
-    const findings = parseZizmorJson(await read('zizmor-1.29.0.json'), '/repo')
+    const findings = parseZizmorJson(await read('zizmor-1.30.0.json'), '/repo')
     expect(
       findings.map((finding) => [
         finding.ident,
@@ -234,7 +234,7 @@ describe('parseZizmorJson', () => {
 
   it('maps High to error and Medium to warning, and anchors on the document route', async () => {
     const findings = toZizmorFindings(
-      parseZizmorJson(await read('zizmor-1.29.0.json'), '/repo'),
+      parseZizmorJson(await read('zizmor-1.30.0.json'), '/repo'),
       false,
     )
     expect(findings.map((finding) => [finding.rule, finding.severity, finding.anchor])).toEqual([
@@ -473,7 +473,7 @@ describe('raw evidence sanitizing', () => {
   })
 
   it('drops opengrep’s matched lines and keeps everything else', async () => {
-    const sanitized = sanitizeOpengrepRaw(await read('opengrep-1.28.0.json'))
+    const sanitized = sanitizeOpengrepRaw(await read('opengrep-1.29.0.json'))
 
     expect(sanitized).not.toContain('shell=True)')
     expect(sanitized).toContain('"lines": "<omitted>"')
@@ -768,7 +768,7 @@ function idAt(findings: readonly Finding[], where: string | number): string | un
 
 describe('parseJscpdReport', () => {
   it('reads clone pairs and the token percentage from a real report', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.16.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.1.2.json'), '/repo')
     expect(report.duplicationPercent).toBeCloseTo(45.491_803_278_688_52)
     expect(report.clones).toEqual([
       {
@@ -796,7 +796,7 @@ describe('parseJscpdReport', () => {
    * carries it is the one `byLocation` orders first of the two.
    */
   it('reports a clone pair as one advisory finding anchored on the twin', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.16.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.1.2.json'), '/repo')
     const findings = toJscpdFindings(report.clones)
     expect(findings.map((finding) => [finding.file, finding.anchor])).toEqual([
       ['src/handler.js', 'src/report.js'],
@@ -810,7 +810,7 @@ describe('parseJscpdReport', () => {
 
   /** The pair is one finding, so the survivor has to carry the twin's location. */
   it('names the twin’s file and line range in the surviving finding’s message', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.16.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.1.2.json'), '/repo')
     const [finding] = toJscpdFindings(report.clones)
     expect(finding?.message).toBe('11 lines (111 tokens) duplicated from src/report.js:1-11')
   })
@@ -821,7 +821,7 @@ describe('parseJscpdReport', () => {
    * upgrade sees one finding resolved, not two findings replaced by one.
    */
   it('keeps a cross-file survivor’s id byte-identical to the id that side carried alone', async () => {
-    const report = parseJscpdReport(await readAsJson('jscpd-5.0.16.json'), '/repo')
+    const report = parseJscpdReport(await readAsJson('jscpd-5.1.2.json'), '/repo')
     const clone = report.clones.at(0)
     if (clone === undefined) throw new Error('the capture holds no clone')
 
@@ -930,7 +930,7 @@ function identified(finding: Omit<Finding, 'id'> & { readonly anchor?: string })
 
 describe('parseAislopJson', () => {
   it('reads schema version, engines, file count and every diagnostic from real output', async () => {
-    const payload = parseAislopJson(await read('aislop-0.15.0.json'))
+    const payload = parseAislopJson(await read('aislop-0.16.0.json'))
     expect(
       payload.diagnostics.map((diagnostic) => [
         diagnostic.filePath,
@@ -947,7 +947,7 @@ describe('parseAislopJson', () => {
       ['src/index.js', 'ai-slop/hallucinated-import', 'error', 3, 1],
     ])
     expect(payload.schemaVersion).toBe('1')
-    expect(payload.version).toBe('0.15.0')
+    expect(payload.version).toBe('0.16.0')
     expect(payload.engines).toEqual({ 'ai-slop': { skipped: false } })
     expect(payload.filesScanned).toBe(2)
   })
@@ -979,7 +979,7 @@ describe('parseAislopJson', () => {
 
 describe('the captured aislop payload', () => {
   /**
-   * The thirteen keys a live 0.15.0 diagnostic carries, plus the optional
+   * The thirteen keys a live 0.16.0 diagnostic carries, plus the optional
    * `detail`. A bump that adds a source-excerpt field fails here, and the fix
    * is `sanitizeRawResults(stdout, 'diagnostics', …)` (`support.ts:239`) before
    * the raw output reaches the run dir, where nothing may quote a credential.
@@ -1048,7 +1048,7 @@ describe('payloadFailure', () => {
   })
 
   it('accepts the captured payload', async () => {
-    expect(payloadFailure(parseAislopJson(await read('aislop-0.15.0.json')), 2)).toBeUndefined()
+    expect(payloadFailure(parseAislopJson(await read('aislop-0.16.0.json')), 2)).toBeUndefined()
   })
 })
 
@@ -1210,5 +1210,5 @@ interface AislopCapture {
 }
 
 async function aislopCapture(): Promise<AislopCapture> {
-  return (await readAsJson('aislop-0.15.0.json')) as AislopCapture
+  return (await readAsJson('aislop-0.16.0.json')) as AislopCapture
 }

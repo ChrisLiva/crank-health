@@ -495,7 +495,7 @@ removed is labeled as such — so deleting a package never reads as the best wor
 
 Same crank-health version + same commit + same repo toolchain ⇒ byte-identical `report.json`, apart
 from the `timings` block and the repo's absolute path. Every ephemeral tool is pinned to an exact
-version in a per-release manifest (`npx --yes oxlint@1.80.0`, `uvx --quiet ruff@0.16.5`) — never
+version in a per-release manifest (`npx --yes oxlint@1.81.0`, `uvx --quiet ruff@0.16.6`) — never
 `@latest`, never a range. Repo-owned tools run at your installed version, and every resolved version
 is recorded in the report. The fetchers are told to stay quiet — and `go`, which has no such switch,
 has its `go: downloading …` narration filtered out — so the first run on a cold tool cache records

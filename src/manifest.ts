@@ -11,20 +11,20 @@
  * bump and it must come with re-captured parse fixtures under `test/captured/`.
  */
 const TOOL_MANIFEST = {
-  oxlint: '1.80.0',
+  oxlint: '1.81.0',
   eslint: '10.9.1',
-  '@biomejs/biome': '2.5.11',
+  '@biomejs/biome': '2.5.12',
   prettier: '3.9.6',
   typescript: '7.0.2',
-  fallow: '3.20.0',
-  knip: '6.32.3',
+  fallow: '3.22.0',
+  knip: '6.34.0',
   'fta-cli': '3.0.1',
-  jscpd: '5.0.16',
+  jscpd: '5.1.2',
   // Modified-MIT license: forbids ML-training use and hosted resale, accepted
   // for scanner use. Releases daily, so this pin goes stale fast — bumping it
   // is a crank-health version bump with re-captured fixtures, per the header.
-  'react-doctor': '0.9.12',
-  aislop: '0.15.0',
+  'react-doctor': '0.9.13',
+  aislop: '0.16.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -36,14 +36,14 @@ const TOOL_MANIFEST = {
  * here and its parser is tested against captured bytes.
  */
 const PYTHON_TOOL_MANIFEST = {
-  ruff: '0.16.5',
-  ty: '0.0.75',
+  ruff: '0.16.6',
+  ty: '0.0.78',
   pyright: '1.1.411',
   mypy: '2.3.1',
   vulture: '2.16',
   complexipy: '7.0.1',
   bandit: '1.9.4',
-  zizmor: '1.29.0',
+  zizmor: '1.30.0',
 } as const satisfies Readonly<Record<string, string>>
 
 /**
@@ -103,7 +103,7 @@ const GO_TOOL_MANIFEST = {
 const SYSTEM_TOOL_MANIFEST = {
   dotnet: '10.0.203',
   gitleaks: '8.30.1',
-  opengrep: '1.28.0',
+  opengrep: '1.29.0',
   'osv-scanner': '2.5.1',
 } as const satisfies Readonly<Record<string, string>>
 
@@ -128,7 +128,7 @@ const SYSTEM_TOOL_MANIFEST = {
 const REPO_TOOL_MANIFEST = {
   '@stryker-mutator/core': '10.0.0',
   'cosmic-ray': '8.7.0',
-  coverage: '7.15.4',
+  coverage: '7.16.0',
   'dotnet-stryker': '4.16.0',
 } as const satisfies Readonly<Record<string, string>>
 
@@ -171,7 +171,7 @@ export function pinnedVersion(tool: PinnedTool): string {
 }
 
 /**
- * The `name@version` spec for an ephemeral install, e.g. `oxlint@1.80.0`.
+ * The `name@version` spec for an ephemeral install, e.g. `oxlint@1.81.0`.
  * Pass this to `npx --yes`, never a bare name.
  */
 export function pinnedSpec(tool: PinnedTool): string {
@@ -198,7 +198,7 @@ export function pinnedPythonVersion(tool: PinnedPythonTool): string {
 }
 
 /**
- * The `name@version` spec `uvx` resolves, e.g. `ruff@0.16.5`. `uvx` reads the
+ * The `name@version` spec `uvx` resolves, e.g. `ruff@0.16.6`. `uvx` reads the
  * `@` form as an exact pin; the `==` form is only needed when the command name
  * differs from the distribution name (see
  * {@link import('./core/exec.ts').uvxCommand}).

@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `f389aa7331d4f802ed030124af51109abf22c9d6` · crank-health 0.15.1 · quick profile
+`<repo>` @ `f389aa7331d4f802ed030124af51109abf22c9d6` · crank-health 0.16.0 · quick profile
 
 ## Grades
 
@@ -78,9 +78,9 @@ Nothing counted toward the grade.
 | bandit | not available | [default-config] | — (pinned 1.9.4) | no Python files, so bandit assessed nothing (services/web) |
 | gitleaks | not available | [default-config] | — (pinned 8.30.1) | gitleaks is not on PATH — install it (brew install gitleaks, or see https://github.com/gitleaks/gitleaks#installing) to assess this, or leave it out and the rest of the scan is unaffected |
 | govulncheck | error | [default-config] | — (pinned v1.7.0) | govulncheck analyzed nothing in services/go-api (exit 1): govulncheck: no packages matched the provided patterns |
-| opengrep | not available | [default-config] | — (pinned 1.28.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (services/api, services/web) |
+| opengrep | not available | [default-config] | — (pinned 1.29.0) | opengrep is not on PATH — install it (brew install opengrep, or see https://github.com/opengrep/opengrep#installation) to assess this, or leave it out and the rest of the scan is unaffected (services/api, services/web) |
 | osv-scanner | not available | [default-config] | — (pinned 2.5.1) | osv-scanner is not on PATH — install it (brew install osv-scanner, or see https://google.github.io/osv-scanner/installation/) to assess this, or leave it out and the rest of the scan is unaffected |
-| zizmor | not available | [default-config] | — (pinned 1.29.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
+| zizmor | not available | [default-config] | — (pinned 1.30.0) | no GitHub Actions workflows or composite actions, so zizmor assessed nothing |
 
 Evidence: [raw/services/api/bandit.json](raw/services/api/bandit.json) · [raw/repo/govulncheck-services-go-api.json](raw/repo/govulncheck-services-go-api.json) · [raw/repo/govulncheck-services-go-api.stderr.txt](raw/repo/govulncheck-services-go-api.stderr.txt)
 
@@ -92,7 +92,7 @@ Evidence: [raw/services/api/bandit.json](raw/services/api/bandit.json) · [raw/r
 | --- | --- | --- | --- | --- |
 | pyright | not available | [default-config] | — (pinned 1.1.411) | standing down: this project has no virtualenv, so ty type-checks it (services/api) |
 | tsc | not available | [default-config] | — (pinned 7.0.2) | no tsconfig.json and no TypeScript sources — nothing owns the types category (services/web) |
-| ty | ok | [default-config] | 0.0.75 | (services/api) |
+| ty | ok | [default-config] | 0.0.78 | (services/api) |
 
 **Findings** (1)
 
@@ -106,8 +106,8 @@ Nothing counted toward the grade.
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| fallow-dead-code | ok | [default-config] | 3.20.0 | (services/web) |
-| knip | ok | [default-config] | 6.32.3 | (services/web) |
+| fallow-dead-code | ok | [default-config] | 3.22.0 | (services/web) |
+| knip | ok | [default-config] | 6.34.0 | (services/web) |
 | vulture | ok | [default-config] | 2.16 | (services/api) |
 
 Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-code.json) · [raw/services/web/fallow-dead-code.stderr.txt](raw/services/web/fallow-dead-code.stderr.txt) · [raw/services/web/knip.json](raw/services/web/knip.json)
@@ -119,7 +119,7 @@ Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | complexipy | ok | [default-config] | 7.0.1 | (services/api) |
-| fallow-health | ok | [default-config] | 3.20.0 | (services/web) |
+| fallow-health | ok | [default-config] | 3.22.0 | (services/web) |
 | fta | ok | [default-config] | 3.0.1 | (services/web) |
 
 Evidence: [raw/services/api/complexipy.json](raw/services/api/complexipy.json) · [raw/services/api/complexipy.sarif.json](raw/services/api/complexipy.sarif.json) · [raw/services/web/fallow-health.json](raw/services/web/fallow-health.json) · [raw/services/web/fallow-health.stderr.txt](raw/services/web/fallow-health.stderr.txt) · [raw/services/web/fta.json](raw/services/web/fta.json)
@@ -130,7 +130,7 @@ Evidence: [raw/services/api/complexipy.json](raw/services/api/complexipy.json) �
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| jscpd | ok | [default-config] | 5.0.16 | — |
+| jscpd | ok | [default-config] | 5.1.2 | — |
 
 Evidence: [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json) · [raw/services/api/jscpd-report.json](raw/services/api/jscpd-report.json) · [raw/services/web/jscpd-report.json](raw/services/web/jscpd-report.json)
 
@@ -140,10 +140,10 @@ Evidence: [raw/repo/jscpd-report.json](raw/repo/jscpd-report.json) · [raw/servi
 
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
-| aislop | ok | [default-config] | 0.15.0 | (services/api, services/web) |
-| oxlint | ok | [default-config] | 1.80.0 | (services/web) |
-| react-doctor | not available | [default-config] | — (pinned 0.9.12) | no React dependency detected (services/web) |
-| ruff-lint | ok | [default-config] | 0.16.5 | (services/api) |
+| aislop | ok | [default-config] | 0.16.0 | (services/api, services/web) |
+| oxlint | ok | [default-config] | 1.81.0 | (services/web) |
+| react-doctor | not available | [default-config] | — (pinned 0.9.13) | no React dependency detected (services/web) |
+| ruff-lint | ok | [default-config] | 0.16.6 | (services/api) |
 
 **Findings** (2)
 
@@ -160,7 +160,7 @@ Evidence: [raw/services/api/aislop.json](raw/services/api/aislop.json) · [raw/s
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | prettier | ok | [default-config] | 3.9.6 | (services/web) |
-| ruff-format | ok | [default-config] | 0.16.5 | (services/api) |
+| ruff-format | ok | [default-config] | 0.16.6 | (services/api) |
 
 Evidence: [raw/services/api/ruff-format.json](raw/services/api/ruff-format.json)
 
