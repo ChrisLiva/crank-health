@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { languageOf } from '../../core/discover.ts'
 import { execTool, systemCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   Language,
@@ -100,10 +101,7 @@ export const opengrepRunner: ToolRunner = {
 }
 
 async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
-  const sources = ctx.files.filter((file) => {
-    const language = languageOf(file)
-    return language !== undefined && OPENGREP_LANGUAGES.includes(language)
-  })
+  const sources = scannableSources(ctx.files)
   if (sources.length === 0) {
     return {
       state: 'not-available',
@@ -132,28 +130,8 @@ async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
       { cwd: ctx.scratch, timeoutMs: ctx.timeoutMs },
     )
 
-    // Nothing is staged for a process that never started: an empty
-    // `opengrep.json` next to the report would read as "scanned, found
-    // nothing", which is the opposite of `not-available`.
-    if (execution.stdout.trim().length > 0) {
-      // Sanitized before it is staged; see {@link sanitizeRawJson}.
-      // eslint-disable-next-line no-await-in-loop
-      const staged = await writeScratchRaw(
-        ctx.scratch,
-        `opengrep${suffix}.json`,
-        sanitizeRawJson(execution.stdout),
-      )
-      rawFiles.push(staged)
-    }
-    if (execution.stderr.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const stderr = await writeScratchRaw(
-        ctx.scratch,
-        `opengrep${suffix}.stderr.txt`,
-        execution.stderr,
-      )
-      rawFiles.push(stderr)
-    }
+    // eslint-disable-next-line no-await-in-loop
+    rawFiles.push(...(await stageBatchOutput(ctx.scratch, suffix, execution)))
 
     if (execution.failure !== undefined) {
       return failed(explainMissing(OPENGREP, execution.failure), rawFiles)
@@ -166,11 +144,7 @@ async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
         state: 'error',
         findings: [],
         rawFiles,
-        reason:
-          `could not parse opengrep output (exit ${execution.exitCode ?? 'signal'}): ` +
-          `${errorMessage(error)}${
-            execution.stderr.trim().length === 0 ? '' : ` — ${firstLine(execution.stderr)}`
-          }`,
+        reason: parseFailureReason(execution, error),
       }
     }
   }
@@ -186,6 +160,47 @@ async function runOpengrep(ctx: RunContext): Promise<ToolResult> {
     ...(version === undefined ? {} : { toolVersion: version }),
     rawFiles,
   }
+}
+
+/** The inventory paths crank-health's opengrep ruleset covers. */
+function scannableSources(files: readonly string[]): string[] {
+  return files.filter((file) => {
+    const language = languageOf(file)
+    return language !== undefined && OPENGREP_LANGUAGES.includes(language)
+  })
+}
+
+/**
+ * Stages one batch's report and stderr, in that order, and answers with the
+ * paths. Nothing is staged for a process that never started: an empty
+ * `opengrep.json` next to the report would read as "scanned, found nothing",
+ * which is the opposite of `not-available`. The report is sanitized before it
+ * is staged; see {@link sanitizeRawJson}.
+ */
+async function stageBatchOutput(
+  scratch: string,
+  suffix: string,
+  execution: ToolExecution,
+): Promise<string[]> {
+  const staged: string[] = []
+  if (execution.stdout.trim().length > 0) {
+    staged.push(
+      await writeScratchRaw(scratch, `opengrep${suffix}.json`, sanitizeRawJson(execution.stdout)),
+    )
+  }
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, `opengrep${suffix}.stderr.txt`, execution.stderr))
+  }
+  return staged
+}
+
+/** Why a batch's report could not be read, with the exit code and stderr it came with. */
+function parseFailureReason(execution: ToolExecution, error: unknown): string {
+  const detail = execution.stderr.trim().length === 0 ? '' : ` — ${firstLine(execution.stderr)}`
+  return (
+    `could not parse opengrep output (exit ${execution.exitCode ?? 'signal'}): ` +
+    `${errorMessage(error)}${detail}`
+  )
 }
 
 /**

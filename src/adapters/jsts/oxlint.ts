@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolCommand, ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
@@ -113,10 +114,7 @@ async function runOxlint(ctx: RunContext): Promise<ToolResult> {
 
   const useRepoConfig = ctx.detection !== null
   const configArgs = useRepoConfig ? [] : await materializeDefaultConfig(ctx.scratch)
-  const command =
-    ctx.detection?.installed === true && ctx.detection.binPath !== undefined
-      ? repoCommand(ctx.detection.binPath, [])
-      : ephemeralCommand(OXLINT_PACKAGE, [])
+  const command = oxlintCommand(ctx.detection)
 
   const batches = batchFiles(ctx.files)
   const pending: PendingFinding[] = []
@@ -136,21 +134,12 @@ async function runOxlint(ctx: RunContext): Promise<ToolResult> {
     // eslint-disable-next-line no-await-in-loop
     rawFiles.push(...(await stageRaw(ctx.scratch, suffix, execution.stdout, execution.stderr)))
 
-    if (execution.failure !== undefined) {
-      return failed(execution.failure, rawFiles)
-    }
+    const problem = executionProblem(execution, rawFiles)
+    if (problem !== undefined) return problem
 
     // A run that matched no files after the repo's own ignore patterns prints
     // nothing at all; that is an empty result, not a broken one.
-    if (execution.stdout.trim().length === 0) {
-      if (execution.exitCode === 0) continue
-      return {
-        state: 'error',
-        findings: [],
-        rawFiles,
-        reason: `oxlint produced no output (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
-      }
-    }
+    if (execution.stdout.trim().length === 0) continue
 
     let report: SarifReport
     try {
@@ -298,6 +287,34 @@ async function materializeDefaultConfig(scratch: string): Promise<string[]> {
   await writeFile(target, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, 'utf8')
   // Nested configs would let the target repo influence a run it does not own.
   return ['--config', target, '--disable-nested-config']
+}
+
+/** The repo's own oxlint when it installed one, our pinned copy otherwise. */
+function oxlintCommand(detection: Detection | null): ToolCommand {
+  return detection?.installed === true && detection.binPath !== undefined
+    ? repoCommand(detection.binPath, [])
+    : ephemeralCommand(OXLINT_PACKAGE, [])
+}
+
+/**
+ * The result that ends the run when this batch failed, or `undefined` when it
+ * produced something to read. Silence is only a failure when oxlint also exited
+ * non-zero: a run that matched no file prints nothing and exits 0.
+ */
+function executionProblem(
+  execution: ToolExecution,
+  rawFiles: readonly string[],
+): ToolResult | undefined {
+  if (execution.failure !== undefined) return failed(execution.failure, rawFiles)
+  if (execution.stdout.trim().length === 0 && execution.exitCode !== 0) {
+    return {
+      state: 'error',
+      findings: [],
+      rawFiles,
+      reason: `oxlint produced no output (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
+    }
+  }
+  return undefined
 }
 
 /** Raw evidence for the run directory (spec §8: stderr is always kept). */

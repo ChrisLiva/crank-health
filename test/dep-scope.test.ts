@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -370,6 +370,27 @@ describe('applyDependencyScopes', () => {
       expect(warnings[0]).toContain('package-lock.json')
     } finally {
       await rm(broken, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * The scope pass runs outside any runner's catch, so a lockfile that exists
+   * and cannot be read has to be a warning rather than a throw — the same
+   * outcome as one that would not parse, with the cause named by its code
+   * rather than by a message quoting the absolute path.
+   */
+  it('grades every package of a lockfile it could not read, and warns once', async () => {
+    const unreadable = await mkdtemp(join(tmpdir(), 'crank-dep-scope-unreadable-'))
+    await mkdir(join(unreadable, 'package-lock.json'))
+    try {
+      const { findings, warnings } = await applyDependencyScopes(unreadable, [packageFinding()])
+
+      expect(findings.every((finding) => finding.gradeScope)).toBe(true)
+      expect(warnings).toEqual([
+        'package-lock.json: could not be read (EISDIR), so no dependency scope was resolved and every package in it is graded',
+      ])
+    } finally {
+      await rm(unreadable, { recursive: true, force: true })
     }
   })
 })

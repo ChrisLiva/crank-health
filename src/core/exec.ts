@@ -381,8 +381,8 @@ let noticeShown = false
  * stdout.
  */
 function scheduleFirstRunNotice(): () => void {
-  if (noticeShown) return () => {}
   const timer = setTimeout(() => {
+    if (noticeShown) return
     noticeShown = true
     process.stderr.write('crank-health: downloading pinned tools (first run only)…\n')
   }, FIRST_RUN_NOTICE_MS)

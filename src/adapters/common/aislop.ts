@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { parse as parseYaml, stringify } from 'yaml'
 import { ancestryOf, languageOf, repoPath } from '../../core/discover.ts'
 import { ephemeralCommand, execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
-import type { ToolFailure } from '../../core/exec.ts'
+import type { ToolCommand, ToolExecution, ToolFailure } from '../../core/exec.ts'
 import type {
   DetectContext,
   Detection,
@@ -506,9 +506,7 @@ async function runAislop(ctx: RunContext): Promise<ToolResult> {
   }
 
   const configPath = ctx.detection?.configFiles[0]
-  const text =
-    configPath === undefined ? undefined : await readFileOrUndefined(join(ctx.repoRoot, configPath))
-  const repo = text === undefined ? undefined : liftRepoConfig(text)
+  const repo = await readRepoConfig(ctx.repoRoot, configPath)
   if (repo?.aiSlopDisabled === true) {
     return unavailable(`repo's ${configPath} disables aislop's ai-slop engine`)
   }
@@ -524,12 +522,7 @@ async function runAislop(ctx: RunContext): Promise<ToolResult> {
   const mirrored = await buildMirror(ctx, mirror)
   if (mirrored !== undefined) return mirrored
 
-  const args = invocationArgs(mirror)
-  const command =
-    ctx.detection?.installed === true && ctx.detection.binPath !== undefined
-      ? repoCommand(ctx.detection.binPath, args)
-      : ephemeralCommand(AISLOP_TOOL, args)
-  const execution = await execTool(command, {
+  const execution = await execTool(aislopCommand(ctx, invocationArgs(mirror)), {
     cwd: base,
     timeoutMs: ctx.timeoutMs,
     // The file half is `telemetry.enabled: false`; this is the half that holds
@@ -542,16 +535,8 @@ async function runAislop(ctx: RunContext): Promise<ToolResult> {
     rawFiles.push(await writeScratchRaw(ctx.scratch, 'aislop.stderr.txt', execution.stderr))
   }
 
-  if (execution.failure !== undefined) return failed(execution.failure, rawFiles)
-  // aislop exits 1 when it found something, which is a completed run.
-  if (execution.exitCode !== 0 && execution.exitCode !== 1) {
-    return {
-      state: 'error',
-      findings: [],
-      rawFiles,
-      reason: `aislop exited ${execution.exitCode}: ${firstLine(execution.stderr) || 'no output'}`,
-    }
-  }
+  const problem = executionFailure(execution, rawFiles)
+  if (problem !== undefined) return problem
 
   let payload: AislopPayload
   try {
@@ -571,14 +556,54 @@ async function runAislop(ctx: RunContext): Promise<ToolResult> {
     // Detection cannot answer this one: a repo can own a config this run then
     // could not validate, and the findings must not claim it as their source.
     configOwned,
-    ...(configPath === undefined
-      ? {}
-      : {
-          reason: configOwned
-            ? `engine selection is crank-health's; rules, exclude and include come from ${configPath}`
-            : `${configPath} could not be read as aislop config; measured with crank-health's defaults`,
-        }),
+    ...(configPath === undefined ? {} : { reason: configNote(configPath, configOwned) }),
   }
+}
+
+/**
+ * The repo's own aislop config, lifted. `undefined` when detection found no
+ * config, the file could not be read, or a lifted key failed its check — all
+ * three mean the run measures with crank-health's defaults.
+ */
+async function readRepoConfig(
+  repoRoot: string,
+  configPath: string | undefined,
+): Promise<RepoConfig | undefined> {
+  if (configPath === undefined) return undefined
+  const text = await readFileOrUndefined(join(repoRoot, configPath))
+  return text === undefined ? undefined : liftRepoConfig(text)
+}
+
+/** The repo's own aislop binary when it has one installed, else an ephemeral one. */
+function aislopCommand(ctx: RunContext, args: readonly string[]): ToolCommand {
+  return ctx.detection?.installed === true && ctx.detection.binPath !== undefined
+    ? repoCommand(ctx.detection.binPath, [...args])
+    : ephemeralCommand(AISLOP_TOOL, [...args])
+}
+
+/**
+ * Whether the process ended in a way that has no report to read. aislop exits 1
+ * when it found something, which is a completed run.
+ */
+function executionFailure(
+  execution: ToolExecution,
+  rawFiles: readonly string[],
+): ToolResult | undefined {
+  if (execution.failure !== undefined) return failed(execution.failure, rawFiles)
+  if (execution.exitCode === 0 || execution.exitCode === 1) return undefined
+  return {
+    state: 'error',
+    findings: [],
+    rawFiles,
+    reason: `aislop exited ${execution.exitCode}: ${firstLine(execution.stderr) || 'no output'}`,
+  }
+}
+
+/** What the repo's config decided about this run, for the result's reason. */
+function configNote(configPath: string, configOwned: boolean): string {
+  return configOwned
+    ? `engine selection is crank-health's; rules, exclude and include come from ${configPath}`
+    : `${configPath} could not be read as aislop config; measured with crank-health's defaults`
 }
 
 /** The inventory paths aislop's file policy can read, as the report filter. */

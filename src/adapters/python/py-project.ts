@@ -304,29 +304,48 @@ function tomlDependencies(text: string): Set<string> {
       continue
     }
 
-    const assignment = /^([A-Za-z0-9_."'-]+)\s*=\s*(.*)$/.exec(line)
-    const key = assignment?.[1]?.replaceAll(/["']/g, '')
-    if (key === undefined) continue
-
-    if (DEPENDENCY_TABLE_PATTERNS.some((pattern) => pattern.test(section))) {
-      names.add(normalizeDistribution(key))
-      continue
-    }
-
-    const value = assignment?.[2] ?? ''
-    const isDependencyArray =
-      value.startsWith('[') &&
-      (DEPENDENCY_ARRAY_KEYS.has(key) ||
-        DEPENDENCY_ARRAY_SECTIONS.some((pattern) => pattern.test(section)))
-    if (!isDependencyArray) continue
-
-    for (const entry of quotedStrings(value)) names.add(normalizeDistribution(entry))
-    inArray = !value.includes(']')
+    const declared = declaredNames(line, section)
+    for (const name of declared.names) names.add(name)
+    inArray = declared.opensArray
   }
 
   names.delete('')
   return names
 }
+
+/**
+ * What one `key = value` line inside `section` declares: the distribution names
+ * it names, and whether it opened an array the following lines continue. A line
+ * that is not an assignment, and one whose section makes it no dependency at
+ * all, declares nothing.
+ */
+function declaredNames(
+  line: string,
+  section: string,
+): { readonly names: readonly string[]; readonly opensArray: boolean } {
+  const assignment = /^([A-Za-z0-9_."'-]+)\s*=\s*(.*)$/.exec(line)
+  const key = assignment?.[1]?.replaceAll(/["']/g, '')
+  if (key === undefined) return NOTHING_DECLARED
+
+  if (DEPENDENCY_TABLE_PATTERNS.some((pattern) => pattern.test(section))) {
+    return { names: [normalizeDistribution(key)], opensArray: false }
+  }
+
+  const value = assignment?.[2] ?? ''
+  const isDependencyArray =
+    value.startsWith('[') &&
+    (DEPENDENCY_ARRAY_KEYS.has(key) ||
+      DEPENDENCY_ARRAY_SECTIONS.some((pattern) => pattern.test(section)))
+  if (!isDependencyArray) return NOTHING_DECLARED
+
+  return {
+    names: quotedStrings(value).map((entry) => normalizeDistribution(entry)),
+    opensArray: !value.includes(']'),
+  }
+}
+
+/** A line that declares no dependency and opens no array. */
+const NOTHING_DECLARED = { names: [], opensArray: false } as const
 
 /**
  * Distribution names in a `requirements.txt`, normalized per PEP 503. Option

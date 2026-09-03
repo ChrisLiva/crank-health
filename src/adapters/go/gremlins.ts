@@ -112,33 +112,9 @@ export function parseGremlinsReport(json: string, projectPath = '.'): GremlinsRe
 
   const mutants: Mutant[] = []
   for (const entry of files) {
-    const record = asRecord(entry)
-    const name = asString(record?.['file_name'])
-    if (name === undefined) continue
-    const file = underProject(projectPath, name)
-
-    for (const raw of asArray(record?.['mutations']) ?? []) {
-      const mutation = asRecord(raw)
-      const reported = asString(mutation?.['status'])
-      if (mutation === undefined || reported === undefined) continue
-
-      const status = STATUS_BY_GREMLIN[reported]
-      if (status === undefined) return { unknownStatus: reported }
-
-      const startLine = asNumber(mutation['line']) ?? 1
-      const startCol = asNumber(mutation['column']) ?? 1
-      mutants.push({
-        file,
-        mutatorName: asString(mutation['type']) ?? 'unknown',
-        // gremlins names the mutator and never quotes the source it wrote.
-        replacement: '',
-        status,
-        startLine,
-        startCol,
-        endLine: startLine,
-        endCol: startCol,
-      })
-    }
+    const found = mutantsInFile(asRecord(entry), projectPath)
+    if (!Array.isArray(found)) return found
+    mutants.push(...found)
   }
 
   return {
@@ -146,6 +122,45 @@ export function parseGremlinsReport(json: string, projectPath = '.'): GremlinsRe
       (a, b) => compare(a.file, b.file) || a.startLine - b.startLine || a.startCol - b.startCol,
     ),
   }
+}
+
+/**
+ * One `files[]` entry's mutants, or the status word this release cannot count —
+ * which stops the whole report rather than being dropped from a score. An entry
+ * without a `file_name` names nothing placeable and contributes no mutants.
+ */
+function mutantsInFile(
+  record: Record<string, unknown> | undefined,
+  projectPath: string,
+): Mutant[] | { readonly unknownStatus: string } {
+  const name = asString(record?.['file_name'])
+  if (name === undefined) return []
+  const file = underProject(projectPath, name)
+
+  const mutants: Mutant[] = []
+  for (const raw of asArray(record?.['mutations']) ?? []) {
+    const mutation = asRecord(raw)
+    const reported = asString(mutation?.['status'])
+    if (mutation === undefined || reported === undefined) continue
+
+    const status = STATUS_BY_GREMLIN[reported]
+    if (status === undefined) return { unknownStatus: reported }
+
+    const startLine = asNumber(mutation['line']) ?? 1
+    const startCol = asNumber(mutation['column']) ?? 1
+    mutants.push({
+      file,
+      mutatorName: asString(mutation['type']) ?? 'unknown',
+      // gremlins names the mutator and never quotes the source it wrote.
+      replacement: '',
+      status,
+      startLine,
+      startCol,
+      endLine: startLine,
+      endCol: startCol,
+    })
+  }
+  return mutants
 }
 
 /** The slice of a `ToolExecution` the outcome ladder classifies. */

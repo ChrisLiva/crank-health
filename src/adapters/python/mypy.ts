@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolCommand, ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
@@ -135,26 +136,83 @@ const NO_VENV_REASON =
   'mypy is declared but this project has no virtualenv; ' +
   "create one and install the project's dependencies"
 
+/** Which mypy runs, and what it has to be told to resolve imports. */
+interface MypyInvocation {
+  readonly command: ToolCommand
+  readonly interpreterArgs: readonly string[]
+  /** True where the pinned copy ran rather than the project's own. */
+  readonly ephemeral: boolean
+}
+
+/**
+ * The repo's own mypy first — it is the version their config was written for,
+ * and it already lives in the environment it must resolve imports against. The
+ * pinned copy runs *outside* that environment, so it is told which interpreter
+ * to resolve against; with neither, there is nothing to run mypy over
+ * ({@link NO_VENV_REASON}).
+ */
+async function mypyInvocation(ctx: RunContext): Promise<MypyInvocation | undefined> {
+  const binPath = ctx.detection?.installed === true ? ctx.detection.binPath : undefined
+  if (binPath !== undefined) {
+    return { command: repoCommand(binPath, []), interpreterArgs: [], ephemeral: false }
+  }
+  const venv = await findVenv(ctx.repoRoot, ctx.project.path)
+  if (venv === undefined) return undefined
+  return {
+    command: uvxCommand(MYPY_DISTRIBUTION, []),
+    interpreterArgs: ['--python-executable', venv.interpreter],
+    ephemeral: true,
+  }
+}
+
+/**
+ * The diagnostics of a finished run, or the result that ends it: mypy exits 0
+ * clean and 1 having found type errors, and anything else means it could not
+ * check the project — a refusal it reports as a diagnostic on stdout while
+ * leaving stderr empty, so both are worth quoting.
+ */
+function mypyDiagnostics(
+  execution: ToolExecution,
+  rawFiles: readonly string[],
+): MypyDiagnostic[] | ToolResult {
+  let diagnostics: MypyDiagnostic[] = []
+  let parseError: string | undefined
+  try {
+    diagnostics = parseMypyJsonl(execution.stdout)
+  } catch (error) {
+    parseError = errorMessage(error)
+  }
+
+  if (execution.exitCode !== 0 && execution.exitCode !== 1) {
+    const said = firstLine(execution.stderr) || diagnostics[0]?.message || (parseError ?? '')
+    return {
+      state: 'error',
+      findings: [],
+      rawFiles,
+      reason: `mypy failed (exit ${execution.exitCode ?? 'signal'}): ${said}`,
+    }
+  }
+  if (parseError !== undefined) {
+    return {
+      state: 'error',
+      findings: [],
+      rawFiles,
+      reason: `could not parse mypy output: ${parseError}`,
+    }
+  }
+  return diagnostics
+}
+
 async function runMypy(ctx: RunContext): Promise<ToolResult> {
   if (ctx.files.length === 0) {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no Python files' }
   }
 
-  // The repo's own mypy first — it is the version their config was written for,
-  // and it already lives in the environment it must resolve imports against.
-  const binPath = ctx.detection?.installed === true ? ctx.detection.binPath : undefined
-  const venv = binPath === undefined ? await findVenv(ctx.repoRoot, ctx.project.path) : undefined
-  if (binPath === undefined && venv === undefined) {
+  const invocation = await mypyInvocation(ctx)
+  if (invocation === undefined) {
     return { state: 'not-available', findings: [], rawFiles: [], reason: NO_VENV_REASON }
   }
-
-  // The pinned mypy runs *outside* the project's environment, so it is told
-  // which interpreter to resolve the project's imports against. The repo's own
-  // copy already lives in that environment and needs no telling.
-  const ephemeral = binPath === undefined
-  const command =
-    binPath === undefined ? uvxCommand(MYPY_DISTRIBUTION, []) : repoCommand(binPath, [])
-  const interpreterArgs = venv === undefined ? [] : ['--python-executable', venv.interpreter]
+  const { command } = invocation
 
   const execution = await execTool(
     {
@@ -169,7 +227,7 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
         join(ctx.scratch, 'mypy-cache'),
         ...reportArgs(ctx.scratch),
         ...configArgs(ctx.detection, ctx.repoRoot),
-        ...interpreterArgs,
+        ...invocation.interpreterArgs,
         // One invocation, never batched: mypy builds one dependency graph over
         // everything it is given, and splitting the file list would make each
         // half see the other half as an unresolved import.
@@ -188,34 +246,8 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
     return failed(execution.failure, rawFiles)
   }
 
-  let diagnostics: MypyDiagnostic[] = []
-  let parseError: string | undefined
-  try {
-    diagnostics = parseMypyJsonl(execution.stdout)
-  } catch (error) {
-    parseError = errorMessage(error)
-  }
-
-  // mypy exits 0 for a clean run and 1 for one that found type errors; anything
-  // else means it could not check the project. It reports that refusal as a
-  // diagnostic on stdout and leaves stderr empty, so both are worth quoting.
-  if (execution.exitCode !== 0 && execution.exitCode !== 1) {
-    const said = firstLine(execution.stderr) || diagnostics[0]?.message || (parseError ?? '')
-    return {
-      state: 'error',
-      findings: [],
-      rawFiles,
-      reason: `mypy failed (exit ${execution.exitCode ?? 'signal'}): ${said}`,
-    }
-  }
-  if (parseError !== undefined) {
-    return {
-      state: 'error',
-      findings: [],
-      rawFiles,
-      reason: `could not parse mypy output: ${parseError}`,
-    }
-  }
+  const diagnostics = mypyDiagnostics(execution, rawFiles)
+  if (!Array.isArray(diagnostics)) return diagnostics
 
   const analyzed = new Set(ctx.files)
   return {
@@ -226,7 +258,7 @@ async function runMypy(ctx: RunContext): Promise<ToolResult> {
     ),
     // Set from the same flag that chose the command, so a `null` version in the
     // report is a faithful witness that the repo's own binary ran.
-    ...(ephemeral ? { toolVersion: pinnedPythonVersion(MYPY_DISTRIBUTION) } : {}),
+    ...(invocation.ephemeral ? { toolVersion: pinnedPythonVersion(MYPY_DISTRIBUTION) } : {}),
     rawFiles,
   }
 }

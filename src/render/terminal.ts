@@ -1,6 +1,7 @@
 import pc from 'picocolors'
 import type { Category, Finding, Grade, Severity } from '../core/types.ts'
 import { CATEGORIES } from '../core/types.ts'
+import type { CollapsedTool } from './display.ts'
 import {
   CATEGORY_LABELS,
   collapseToolRows,
@@ -68,64 +69,15 @@ export function renderTerminal(
   // the split is what `report.json` is for.
   const all = reportFindings(report)
 
-  // What the grades are a statement about, directly above them: every
-  // denominator under this line is the assessed half of it.
-  const coverage = coverageLine(report.coverage)
-  if (coverage !== null) lines.push(color.dim(coverage))
-
-  // The categories `--only` left out are one line under the ones it kept, not a
-  // line each: rows saying "nobody asked" are what a `--only` run came here to
-  // skip past (spec §9).
-  const omit = unselectedCategories(report)
-  for (const category of CATEGORIES) {
-    if (!omit.includes(category)) lines.push(...categoryLines(report, all, category, color))
-  }
-  if (omit.length > 0) lines.push(color.dim(`  ${notSelectedNote(omit)}`))
+  lines.push(...gradeLines(report, all, color))
 
   const projects = projectLines(report, color)
   if (projects.length > 0) lines.push('', ...projects)
 
   if (report.delta !== undefined) lines.push('', ...deltaLines(report.delta, color))
 
-  // In PR mode the findings worth a glance are the ones this change introduced;
-  // the pre-existing ones are in report.md, and listing them here would bury
-  // the regression under a wall of things the author did not do.
-  const source = rankFindings(
-    report.delta?.newFindings.map((entry) => withGradeScope(entry)) ?? all,
-    manifestFiles(all),
-  )
-  const shown = source.slice(0, limit)
-  if (shown.length > 0) {
-    lines.push('', color.bold(report.delta === undefined ? 'Top findings' : 'Top new findings'))
-    for (const finding of shown) lines.push(findingLine(finding, color))
-    if (source.length > shown.length) {
-      lines.push(color.dim(`  … ${source.length - shown.length} more in report.json`))
-    }
-  }
-
-  // Every tool with something to say: the ones that did not complete, and the
-  // ones that did but qualified the answer — gitleaks suppressing hits outside
-  // the inventory, osv-scanner unable to read Central Package Management.
-  // `report.md` has always printed both; a note only that surface carries is a
-  // note most readers never see, and a partial scan then reads as a clean one.
-  // A tool with no reason is not news, so the block is never a roll call.
-  const notes = collapseToolRows(
-    report.tools.filter((tool) => tool.state !== 'ok' || tool.reason !== null),
-  )
-  if (notes.length > 0) {
-    lines.push('', color.bold('Tool notes'))
-    for (const tool of notes) {
-      const side = tool.side === undefined ? '' : ` (${tool.side} scan)`
-      const stands = standInNote(tool, report.projects.length)
-      // Red is for the runs that did not happen; a completed run's note is a
-      // footnote, and painting it like a failure would cry wolf.
-      const state = tool.state === 'ok' ? color.dim(tool.state) : color.red(tool.state)
-      lines.push(
-        `  ${state} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}` +
-          `${stands === null ? '' : ` ${stands}`}`,
-      )
-    }
-  }
+  lines.push(...findingLines(report, all, limit, color))
+  lines.push(...toolNoteLines(report, color))
 
   for (const warning of report.warnings) lines.push(color.yellow(`  warning: ${warning}`))
 
@@ -140,6 +92,79 @@ export function renderTerminal(
 }
 
 type Colors = ReturnType<typeof pc.createColors>
+
+/**
+ * What the grades are a statement about, then the grades: every denominator
+ * under the coverage line is the assessed half of it. The categories `--only`
+ * left out are one line under the ones it kept, not a line each — rows saying
+ * "nobody asked" are what a `--only` run came here to skip past (spec §9).
+ */
+function gradeLines(report: Report, all: readonly Finding[], color: Colors): string[] {
+  const lines: string[] = []
+  const coverage = coverageLine(report.coverage)
+  if (coverage !== null) lines.push(color.dim(coverage))
+
+  const omit = unselectedCategories(report)
+  for (const category of CATEGORIES) {
+    if (!omit.includes(category)) lines.push(...categoryLines(report, all, category, color))
+  }
+  if (omit.length > 0) lines.push(color.dim(`  ${notSelectedNote(omit)}`))
+  return lines
+}
+
+/**
+ * The findings worth looking at first, at most `limit` of them, and a count of
+ * the ones left in `report.json`. In PR mode they are the ones this change
+ * introduced; the pre-existing ones are in report.md, and listing them here
+ * would bury the regression under a wall of things the author did not do.
+ */
+function findingLines(report: Report, all: Finding[], limit: number, color: Colors): string[] {
+  const source = rankFindings(
+    report.delta?.newFindings.map((entry) => withGradeScope(entry)) ?? all,
+    manifestFiles(all),
+  )
+  const shown = source.slice(0, limit)
+  if (shown.length === 0) return []
+
+  const lines = [
+    '',
+    color.bold(report.delta === undefined ? 'Top findings' : 'Top new findings'),
+    ...shown.map((finding) => findingLine(finding, color)),
+  ]
+  if (source.length > shown.length) {
+    lines.push(color.dim(`  … ${source.length - shown.length} more in report.json`))
+  }
+  return lines
+}
+
+/**
+ * Every tool with something to say: the ones that did not complete, and the
+ * ones that did but qualified the answer — gitleaks suppressing hits outside
+ * the inventory, osv-scanner unable to read Central Package Management.
+ * `report.md` has always printed both; a note only that surface carries is a
+ * note most readers never see, and a partial scan then reads as a clean one.
+ * A tool with no reason is not news, so the block is never a roll call.
+ */
+function toolNoteLines(report: Report, color: Colors): string[] {
+  const notes = collapseToolRows(
+    report.tools.filter((tool) => tool.state !== 'ok' || tool.reason !== null),
+  )
+  if (notes.length === 0) return []
+  return ['', color.bold('Tool notes'), ...notes.map((tool) => toolNoteLine(tool, report, color))]
+}
+
+/** One tool's note, painted by whether the run happened at all. */
+function toolNoteLine(tool: CollapsedTool, report: Report, color: Colors): string {
+  const side = tool.side === undefined ? '' : ` (${tool.side} scan)`
+  const stands = standInNote(tool, report.projects.length)
+  // Red is for the runs that did not happen; a completed run's note is a
+  // footnote, and painting it like a failure would cry wolf.
+  const state = tool.state === 'ok' ? color.dim(tool.state) : color.red(tool.state)
+  return (
+    `  ${state} ${tool.tool}${side}: ${tool.reason ?? 'no reason given'}` +
+    `${stands === null ? '' : ` ${stands}`}`
+  )
+}
 
 /** Severity, most urgent first — the last question the ranking asks. */
 const SEVERITY_RANK: Readonly<Record<Severity, number>> = {

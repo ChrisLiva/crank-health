@@ -688,6 +688,28 @@ async function select(
   return cursor
 }
 
+/** What a key does in a multi choice; every other key is ignored. */
+const MULTI_ACTIONS: Readonly<
+  Record<string, 'up' | 'down' | 'toggle' | 'all' | 'confirm' | 'back' | undefined>
+> = {
+  up: 'up',
+  k: 'up',
+  down: 'down',
+  j: 'down',
+  space: 'toggle',
+  a: 'all',
+  return: 'confirm',
+  enter: 'confirm',
+  escape: 'back',
+  left: 'back',
+}
+
+/** One row of a multi choice: what it is called, and what it is for. */
+interface MultiChoice {
+  readonly label: string
+  readonly note?: string | undefined
+}
+
 /**
  * Arrow-key multi choice: space toggles the entry under the cursor, `a` flips
  * everything at once, enter confirms (at least one must stay selected).
@@ -696,15 +718,70 @@ async function select(
 async function multiSelect(
   io: PromptIO,
   question: string,
-  choices: readonly { label: string; note?: string | undefined }[],
+  choices: readonly MultiChoice[],
   initial: readonly boolean[],
 ): Promise<boolean[] | Back> {
   const count = choices.length
   let cursor = 0
   let warn = false
+  let confirmed = false
   const selected = [...initial]
   const state: Painted = { lines: 0 }
-  const render = (): string[] => [
+  const render = (): string[] => multiSelectLines(question, choices, selected, cursor, warn)
+
+  io.say('')
+  io.write(HIDE_CURSOR)
+  try {
+    while (!confirmed) {
+      paint(io, state, render())
+      // eslint-disable-next-line no-await-in-loop
+      const key = await readKey(io)
+      switch (MULTI_ACTIONS[key.name ?? '']) {
+        case 'up':
+          cursor = (cursor + count - 1) % count
+          break
+        case 'down':
+          cursor = (cursor + 1) % count
+          break
+        case 'toggle':
+          selected[cursor] = selected[cursor] !== true
+          warn = false
+          break
+        case 'all': {
+          const all = selected.every(Boolean)
+          selected.fill(!all)
+          warn = false
+          break
+        }
+        case 'confirm':
+          // Confirming an empty selection is the one keystroke that does not
+          // settle the prompt; it warns and asks again.
+          if (selected.some(Boolean)) confirmed = true
+          else warn = true
+          break
+        case 'back':
+          settle(io, state, `${question} ${pc.dim('(back)')}`)
+          return BACK
+        default:
+          break
+      }
+    }
+  } finally {
+    io.write(SHOW_CURSOR)
+  }
+  settle(io, state, `${question} ${pc.cyan(chosenLabel(choices, selected))}`)
+  return selected
+}
+
+/** One multi-select frame: the question, a row per choice, and the warning. */
+function multiSelectLines(
+  question: string,
+  choices: readonly MultiChoice[],
+  selected: readonly boolean[],
+  cursor: number,
+  warn: boolean,
+): string[] {
+  return [
     `${question} ${pc.dim(`(${MULTI_HINT})`)}`,
     ...choices.map((choice, index) => {
       const active = index === cursor
@@ -715,42 +792,15 @@ async function multiSelect(
     }),
     ...(warn ? [`  ${pc.yellow('keep at least one selected')}`] : []),
   ]
+}
 
-  io.say('')
-  io.write(HIDE_CURSOR)
-  try {
-    for (;;) {
-      paint(io, state, render())
-      // eslint-disable-next-line no-await-in-loop
-      const key = await readKey(io)
-      if (key.name === 'up' || key.name === 'k') cursor = (cursor + count - 1) % count
-      else if (key.name === 'down' || key.name === 'j') cursor = (cursor + 1) % count
-      else if (key.name === 'space') {
-        selected[cursor] = selected[cursor] !== true
-        warn = false
-      } else if (key.name === 'a') {
-        const all = selected.every(Boolean)
-        selected.fill(!all)
-        warn = false
-      } else if (key.name === 'return' || key.name === 'enter') {
-        if (selected.some(Boolean)) break
-        warn = true
-      } else if (key.name === 'escape' || key.name === 'left') {
-        settle(io, state, `${question} ${pc.dim('(back)')}`)
-        return BACK
-      }
-    }
-  } finally {
-    io.write(SHOW_CURSOR)
-  }
-  const chosen = selected.every(Boolean)
-    ? 'all'
-    : choices
-        .filter((_, index) => selected[index])
-        .map((choice) => choice.label)
-        .join(', ')
-  settle(io, state, `${question} ${pc.cyan(chosen)}`)
-  return selected
+/** How a settled multi-select reads back: `all`, or the labels that stayed on. */
+function chosenLabel(choices: readonly MultiChoice[], selected: readonly boolean[]): string {
+  if (selected.every(Boolean)) return 'all'
+  return choices
+    .filter((_, index) => selected[index])
+    .map((choice) => choice.label)
+    .join(', ')
 }
 
 /** A Yes/No toggle: arrows flip it, y/n answer directly, enter confirms. */

@@ -163,25 +163,42 @@ export function parseTouchedLines(patch: string): ReadonlyMap<string, ReadonlySe
 
   for (const line of patch.split('\n')) {
     if (line.startsWith('+++ ')) {
-      const path = line.slice(4).trim()
-      // A deletion has no head side, so nothing after it can be touched.
-      file = path === '/dev/null' ? undefined : unquotePath(path)
+      file = headPath(line)
       continue
     }
     if (file === undefined || !line.startsWith('@@')) continue
 
-    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line)
-    if (hunk === null) continue
-    const start = Number(hunk[1])
-    const count = hunk[2] === undefined ? 1 : Number(hunk[2])
-    if (!Number.isFinite(start) || !Number.isFinite(count) || count <= 0) continue
-
+    const added = hunkLines(line)
+    if (added.length === 0) continue
     const lines = touched.get(file) ?? new Set<number>()
-    for (let offset = 0; offset < count; offset++) lines.add(start + offset)
+    for (const number of added) lines.add(number)
     touched.set(file, lines)
   }
 
   return touched
+}
+
+/** The head-side path a `+++` header names, or nothing when it is a deletion. */
+function headPath(header: string): string | undefined {
+  const path = header.slice(4).trim()
+  // A deletion has no head side, so nothing after it can be touched.
+  return path === '/dev/null' ? undefined : unquotePath(path)
+}
+
+/**
+ * The head lines one `@@` header covers. Empty for a header this cannot read
+ * and for a pure deletion, which touches no head line.
+ */
+function hunkLines(header: string): number[] {
+  const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(header)
+  if (hunk === null) return []
+  const start = Number(hunk[1])
+  const count = hunk[2] === undefined ? 1 : Number(hunk[2])
+  if (!Number.isFinite(start) || !Number.isFinite(count) || count <= 0) return []
+
+  const lines: number[] = []
+  for (let offset = 0; offset < count; offset++) lines.push(start + offset)
+  return lines
 }
 
 /**

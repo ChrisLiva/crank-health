@@ -2,10 +2,12 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { execTool, repoCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   DetectContext,
   RunContext,
+  ToolMetrics,
   ToolResult,
   ToolRunner,
 } from '../../core/types.ts'
@@ -113,22 +115,9 @@ export const strykerRunner: ToolRunner = {
 }
 
 async function runStryker(ctx: RunContext): Promise<ToolResult> {
-  if (!ctx.deep) {
-    return unavailable('mutation testing runs in the deep profile only — pass `--deep`')
-  }
-  const detection = ctx.detection
-  if (detection === null) return unavailable(STRYKER_SETUP_HINT)
-  if (!detection.installed || detection.binPath === undefined) {
-    return unavailable(
-      'this project declares StrykerJS but has not installed it — run `npm install` so ' +
-        'Stryker and the test-runner plugins its config names are present',
-    )
-  }
-
-  const mutate = mutateScope(ctx)
-  if (mutate !== undefined && mutate.length === 0) {
-    return unavailable('this change touched no JavaScript or TypeScript file Stryker could mutate')
-  }
+  const plan = planStryker(ctx)
+  if ('reason' in plan) return unavailable(plan.reason)
+  const { detection, binPath, mutate } = plan
 
   const workingDir = join(ctx.scratch, STRYKER_TOOL)
   await mkdir(workingDir, { recursive: true })
@@ -148,22 +137,13 @@ async function runStryker(ctx: RunContext): Promise<ToolResult> {
     'utf8',
   )
 
-  const execution = await execTool(repoCommand(detection.binPath, ['run', configPath]), {
+  const execution = await execTool(repoCommand(binPath, ['run', configPath]), {
     cwd: ctx.repoRoot,
     timeoutMs: ctx.timeoutMs,
   })
 
-  const rawFiles: string[] = []
   const report = await readFileOrUndefined(reportPath)
-  if (report !== undefined) {
-    rawFiles.push(await writeScratchRaw(ctx.scratch, 'stryker-mutation-report.json', report))
-  }
-  if (execution.stdout.trim().length > 0) {
-    rawFiles.push(await writeScratchRaw(ctx.scratch, 'stryker.txt', execution.stdout))
-  }
-  if (execution.stderr.trim().length > 0) {
-    rawFiles.push(await writeScratchRaw(ctx.scratch, 'stryker.stderr.txt', execution.stderr))
-  }
+  const rawFiles = await stageRaw(ctx.scratch, report, execution)
 
   if (execution.failure !== undefined) {
     return failed(execution.failure, rawFiles)
@@ -207,13 +187,79 @@ async function runStryker(ctx: RunContext): Promise<ToolResult> {
           reason: `listing the first ${SURVIVED_FINDING_LIMIT} of ${survived.length} survived mutants; the rest are in the raw report`,
         }
       : {}),
-    metrics: {
-      ...(counts.detected + counts.undetected > 0
-        ? { mutationScore: (counts.detected / (counts.detected + counts.undetected)) * 100 }
-        : {}),
-      mutantsDetected: counts.detected,
-      mutantsUndetected: counts.undetected,
-    },
+    metrics: mutationMetrics(counts),
+  }
+}
+
+/** What crank-health can run Stryker with here, or why it cannot run at all. */
+type StrykerPlan =
+  | {
+      readonly detection: Detection
+      /** The repo's installed `stryker` binary. */
+      readonly binPath: string
+      /** PR mode: the only files to mutate. `undefined` defers to the repo's config. */
+      readonly mutate: string[] | undefined
+    }
+  | { readonly reason: string }
+
+/**
+ * The four conditions a Stryker run needs, in the order their messages are
+ * owed: the deep profile, a repo that owns Stryker, an install of it, and at
+ * least one mutable file in scope.
+ */
+function planStryker(ctx: RunContext): StrykerPlan {
+  if (!ctx.deep) {
+    return { reason: 'mutation testing runs in the deep profile only — pass `--deep`' }
+  }
+  const detection = ctx.detection
+  if (detection === null) return { reason: STRYKER_SETUP_HINT }
+  if (!detection.installed || detection.binPath === undefined) {
+    return {
+      reason:
+        'this project declares StrykerJS but has not installed it — run `npm install` so ' +
+        'Stryker and the test-runner plugins its config names are present',
+    }
+  }
+
+  const mutate = mutateScope(ctx)
+  if (mutate !== undefined && mutate.length === 0) {
+    return { reason: 'this change touched no JavaScript or TypeScript file Stryker could mutate' }
+  }
+  return { detection, binPath: detection.binPath, mutate }
+}
+
+/** Raw evidence for the run directory: the report Stryker wrote, then its output. */
+async function stageRaw(
+  scratch: string,
+  report: string | undefined,
+  execution: ToolExecution,
+): Promise<string[]> {
+  const staged: string[] = []
+  if (report !== undefined) {
+    staged.push(await writeScratchRaw(scratch, 'stryker-mutation-report.json', report))
+  }
+  if (execution.stdout.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, 'stryker.txt', execution.stdout))
+  }
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, 'stryker.stderr.txt', execution.stderr))
+  }
+  return staged
+}
+
+/**
+ * The test-quality metrics. A run that produced no mutant at all reports the
+ * two counts without a score, since 0/0 is not a percentage.
+ */
+function mutationMetrics(counts: {
+  readonly detected: number
+  readonly undetected: number
+}): ToolMetrics {
+  const total = counts.detected + counts.undetected
+  return {
+    ...(total > 0 ? { mutationScore: (counts.detected / total) * 100 } : {}),
+    mutantsDetected: counts.detected,
+    mutantsUndetected: counts.undetected,
   }
 }
 

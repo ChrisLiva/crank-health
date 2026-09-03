@@ -91,28 +91,22 @@ export async function detectNodeTool(
     configFiles[0] ??
     (declared ? repoPath(ancestry[declaredAt] ?? ROOT_PROJECT, PACKAGE_JSON) : undefined)
 
-  const depth = await nearestInstall(ctx.repoRoot, ancestry, spec.binName)
-  const installedIn = depth === undefined ? undefined : (ancestry[depth] ?? undefined)
-  const binPath =
-    installedIn === undefined ? undefined : binaryPath(ctx.repoRoot, installedIn, spec.binName)
-  const version =
-    depth === undefined
-      ? undefined
-      : await installedVersion(ctx.repoRoot, ancestry.slice(depth), spec)
+  const install = await nearestInstall(ctx.repoRoot, ancestry, spec)
 
   return {
-    reason:
-      configFiles.length > 0 && declared
-        ? 'config+dependency'
-        : configFiles.length > 0
-          ? 'config'
-          : 'dependency',
+    reason: ownershipReason(configFiles.length > 0, declared),
     configFiles,
     ...(ownedVia === undefined ? {} : { ownedVia }),
-    installed: binPath !== undefined,
-    ...(binPath === undefined ? {} : { binPath }),
-    ...(version === undefined ? {} : { version }),
+    installed: install.binPath !== undefined,
+    ...(install.binPath === undefined ? {} : { binPath: install.binPath }),
+    ...(install.version === undefined ? {} : { version: install.version }),
   }
+}
+
+/** Which of spec §1's two ownership signals — or both — decided this detection. */
+function ownershipReason(hasConfig: boolean, declared: boolean): Detection['reason'] {
+  if (hasConfig && declared) return 'config+dependency'
+  return hasConfig ? 'config' : 'dependency'
 }
 
 /** This directory's config artifacts, including a config block in its manifest. */
@@ -132,17 +126,27 @@ function configArtifacts(
   return found
 }
 
-/** How far up the chain the nearest `node_modules/.bin` entry is, if any. */
+/**
+ * The nearest `node_modules/.bin` entry up the chain: where the binary is and
+ * what version sits beside it. Both absent when nothing on the chain has one.
+ */
 async function nearestInstall(
   repoRoot: string,
   ancestry: readonly string[],
-  binName: string,
-): Promise<number | undefined> {
+  spec: NodeToolSpec,
+): Promise<{ readonly binPath?: string; readonly version?: string }> {
   const installed = await Promise.all(
-    ancestry.map((directory) => exists(binaryPath(repoRoot, directory, binName))),
+    ancestry.map((directory) => exists(binaryPath(repoRoot, directory, spec.binName))),
   )
   const depth = installed.indexOf(true)
-  return depth === -1 ? undefined : depth
+  const directory = depth === -1 ? undefined : ancestry[depth]
+  if (directory === undefined) return {}
+
+  const version = await installedVersion(repoRoot, ancestry.slice(depth), spec)
+  return {
+    binPath: binaryPath(repoRoot, directory, spec.binName),
+    ...(version === undefined ? {} : { version }),
+  }
 }
 
 function binaryPath(repoRoot: string, directory: string, binName: string): string {

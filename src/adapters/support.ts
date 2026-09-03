@@ -270,10 +270,17 @@ export function sanitizeRawResults(
   return `${JSON.stringify({ ...record, [arrayKey]: sanitized }, null, 2)}\n`
 }
 
-/** Parses a JSON file, or `undefined` when it is missing or malformed. */
+/**
+ * Parses a JSON file, or `undefined` when there is nothing to parse: no file
+ * to read, on the terms {@link readFileOrUndefined} states, or text that is
+ * not JSON. Every caller is a runner deciding whether a manifest or a report
+ * says something, and neither kind of absence is the runner's fault.
+ */
 export async function readJson(path: string): Promise<unknown> {
+  const text = await readFileOrUndefined(path)
+  if (text === undefined) return undefined
   try {
-    return JSON.parse(await readFile(path, 'utf8'))
+    return JSON.parse(text)
   } catch {
     return undefined
   }

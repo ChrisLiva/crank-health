@@ -270,30 +270,9 @@ export function parseKnipJson(stdout: string): KnipIssues {
     if (record === undefined || file === undefined) continue
     const path = repoRelative(file)
 
-    for (const raw of asArray(record['files']) ?? []) {
-      const name = asString(asRecord(raw)?.['name']) ?? asString(raw)
-      if (name !== undefined) unusedFiles.push(repoRelative(name))
-    }
-    for (const kind of EXPORT_KINDS) {
-      for (const raw of asArray(record[kind]) ?? []) {
-        const symbol = asRecord(raw)
-        const name = asString(symbol?.['name'])
-        if (name === undefined) continue
-        unusedExports.push({
-          file: path,
-          name,
-          line: asNumber(symbol?.['line']) ?? 1,
-          column: asNumber(symbol?.['col']) ?? 1,
-          kind,
-        })
-      }
-    }
-    for (const kind of DEPENDENCY_KINDS) {
-      for (const raw of asArray(record[kind]) ?? []) {
-        const name = asString(asRecord(raw)?.['name']) ?? asString(raw)
-        if (name !== undefined) unusedDependencies.push({ file: path, name, kind })
-      }
-    }
+    unusedFiles.push(...unusedFilesIn(record))
+    unusedExports.push(...unusedSymbolsIn(record, path))
+    unusedDependencies.push(...unusedPackagesIn(record, path))
   }
 
   return {
@@ -301,6 +280,50 @@ export function parseKnipJson(stdout: string): KnipIssues {
     unusedExports,
     unusedDependencies,
   }
+}
+
+/**
+ * The paths one knip record calls unused files. knip writes each either as a
+ * bare string or as an object with a `name`.
+ */
+function unusedFilesIn(record: Record<string, unknown>): string[] {
+  return (asArray(record['files']) ?? []).flatMap((raw) => {
+    const name = asString(asRecord(raw)?.['name']) ?? asString(raw)
+    return name === undefined ? [] : [repoRelative(name)]
+  })
+}
+
+/**
+ * One record's unused symbols, across every issue type that names an
+ * export-like one. Each carries knip's own issue type as its kind.
+ */
+function unusedSymbolsIn(record: Record<string, unknown>, path: string): KnipSymbol[] {
+  return EXPORT_KINDS.flatMap((kind) =>
+    (asArray(record[kind]) ?? []).flatMap((raw) => {
+      const symbol = asRecord(raw)
+      const name = asString(symbol?.['name'])
+      if (name === undefined) return []
+      return [
+        {
+          file: path,
+          name,
+          line: asNumber(symbol?.['line']) ?? 1,
+          column: asNumber(symbol?.['col']) ?? 1,
+          kind,
+        } satisfies KnipSymbol,
+      ]
+    }),
+  )
+}
+
+/** One record's declared-but-unused packages, across the three dependency issue types. */
+function unusedPackagesIn(record: Record<string, unknown>, path: string): KnipDependency[] {
+  return DEPENDENCY_KINDS.flatMap((kind) =>
+    (asArray(record[kind]) ?? []).flatMap((raw) => {
+      const name = asString(asRecord(raw)?.['name']) ?? asString(raw)
+      return name === undefined ? [] : [{ file: path, name, kind } satisfies KnipDependency]
+    }),
+  )
 }
 
 /**

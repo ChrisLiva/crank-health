@@ -75,16 +75,27 @@ export function classifyLockfile(file: string, text: string): LockfileScopes {
   try {
     read = reader(text)
   } catch (error) {
-    read = {
-      packages: new Map(),
-      notes: [
-        `could not be read (${describe(error)}), so no dependency scope was resolved and ` +
-          'every package in it is graded',
-      ],
-    }
+    read = unreadable(describe(error))
   }
-  // Every note names its own lockfile here rather than in each reader, so a
-  // monorepo's second `package-lock.json` cannot be mistaken for its first.
+  return named(file, read)
+}
+
+/** No scope resolved, and one note saying why every package is graded. */
+function unreadable(cause: string): LockfileScopes {
+  return {
+    packages: new Map(),
+    notes: [
+      `could not be read (${cause}), so no dependency scope was resolved and ` +
+        'every package in it is graded',
+    ],
+  }
+}
+
+/**
+ * Every note names its own lockfile here rather than in each reader, so a
+ * monorepo's second `package-lock.json` cannot be mistaken for its first.
+ */
+function named(file: string, read: LockfileScopes): LockfileScopes {
   return { packages: read.packages, notes: read.notes.map((note) => `${file}: ${note}`) }
 }
 
@@ -139,22 +150,60 @@ function readPnpmLock(text: string): LockfileScopes {
   }
   const snapshots = asRecord(root['snapshots']) ?? {}
   const importers = asRecord(root['importers']) ?? {}
+  const { reached, missing } = walkRuntimeClosure(snapshots, importerRoots(importers))
 
-  const queue: string[] = []
+  // Weakest claim first, strongest last: a package the walk resolved is `prod`
+  // whatever else any other key of it said, and one the walk *reached* through
+  // a missing entry is `unknown` rather than dev-only — it is not a package
+  // only the toolchain pulls in, and demoting it would be the one wrong answer.
+  const packages = new Map<string, DependencyScope>()
+  for (const key of Object.keys(snapshots)) packages.set(baseId(key), 'dev')
+  for (const id of missing) packages.set(id, 'unknown')
+  for (const id of reached) packages.set(id, 'prod')
+
+  return { packages: sorted(packages), notes: missingSnapshotNotes(missing.size) }
+}
+
+/** The roots of the runtime walk: every snapshot key an importer ships. */
+function importerRoots(importers: Record<string, unknown>): string[] {
+  const roots: string[] = []
   for (const importer of Object.values(importers)) {
     const entry = asRecord(importer)
     if (entry === undefined) continue
     for (const field of PROD_FIELDS) {
       for (const [name, spec] of Object.entries(asRecord(entry[field]) ?? {})) {
         const key = snapshotKey(name, asString(asRecord(spec)?.['version']))
-        if (key !== undefined) queue.push(key)
+        if (key !== undefined) roots.push(key)
       }
     }
   }
+  return roots
+}
 
-  // Breadth first over the snapshot graph. `visited` is keyed on the full
-  // peer-suffixed key — two resolutions of one package are two nodes — and is
-  // what stops a dependency cycle from running forever.
+/** The snapshot keys one snapshot entry's shipped fields point at. */
+function snapshotEdges(snapshot: Record<string, unknown>): string[] {
+  const edges: string[] = []
+  for (const field of PROD_FIELDS) {
+    for (const [name, version] of Object.entries(asRecord(snapshot[field]) ?? {})) {
+      const next = snapshotKey(name, asString(version))
+      if (next !== undefined) edges.push(next)
+    }
+  }
+  return edges
+}
+
+/**
+ * Breadth first over the snapshot graph, from the importers' runtime roots:
+ * which base `name@version` the walk resolved, and which it reached through a
+ * key `snapshots` has no entry for. `visited` is keyed on the full
+ * peer-suffixed key — two resolutions of one package are two nodes — and is
+ * what stops a dependency cycle from running forever.
+ */
+function walkRuntimeClosure(
+  snapshots: Record<string, unknown>,
+  roots: readonly string[],
+): { reached: ReadonlySet<string>; missing: ReadonlySet<string> } {
+  const queue = [...roots]
   const visited = new Set<string>()
   const reached = new Set<string>()
   const missing = new Set<string>()
@@ -168,36 +217,21 @@ function readPnpmLock(text: string): LockfileScopes {
       continue
     }
     reached.add(baseId(key))
-    for (const field of PROD_FIELDS) {
-      for (const [name, version] of Object.entries(asRecord(snapshot[field]) ?? {})) {
-        const next = snapshotKey(name, asString(version))
-        if (next !== undefined) queue.push(next)
-      }
-    }
+    queue.push(...snapshotEdges(snapshot))
   }
+  return { reached, missing }
+}
 
-  // Weakest claim first, strongest last: a package the walk resolved is `prod`
-  // whatever else any other key of it said, and one the walk *reached* through
-  // a missing entry is `unknown` rather than dev-only — it is not a package
-  // only the toolchain pulls in, and demoting it would be the one wrong answer.
-  const packages = new Map<string, DependencyScope>()
-  for (const key of Object.keys(snapshots)) packages.set(baseId(key), 'dev')
-  for (const id of missing) packages.set(id, 'unknown')
-  for (const id of reached) packages.set(id, 'prod')
-
-  return {
-    packages: sorted(packages),
-    notes:
-      missing.size === 0
-        ? []
-        : [
-            missing.size === 1
-              ? '1 package reachable from a runtime dependency has no snapshot entry, so its ' +
-                'scope is unknown and it is graded'
-              : `${missing.size} packages reachable from a runtime dependency have no snapshot ` +
-                'entry, so their scope is unknown and they are graded',
-          ],
-  }
+/** The one note a walk that ran off the end of the snapshot table leaves. */
+function missingSnapshotNotes(count: number): string[] {
+  if (count === 0) return []
+  return [
+    count === 1
+      ? '1 package reachable from a runtime dependency has no snapshot entry, so its ' +
+        'scope is unknown and it is graded'
+      : `${count} packages reachable from a runtime dependency have no snapshot ` +
+        'entry, so their scope is unknown and they are graded',
+  ]
 }
 
 /** `name` + the resolved version pnpm recorded → the snapshot key, or nothing. */
@@ -332,16 +366,33 @@ export async function applyDependencyScopes(
 /**
  * A lockfile that is not there classifies nothing and is not worth a warning:
  * osv-scanner reports a manifest it could not find a lockfile beside, and the
- * package is graded, which is the answer either way.
+ * package is graded, which is the answer either way. A lockfile that is there
+ * and cannot be read — EACCES, EISDIR — resolves nothing too, and says so in
+ * the report's warnings the way a lockfile that would not parse does, because
+ * this runs outside any tool's catch and a throw here would end the scan.
  */
 async function readLockfile(repoRoot: string, file: string): Promise<LockfileScopes> {
   let text: string
   try {
     text = await readFile(join(repoRoot, file), 'utf8')
-  } catch {
-    return EMPTY
+  } catch (error) {
+    return isAbsentFile(error)
+      ? EMPTY
+      : named(file, unreadable(errorCode(error) ?? describe(error)))
   }
   return classifyLockfile(file, text)
+}
+
+/** Whether a rejected filesystem call said the path does not exist. */
+function isAbsentFile(error: unknown): boolean {
+  return errorCode(error) === 'ENOENT'
+}
+
+/** A filesystem error's `code` — the cause without the absolute path its message quotes. */
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : undefined
 }
 
 /** Whether this finding is about an npm package, and so has a scope at all. */

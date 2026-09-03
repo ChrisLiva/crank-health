@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { languageOf } from '../../core/discover.ts'
 import { execTool, repoCommand, uvxCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
@@ -171,36 +172,11 @@ async function runBandit(ctx: RunContext): Promise<ToolResult> {
       { cwd: ctx.scratch, timeoutMs: ctx.timeoutMs },
     )
 
-    // Sanitized before it is staged, never after: `raw/` is copied into the run
-    // directory verbatim, so this is the only place the excerpts can be dropped.
     // eslint-disable-next-line no-await-in-loop
-    const staged = await writeScratchRaw(
-      ctx.scratch,
-      `bandit${suffix}.json`,
-      sanitizeRawJson(execution.stdout),
-    )
-    rawFiles.push(staged)
-    if (execution.stderr.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const stderr = await writeScratchRaw(
-        ctx.scratch,
-        `bandit${suffix}.stderr.txt`,
-        execution.stderr,
-      )
-      rawFiles.push(stderr)
-    }
+    rawFiles.push(...(await stageBatchOutput(ctx.scratch, suffix, execution)))
 
-    if (execution.failure !== undefined) {
-      return failed(execution.failure, rawFiles)
-    }
-    if (execution.exitCode === undefined || !EXPECTED_EXIT_CODES.has(execution.exitCode)) {
-      return {
-        state: 'error',
-        findings: [],
-        rawFiles,
-        reason: `bandit failed (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
-      }
-    }
+    const failure = batchFailure(execution, rawFiles)
+    if (failure !== undefined) return failure
 
     try {
       issues.push(...parseBanditJson(execution.stdout, ctx.repoRoot))
@@ -225,6 +201,46 @@ async function runBandit(ctx: RunContext): Promise<ToolResult> {
     ),
     toolVersion: pinnedPythonVersion(BANDIT_DISTRIBUTION),
     rawFiles,
+  }
+}
+
+/**
+ * Stages one batch's report and stderr, in that order, and answers with the
+ * paths. The report is sanitized before it is staged, never after: `raw/` is
+ * copied into the run directory verbatim, so this is the only place the
+ * excerpts can be dropped.
+ */
+async function stageBatchOutput(
+  scratch: string,
+  suffix: string,
+  execution: ToolExecution,
+): Promise<string[]> {
+  const staged = [
+    await writeScratchRaw(scratch, `bandit${suffix}.json`, sanitizeRawJson(execution.stdout)),
+  ]
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, `bandit${suffix}.stderr.txt`, execution.stderr))
+  }
+  return staged
+}
+
+/**
+ * Whether a batch ended in a way that ends the whole run: the process could not
+ * produce a result, or bandit exited outside {@link EXPECTED_EXIT_CODES}.
+ */
+function batchFailure(
+  execution: ToolExecution,
+  rawFiles: readonly string[],
+): ToolResult | undefined {
+  if (execution.failure !== undefined) return failed(execution.failure, rawFiles)
+  if (execution.exitCode !== undefined && EXPECTED_EXIT_CODES.has(execution.exitCode)) {
+    return undefined
+  }
+  return {
+    state: 'error',
+    findings: [],
+    rawFiles,
+    reason: `bandit failed (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
   }
 }
 

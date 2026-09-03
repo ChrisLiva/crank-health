@@ -1,4 +1,5 @@
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
@@ -98,8 +99,8 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no files for ESLint to check' }
   }
 
-  const installed = detection.installed && detection.binPath !== undefined
-  if (!installed && onlyLegacyConfig(detection)) {
+  const binPath = detection.installed ? detection.binPath : undefined
+  if (binPath === undefined && onlyLegacyConfig(detection)) {
     return {
       state: 'not-available',
       findings: [],
@@ -112,9 +113,7 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
   }
 
   const command =
-    installed && detection.binPath !== undefined
-      ? repoCommand(detection.binPath, [])
-      : ephemeralCommand(ESLINT_PACKAGE, [])
+    binPath === undefined ? ephemeralCommand(ESLINT_PACKAGE, []) : repoCommand(binPath, [])
 
   const batches = batchFiles(ctx.files)
   const pending: PendingFinding[] = []
@@ -131,32 +130,10 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
     )
 
     // eslint-disable-next-line no-await-in-loop
-    const staged = await writeScratchRaw(ctx.scratch, `eslint${suffix}.json`, execution.stdout)
-    rawFiles.push(staged)
-    if (execution.stderr.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const stderr = await writeScratchRaw(
-        ctx.scratch,
-        `eslint${suffix}.stderr.txt`,
-        execution.stderr,
-      )
-      rawFiles.push(stderr)
-    }
+    rawFiles.push(...(await stageRaw(ctx.scratch, suffix, execution)))
 
-    if (execution.failure !== undefined) {
-      return failed(execution.failure, rawFiles)
-    }
-
-    // ESLint exits 1 when it found problems and 2 when it could not run at all;
-    // in the second case there is no JSON to read, only a message on stderr.
-    if (execution.stdout.trim().length === 0) {
-      return {
-        state: 'error',
-        findings: [],
-        rawFiles,
-        reason: `eslint produced no output (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
-      }
-    }
+    const problem = executionProblem(execution, rawFiles)
+    if (problem !== undefined) return problem
 
     let results: EslintFileResult[]
     try {
@@ -181,6 +158,41 @@ async function runEslint(ctx: RunContext): Promise<ToolResult> {
       : { toolVersion: detection.version }),
     rawFiles,
   }
+}
+
+/** Raw evidence for the run directory (spec §8: stderr is always kept). */
+async function stageRaw(
+  scratch: string,
+  suffix: string,
+  execution: ToolExecution,
+): Promise<string[]> {
+  const staged = [await writeScratchRaw(scratch, `eslint${suffix}.json`, execution.stdout)]
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, `eslint${suffix}.stderr.txt`, execution.stderr))
+  }
+  return staged
+}
+
+/**
+ * The result that ends the run when this batch never produced a report, or
+ * `undefined` when its stdout is worth parsing. ESLint exits 1 when it found
+ * problems and 2 when it could not run at all; in the second case there is no
+ * JSON to read, only a message on stderr.
+ */
+function executionProblem(
+  execution: ToolExecution,
+  rawFiles: readonly string[],
+): ToolResult | undefined {
+  if (execution.failure !== undefined) return failed(execution.failure, rawFiles)
+  if (execution.stdout.trim().length === 0) {
+    return {
+      state: 'error',
+      findings: [],
+      rawFiles,
+      reason: `eslint produced no output (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
+    }
+  }
+  return undefined
 }
 
 /** One file's worth of ESLint's JSON formatter output. */

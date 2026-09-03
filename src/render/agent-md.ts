@@ -1054,9 +1054,9 @@ const NOTHING_NEW = 'No tasks: this change introduced no new findings.'
  * One task, whole: its heading, the grade its category would reach, the work,
  * and the command that says whether the work is done.
  *
- * Both of those lines used to be stated once per run of consecutive tasks that
- * agreed on them — six lint tasks under one `Verify:` — which saved lines by
- * making a task unreadable on its own. An agent that starts at T4 has to scroll
+ * Both lines are printed on every task, however many consecutive tasks agree
+ * on them. Stating them once per run of six lint tasks saves five lines and
+ * makes a task unreadable on its own: an agent that starts at T4 has to scroll
  * up past three headings to find out what would check it, and a task whose
  * check lives under a different heading is one an agent quietly skips.
  * Repetition is the cheaper failure.

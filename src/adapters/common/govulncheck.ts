@@ -96,18 +96,7 @@ export interface GoVulnerability {
  */
 export function parseGovulncheckStream(stream: string): GoVulnerability[] {
   const records = streamObjects(stream)
-  const advisories = new Map<string, { aliases: readonly string[]; summary: string }>()
-  for (const record of records) {
-    const osv = asRecord(record['osv'])
-    const id = asString(osv?.['id'])
-    if (osv === undefined || id === undefined) continue
-    advisories.set(id, {
-      aliases: (asArray(osv['aliases']) ?? [])
-        .flatMap((alias) => (asString(alias) === undefined ? [] : [String(alias)]))
-        .toSorted(compare),
-      summary: asString(osv['summary']) ?? '',
-    })
-  }
+  const advisories = advisoriesById(records)
 
   const found = new Map<string, GoVulnerability>()
   for (const record of records) {
@@ -132,6 +121,34 @@ export function parseGovulncheckStream(stream: string): GoVulnerability[] {
   }
 
   return [...found.values()].toSorted((a, b) => compare(a.osv, b.osv))
+}
+
+/** The metadata half of the stream: what an `osv` record says about an advisory. */
+interface AdvisoryMetadata {
+  readonly aliases: readonly string[]
+  readonly summary: string
+}
+
+/**
+ * Advisory id → its metadata, from the stream's `osv` records. An id the
+ * `finding` half never references describes an advisory that did not apply.
+ */
+function advisoriesById(
+  records: readonly Record<string, unknown>[],
+): Map<string, AdvisoryMetadata> {
+  const advisories = new Map<string, AdvisoryMetadata>()
+  for (const record of records) {
+    const osv = asRecord(record['osv'])
+    const id = asString(osv?.['id'])
+    if (osv === undefined || id === undefined) continue
+    advisories.set(id, {
+      aliases: (asArray(osv['aliases']) ?? [])
+        .flatMap((alias) => (asString(alias) === undefined ? [] : [String(alias)]))
+        .toSorted(compare),
+      summary: asString(osv['summary']) ?? '',
+    })
+  }
+  return advisories
 }
 
 /**
@@ -172,22 +189,26 @@ function deepest(known: GoVulnerability | undefined, entry: GoVulnerability): Go
  * completed, which is more than a scan reporting nothing at all.
  */
 function streamObjects(stream: string): Record<string, unknown>[] {
-  const objects: Record<string, unknown>[] = []
+  return objectSpans(stream).flatMap((span) => {
+    const parsed = parseObject(span)
+    return parsed === undefined ? [] : [parsed]
+  })
+}
+
+/**
+ * The text of each brace-balanced top-level object in the stream. Braces are
+ * counted outside strings only, so a `}` inside a summary is not a delimiter,
+ * and an object left open at the end of a truncated stream is dropped.
+ */
+function objectSpans(stream: string): string[] {
+  const spans: string[] = []
   let depth = 0
   let start = -1
-  let inString = false
-  let escaped = false
 
   for (let index = 0; index < stream.length; index++) {
     const char = stream[index]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (char === '\\') escaped = true
-      else if (char === '"') inString = false
-      continue
-    }
     if (char === '"') {
-      inString = true
+      index = endOfString(stream, index)
       continue
     }
     if (char === '{') {
@@ -197,12 +218,24 @@ function streamObjects(stream: string): Record<string, unknown>[] {
     }
     if (char !== '}' || depth === 0) continue
     depth--
-    if (depth !== 0) continue
-    const parsed = parseObject(stream.slice(start, index + 1))
-    if (parsed !== undefined) objects.push(parsed)
+    if (depth === 0) spans.push(stream.slice(start, index + 1))
   }
 
-  return objects
+  return spans
+}
+
+/**
+ * The index of the quote closing the string opened at `open`, or the last index
+ * of the stream when nothing closes it. A backslash escapes the next character,
+ * so `\"` does not close the string.
+ */
+function endOfString(stream: string, open: number): number {
+  for (let index = open + 1; index < stream.length; index++) {
+    const char = stream[index]
+    if (char === '\\') index++
+    else if (char === '"') return index
+  }
+  return stream.length
 }
 
 function parseObject(text: string): Record<string, unknown> | undefined {

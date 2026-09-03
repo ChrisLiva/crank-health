@@ -1,4 +1,5 @@
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolCommand, ToolExecution } from '../../core/exec.ts'
 import type {
   Detection,
   PendingFinding,
@@ -97,10 +98,8 @@ async function runPrettier(ctx: RunContext): Promise<ToolResult> {
 
   const detection = ctx.detection
   const repoConfig = detection !== null
-  const command =
-    detection?.installed === true && detection.binPath !== undefined
-      ? repoCommand(detection.binPath, [])
-      : ephemeralCommand(PRETTIER_PACKAGE, [])
+  const command = prettierCommand(detection)
+  const configArgs = repoConfig ? [] : DEFAULT_CONFIG_ARGS
 
   const batches = batchFiles(ctx.files)
   const failing: string[] = []
@@ -113,37 +112,16 @@ async function runPrettier(ctx: RunContext): Promise<ToolResult> {
     const execution = await execTool(
       {
         ...command,
-        args: [...command.args, ...BASE_ARGS, ...(repoConfig ? [] : DEFAULT_CONFIG_ARGS), ...batch],
+        args: [...command.args, ...BASE_ARGS, ...configArgs, ...batch],
       },
       { cwd: ctx.repoRoot, timeoutMs: ctx.timeoutMs },
     )
 
     // eslint-disable-next-line no-await-in-loop
-    const staged = await writeScratchRaw(ctx.scratch, `prettier${suffix}.txt`, execution.stdout)
-    rawFiles.push(staged)
-    if (execution.stderr.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const stderr = await writeScratchRaw(
-        ctx.scratch,
-        `prettier${suffix}.stderr.txt`,
-        execution.stderr,
-      )
-      rawFiles.push(stderr)
-    }
+    rawFiles.push(...(await stageRaw(ctx.scratch, suffix, execution)))
 
-    if (execution.failure !== undefined) {
-      return failed(execution.failure, rawFiles)
-    }
-
-    // 0 = everything matched, 1 = some files differ, 2 = prettier itself failed.
-    if (execution.exitCode !== 0 && execution.exitCode !== 1) {
-      return {
-        state: 'error',
-        findings: [],
-        rawFiles,
-        reason: `prettier failed (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
-      }
-    }
+    const problem = executionProblem(execution, rawFiles)
+    if (problem !== undefined) return problem
 
     failing.push(...parseListDifferent(execution.stdout))
   }
@@ -160,6 +138,47 @@ async function runPrettier(ctx: RunContext): Promise<ToolResult> {
     // the files it was asked about are exactly the formattable ones.
     metrics: { formattableFiles: ctx.files.length },
   }
+}
+
+/** The repo's own prettier when it installed one, our pinned copy otherwise. */
+function prettierCommand(detection: Detection | null): ToolCommand {
+  return detection?.installed === true && detection.binPath !== undefined
+    ? repoCommand(detection.binPath, [])
+    : ephemeralCommand(PRETTIER_PACKAGE, [])
+}
+
+/** Raw evidence for the run directory (spec §8: stderr is always kept). */
+async function stageRaw(
+  scratch: string,
+  suffix: string,
+  execution: ToolExecution,
+): Promise<string[]> {
+  const staged = [await writeScratchRaw(scratch, `prettier${suffix}.txt`, execution.stdout)]
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, `prettier${suffix}.stderr.txt`, execution.stderr))
+  }
+  return staged
+}
+
+/**
+ * The result that ends the run when this batch failed, or `undefined` when its
+ * stdout is the list of differing files. Exit 0 = everything matched, 1 = some
+ * files differ, 2 = prettier itself failed.
+ */
+function executionProblem(
+  execution: ToolExecution,
+  rawFiles: readonly string[],
+): ToolResult | undefined {
+  if (execution.failure !== undefined) return failed(execution.failure, rawFiles)
+  if (execution.exitCode !== 0 && execution.exitCode !== 1) {
+    return {
+      state: 'error',
+      findings: [],
+      rawFiles,
+      reason: `prettier failed (exit ${execution.exitCode ?? 'signal'}): ${firstLine(execution.stderr)}`,
+    }
+  }
+  return undefined
 }
 
 /**

@@ -374,23 +374,59 @@ function fixesById(
     const record = asRecord(entry)
     const id = asString(record?.['id'])
     if (id === undefined) continue
-    for (const affectedEntry of asArray(record?.['affected']) ?? []) {
-      const affected = asRecord(affectedEntry)
-      const target = asRecord(affected?.['package'])
-      if (asString(target?.['name']) !== packageName) continue
-      if (asString(target?.['ecosystem']) !== ecosystem) continue
-      for (const rangeEntry of asArray(affected?.['ranges']) ?? []) {
-        for (const eventEntry of asArray(asRecord(rangeEntry)?.['events']) ?? []) {
-          const fixed = asString(asRecord(eventEntry)?.['fixed'])
-          const known = fixes.get(id)
-          if (fixed !== undefined && (known === undefined || compareVersions(fixed, known) > 0)) {
-            fixes.set(id, fixed)
-          }
-        }
-      }
-    }
+    const affected = asArray(record?.['affected']) ?? []
+    const fixed = higherVersion(fixes.get(id), fixedInAffected(affected, packageName, ecosystem))
+    if (fixed !== undefined) fixes.set(id, fixed)
   }
   return fixes
+}
+
+/**
+ * The highest `fixed` event among the `affected[]` entries that name this exact
+ * package, ignoring the sibling packages one advisory also lists.
+ */
+function fixedInAffected(
+  affectedEntries: readonly unknown[],
+  packageName: string,
+  ecosystem: string,
+): string | undefined {
+  let highest: string | undefined
+  for (const affectedEntry of affectedEntries) {
+    const affected = asRecord(affectedEntry)
+    if (!namesPackage(asRecord(affected?.['package']), packageName, ecosystem)) continue
+    highest = higherVersion(highest, fixedInRanges(asArray(affected?.['ranges']) ?? []))
+  }
+  return highest
+}
+
+/** Whether an OSV `affected[].package` is the package in the lockfile. */
+function namesPackage(
+  target: Record<string, unknown> | undefined,
+  packageName: string,
+  ecosystem: string,
+): boolean {
+  return asString(target?.['name']) === packageName && asString(target?.['ecosystem']) === ecosystem
+}
+
+/**
+ * The highest `fixed` event across one affected entry's ranges: a version
+ * affected by two ranges is only clear of both above the later one.
+ */
+function fixedInRanges(rangeEntries: readonly unknown[]): string | undefined {
+  let highest: string | undefined
+  for (const rangeEntry of rangeEntries) {
+    for (const eventEntry of asArray(asRecord(rangeEntry)?.['events']) ?? []) {
+      highest = higherVersion(highest, asString(asRecord(eventEntry)?.['fixed']))
+    }
+  }
+  return highest
+}
+
+/** The later of two versions, either of which may be absent. */
+function higherVersion(a: string | undefined, b: string | undefined): string | undefined {
+  if (a === undefined) return b
+  if (b === undefined) return a
+  return compareVersions(b, a) > 0 ? b : a
 }
 
 /**

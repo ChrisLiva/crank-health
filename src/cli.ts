@@ -1,4 +1,5 @@
 import pc from 'picocolors'
+import type { CliOptions } from './args.ts'
 import { CliUsageError, HELP_TEXT, parseCliArgs } from './args.ts'
 import type { Category, Grade } from './core/types.ts'
 import { CATEGORIES } from './core/types.ts'
@@ -30,21 +31,9 @@ async function run(argv: readonly string[]): Promise<number> {
     return 0
   }
   if (options.interactive) {
-    if (!process.stdin.isTTY) {
-      throw new CliUsageError('--interactive needs a terminal on stdin')
-    }
-    const io = createTerminalIO()
-    try {
-      const session = await runInteractiveSession(options, io)
-      if (!session.run) return 0
-      options = session.options
-    } catch (error) {
-      if (!isPromptCancelled(error)) throw error
-      process.stderr.write('interactive session cancelled — nothing was run\n')
-      return 0
-    } finally {
-      io.close()
-    }
+    const chosen = await resolveInteractively(options)
+    if (chosen === undefined) return 0
+    options = chosen
   }
   const scan = {
     path: options.path,
@@ -80,6 +69,29 @@ async function run(argv: readonly string[]): Promise<number> {
       `Pass ${pc.cyan('--allow-missing')} to ignore categories nothing assessed.\n`,
   )
   return 1
+}
+
+/**
+ * The options the interactive session settled on, or nothing when no scan is to
+ * run — the user answered "no" or cancelled, neither of which is an error.
+ *
+ * @throws {CliUsageError} when stdin is not a terminal, which the prompts need
+ */
+async function resolveInteractively(options: CliOptions): Promise<CliOptions | undefined> {
+  if (!process.stdin.isTTY) {
+    throw new CliUsageError('--interactive needs a terminal on stdin')
+  }
+  const io = createTerminalIO()
+  try {
+    const session = await runInteractiveSession(options, io)
+    return session.run ? session.options : undefined
+  } catch (error) {
+    if (!isPromptCancelled(error)) throw error
+    process.stderr.write('interactive session cancelled — nothing was run\n')
+    return undefined
+  } finally {
+    io.close()
+  }
 }
 
 /** Validates `--only` against the eight real categories. */

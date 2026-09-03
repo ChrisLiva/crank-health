@@ -209,28 +209,46 @@ function attribute(records: readonly RunRecord[], projects: readonly Project[]):
   for (const record of records) {
     for (const finding of record.result.findings) {
       if (seen.has(finding.id)) continue
-      const anchorKey =
-        finding.identity === undefined || !dedupesByAnchor(finding.category)
-          ? undefined
-          : [
-              finding.category,
-              finding.file,
-              finding.identity.anchor,
-              finding.identity.occurrence,
-              finding.gradeScope,
-            ].join('\u0000')
-      if (anchorKey !== undefined) {
-        const claimedBy = anchorClaims.get(anchorKey)
-        if (claimedBy !== undefined && claimedBy !== finding.tool) continue
-        if (claimedBy === undefined) anchorClaims.set(anchorKey, finding.tool)
-      }
+      if (!claimsAnchor(anchorClaims, finding)) continue
       seen.add(finding.id)
-      const { project: _reported, ...rest } = finding
-      const project = projectOf(finding.file)
-      findings.push({ ...rest, ...(project === undefined ? {} : { project }) })
+      findings.push(withProject(finding, projectOf(finding.file)))
     }
   }
   return findings
+}
+
+/** The source anchor a finding de-duplicates on, or nothing if its category does not. */
+function anchorKeyOf(finding: Finding): string | undefined {
+  if (finding.identity === undefined || !dedupesByAnchor(finding.category)) return undefined
+  return [
+    finding.category,
+    finding.file,
+    finding.identity.anchor,
+    finding.identity.occurrence,
+    finding.gradeScope,
+  ].join('\u0000')
+}
+
+/**
+ * Whether this finding keeps its source anchor: the first tool to reach an
+ * anchor claims it, and only that tool's verdicts on it survive. Records the
+ * claim as it decides.
+ */
+function claimsAnchor(claims: Map<string, string>, finding: Finding): boolean {
+  const key = anchorKeyOf(finding)
+  if (key === undefined) return true
+  const claimedBy = claims.get(key)
+  if (claimedBy === undefined) {
+    claims.set(key, finding.tool)
+    return true
+  }
+  return claimedBy === finding.tool
+}
+
+/** One finding relabelled with the project owning its file, or with none. */
+function withProject(finding: Finding, project: string | undefined): Finding {
+  const { project: _reported, ...rest } = finding
+  return { ...rest, ...(project === undefined ? {} : { project }) }
 }
 
 /**
@@ -444,18 +462,7 @@ async function plan(
   const wholeRepo = repoProject(repo.files)
 
   for (const adapter of adapters) {
-    const runners = adapter.runners.filter(
-      // A deep runner in a quick scan is not a job that declined; it is not a
-      // job (spec §5). Nothing is recorded for it, so the category degrades with
-      // the profile's own reason rather than with a tool's.
-      (runner) => requested.includes(runner.category) && (deep || runner.deepOnly !== true),
-    )
-    // …but it is a *deferral* the scan records, when the adapter applies here at
-    // all: the category was requested and only `--deep` may answer it. Not so
-    // for a runner `--only` excluded — that is an exclusion, not a deferral.
-    const deferredRunners = adapter.runners.filter(
-      (runner) => requested.includes(runner.category) && !deep && runner.deepOnly === true,
-    )
+    const { runners, deferredRunners } = splitRunners(adapter, requested, deep)
     if (runners.length === 0 && deferredRunners.length === 0) continue
 
     // Which projects this adapter has anything to say about, decided once per
@@ -467,22 +474,57 @@ async function plan(
     }
     if (runners.length === 0) continue
 
-    const candidates: Job[] = []
-    for (const runner of runners) {
-      for (const unit of unitsFor(runner, targets, wholeRepo, repo.projects.length)) {
-        // eslint-disable-next-line no-await-in-loop
-        const job = await candidate(runner, adapter, unit, repo, warnings)
-        if (job !== undefined) candidates.push(job)
-      }
-    }
-
-    jobs.push(...withoutRedundantDefaults(candidates))
+    // eslint-disable-next-line no-await-in-loop
+    jobs.push(...(await adapterJobs(runners, adapter, targets, wholeRepo, repo, warnings)))
   }
 
   return {
     jobs,
     deferredCategories: CATEGORIES.filter((category) => deferred.has(category)),
   }
+}
+
+/**
+ * An adapter's runners split in two: the ones this profile runs, and the ones
+ * only `--deep` would. A deep runner in a quick scan is not a job that declined;
+ * it is not a job (spec §5), so nothing is recorded for it and the category
+ * degrades with the profile's own reason rather than with a tool's. It is a
+ * *deferral* instead. A runner `--only` excluded is neither: that is an
+ * exclusion, and it lands in neither list.
+ */
+function splitRunners(
+  adapter: LanguageAdapter,
+  requested: readonly Category[],
+  deep: boolean,
+): { runners: ToolRunner[]; deferredRunners: ToolRunner[] } {
+  const asked = adapter.runners.filter((runner) => requested.includes(runner.category))
+  return {
+    runners: asked.filter((runner) => deep || runner.deepOnly !== true),
+    deferredRunners: asked.filter((runner) => !deep && runner.deepOnly === true),
+  }
+}
+
+/**
+ * The jobs one adapter contributes, in runner-then-project order, with the
+ * default-tool candidates the repo's own choices stand down already dropped.
+ */
+async function adapterJobs(
+  runners: readonly ToolRunner[],
+  adapter: LanguageAdapter,
+  targets: readonly Project[],
+  wholeRepo: Project,
+  repo: RepoContext,
+  warnings: string[],
+): Promise<Job[]> {
+  const candidates: Job[] = []
+  for (const runner of runners) {
+    for (const unit of unitsFor(runner, targets, wholeRepo, repo.projects.length)) {
+      // eslint-disable-next-line no-await-in-loop
+      const job = await candidate(runner, adapter, unit, repo, warnings)
+      if (job !== undefined) candidates.push(job)
+    }
+  }
+  return withoutRedundantDefaults(candidates)
 }
 
 /** What {@link plan} decided: the jobs to run, and the categories it deferred. */

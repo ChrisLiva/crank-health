@@ -1,0 +1,11 @@
+# crank-health's own aislop settings. A crank-health run lifts only `rules`,
+# `exclude` and `include` from this file (src/adapters/common/aislop.ts); the
+# rest is for running aislop by hand.
+version: 1
+rules:
+  # Every URL in this codebase is a tool's canonical public address, quoted in an
+  # install hint or pinned as a package feed (go.dev/dl, api.nuget.org's v3
+  # index). No deployment stands behind any of them, so there is no environment
+  # variable to move one out to. The rule fires on the `.dev` TLD and the `api.`
+  # subdomain, which name the hosts, not a configuration.
+  ai-slop/hardcoded-url: off

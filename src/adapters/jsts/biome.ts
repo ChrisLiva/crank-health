@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { ROOT_PROJECT, directoryOf } from '../../core/discover.ts'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
+import type { ToolCommand, ToolExecution } from '../../core/exec.ts'
 import type {
   Category,
   Detection,
@@ -119,10 +120,7 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
     return { state: 'ok', findings: [], rawFiles: [], reason: 'no files for Biome to check' }
   }
 
-  const command =
-    detection.installed && detection.binPath !== undefined
-      ? repoCommand(detection.binPath, [subcommand])
-      : ephemeralCommand(BIOME_PACKAGE, [subcommand], BIOME_BIN)
+  const command = biomeCommand(detection, subcommand)
 
   // Biome's project root is its cwd: it reads the config there and treats a
   // `biome.json` it meets below as a *nested* one, which must declare
@@ -150,17 +148,7 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
     )
 
     // eslint-disable-next-line no-await-in-loop
-    const staged = await writeScratchRaw(ctx.scratch, `${tool}${suffix}.txt`, execution.stdout)
-    rawFiles.push(staged)
-    if (execution.stderr.trim().length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const stderr = await writeScratchRaw(
-        ctx.scratch,
-        `${tool}${suffix}.stderr.txt`,
-        execution.stderr,
-      )
-      rawFiles.push(stderr)
-    }
+    rawFiles.push(...(await stageRaw(ctx.scratch, `${tool}${suffix}`, execution)))
 
     if (execution.failure !== undefined) {
       return failed(execution.failure, rawFiles)
@@ -200,6 +188,29 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
     // "% files failing"). Biome reports failures, never the clean total.
     ...(subcommand === 'format' ? { metrics: { formattableFiles: ctx.files.length } } : {}),
   }
+}
+
+/**
+ * The repo's own Biome when it installed one, our pinned copy otherwise. The
+ * subcommand is the first argument either way.
+ */
+function biomeCommand(detection: Detection, subcommand: Subcommand): ToolCommand {
+  return detection.installed && detection.binPath !== undefined
+    ? repoCommand(detection.binPath, [subcommand])
+    : ephemeralCommand(BIOME_PACKAGE, [subcommand], BIOME_BIN)
+}
+
+/** Raw evidence for the run directory (spec §8: stderr is always kept). */
+async function stageRaw(
+  scratch: string,
+  name: string,
+  execution: ToolExecution,
+): Promise<string[]> {
+  const staged = [await writeScratchRaw(scratch, `${name}.txt`, execution.stdout)]
+  if (execution.stderr.trim().length > 0) {
+    staged.push(await writeScratchRaw(scratch, `${name}.stderr.txt`, execution.stderr))
+  }
+  return staged
 }
 
 /**

@@ -125,17 +125,26 @@ function invocationArgs(): string[] {
  * `file:line:col`, which makes it the only thing needed to place a diagnostic
  */
 export function parseVetStream(stdout: string, repoRoot: string): readonly PendingFinding[] {
+  return documentsIn(stdout).flatMap((document) => findingsInDocument(document, repoRoot))
+}
+
+/**
+ * One document's findings: a document that did not parse, or that is not the
+ * `{package: {analyzer: […]}}` shape, costs its own package's findings alone.
+ */
+function findingsInDocument(document: string, repoRoot: string): PendingFinding[] {
+  const packages = asRecord(parseDocument(document))
+  if (packages === undefined) return []
+  return Object.values(packages).flatMap((analyzers) => findingsInPackage(analyzers, repoRoot))
+}
+
+/** One package's `{analyzer: [diagnostic…]}` map, with the analyzer as the rule. */
+function findingsInPackage(analyzers: unknown, repoRoot: string): PendingFinding[] {
   const findings: PendingFinding[] = []
-  for (const document of documentsIn(stdout)) {
-    const packages = asRecord(parseDocument(document))
-    if (packages === undefined) continue
-    for (const analyzers of Object.values(packages)) {
-      for (const [analyzer, diagnostics] of Object.entries(asRecord(analyzers) ?? {})) {
-        for (const diagnostic of asArray(diagnostics) ?? []) {
-          const finding = toPendingFinding(analyzer, asRecord(diagnostic), repoRoot)
-          if (finding !== undefined) findings.push(finding)
-        }
-      }
+  for (const [analyzer, diagnostics] of Object.entries(asRecord(analyzers) ?? {})) {
+    for (const diagnostic of asArray(diagnostics) ?? []) {
+      const finding = toPendingFinding(analyzer, asRecord(diagnostic), repoRoot)
+      if (finding !== undefined) findings.push(finding)
     }
   }
   return findings
@@ -155,6 +164,30 @@ function documentsIn(stdout: string): string[] {
   const documents: string[] = []
   let depth = 0
   let start = -1
+
+  for (const { index, char } of structuralBraces(stdout)) {
+    if (char === '{') {
+      if (depth === 0) start = index
+      depth += 1
+      continue
+    }
+    if (depth === 0) continue
+    depth -= 1
+    if (depth === 0 && start !== -1) {
+      documents.push(stdout.slice(start, index + 1))
+      start = -1
+    }
+  }
+  return documents
+}
+
+/**
+ * Every `{` and `}` in the stream that is structure rather than string content,
+ * with the index it sits at. A brace inside a quoted diagnostic message — Go
+ * source quoted back at the reader — is not structure, and neither is one behind
+ * a backslash escape.
+ */
+function* structuralBraces(stdout: string): Generator<{ index: number; char: string }> {
   let inString = false
   let escaped = false
 
@@ -166,20 +199,9 @@ function documentsIn(stdout: string): string[] {
       else if (char === '"') inString = false
       continue
     }
-    if (char === '"') {
-      inString = true
-    } else if (char === '{') {
-      if (depth === 0) start = index
-      depth += 1
-    } else if (char === '}' && depth > 0) {
-      depth -= 1
-      if (depth === 0 && start !== -1) {
-        documents.push(stdout.slice(start, index + 1))
-        start = -1
-      }
-    }
+    if (char === '"') inString = true
+    else if (char === '{' || char === '}') yield { index, char }
   }
-  return documents
 }
 
 /** One document, or `undefined` where it was not JSON after all. */
