@@ -18,7 +18,7 @@ import { asRecord, asString, exists, readJson } from '../support.ts'
  */
 
 /** The manifest that declares a Node project's dependencies and its config blocks. */
-const PACKAGE_JSON = 'package.json'
+export const PACKAGE_JSON = 'package.json'
 
 /** Where npm puts what it installed. */
 const NODE_MODULES = 'node_modules'

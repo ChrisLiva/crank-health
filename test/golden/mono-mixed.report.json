@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.15.0",
+  "crankHealth": "0.15.1",
   "repo": {
     "path": "<repo>",
-    "commit": "1e84ef63f0b7067eb8e22569987523f55a14d47c"
+    "commit": "f389aa7331d4f802ed030124af51109abf22c9d6"
   },
   "profile": "quick",
   "mode": "whole-repo",
@@ -115,7 +115,7 @@
       "assessed": 4
     },
     "lines": {
-      "total": 75,
+      "total": 77,
       "assessed": 20
     },
     "unassessed": [
@@ -127,7 +127,7 @@
       {
         "extension": ".md",
         "files": 1,
-        "lines": 40
+        "lines": 42
       },
       {
         "extension": ".mod",
@@ -518,14 +518,13 @@
       "project": "services/web",
       "execution": "ephemeral-pinned",
       "provenance": "default-config",
-      "version": null,
+      "version": "6.32.3",
       "pinned": "6.32.3",
       "detection": null,
-      "state": "error",
-      "reason": "could not parse knip output: Unexpected token 'R', \"\nRun `knip \"... is not valid JSON",
+      "state": "ok",
+      "reason": null,
       "raw": [
-        "raw/services/web/knip.json",
-        "raw/services/web/knip.stderr.txt"
+        "raw/services/web/knip.json"
       ]
     },
     {

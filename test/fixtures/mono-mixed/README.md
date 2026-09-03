@@ -34,7 +34,9 @@ service never sees oxlint, the JS service never sees ruff.
 `main.py` imports `greet.py` and `src/index.js` imports `dupe-keys.js`, so
 nothing here is dead.
 
-One tool cannot answer in a layout like this, and says so rather than pretending:
-knip resolves a repo's entry points from a root `package.json`, and this repo has
-none, so its record is `error` with knip's own message in it. The dead-code
-category is still graded, from fallow's verdict.
+knip resolves a repo's entry points from the `package.json` in the directory it
+runs from and never looks upward for one, so in a layout with no root manifest
+it runs from `services/web` — the nearest package that names its entry points —
+and its paths come back under `services/web/`. Run from the repo root instead
+it would find no manifest and exit on that, which is the row this fixture
+guards against.

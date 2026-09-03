@@ -353,7 +353,7 @@ function hasField(json: string, field: string): boolean {
 }
 
 /** The directory a repo-relative path sits in — the parent, for a directory. */
-function directoryOf(path: string): string {
+export function directoryOf(path: string): string {
   const slash = path.lastIndexOf('/')
   return slash <= 0 ? ROOT_PROJECT : path.slice(0, slash)
 }

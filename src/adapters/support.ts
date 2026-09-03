@@ -158,6 +158,17 @@ export function underProject(project: string, file: string): string {
   return project === '.' ? path : `${project}/${path}`
 }
 
+/**
+ * The inverse of {@link underProject}: a repo-relative path as a tool run from
+ * inside `project` must be handed it. A file outside the directory has no
+ * such spelling and comes back unchanged, so a caller that runs from an
+ * ancestor of every file it passes never sees that case.
+ */
+export function withinProject(project: string, file: string): string {
+  const prefix = `${project}/`
+  return project === '.' || !file.startsWith(prefix) ? file : file.slice(prefix.length)
+}
+
 /** Byte-wise ordering, not locale-aware: the sort must not vary by machine. */
 export function compare(a: string, b: string): number {
   if (a === b) return 0

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "crankHealth": "0.15.0",
+  "crankHealth": "0.15.1",
   "repo": {
     "path": "<repo>",
     "commit": "1624281eaabc18eb08af09502955981d65aa1ca4"

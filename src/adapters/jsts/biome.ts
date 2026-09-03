@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+import { ROOT_PROJECT, directoryOf } from '../../core/discover.ts'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Category,
@@ -21,6 +23,8 @@ import {
   failed,
   identify,
   repoRelative,
+  underProject,
+  withinProject,
 } from '../support.ts'
 import { detectNodeTool } from './node-package.ts'
 
@@ -120,7 +124,15 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
       ? repoCommand(detection.binPath, [subcommand])
       : ephemeralCommand(BIOME_PACKAGE, [subcommand], BIOME_BIN)
 
-  const batches = batchFiles(ctx.files)
+  // Biome's project root is its cwd: it reads the config there and treats a
+  // `biome.json` it meets below as a *nested* one, which must declare
+  // `root: false` or Biome refuses to run at all. So Biome runs from the
+  // directory of the highest config the project inherits — the repo root when
+  // the repo has a root config, the package when only the package does. The
+  // VCS root is pinned separately, because the `.gitignore` Biome is asked to
+  // honour is the repo's, wherever its config sits.
+  const root = biomeRoot(detection)
+  const batches = batchFiles(ctx.files.map((file) => withinProject(root, file)))
   const pending: PendingFinding[] = []
   const rawFiles: string[] = []
 
@@ -130,8 +142,11 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
     // batches share the raw-output namespace.
     // eslint-disable-next-line no-await-in-loop
     const execution = await execTool(
-      { ...command, args: [...command.args, ...BASE_ARGS, ...batch] },
-      { cwd: ctx.repoRoot, timeoutMs: ctx.timeoutMs },
+      {
+        ...command,
+        args: [...command.args, ...BASE_ARGS, `--vcs-root=${ctx.repoRoot}`, ...batch],
+      },
+      { cwd: join(ctx.repoRoot, root), timeoutMs: ctx.timeoutMs },
     )
 
     // eslint-disable-next-line no-await-in-loop
@@ -163,7 +178,15 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
       }
     }
 
-    pending.push(...toPendingFindings(diagnostics, subcommand))
+    pending.push(
+      ...toPendingFindings(
+        diagnostics.map((diagnostic) => ({
+          ...diagnostic,
+          file: underProject(root, diagnostic.file),
+        })),
+        subcommand,
+      ),
+    )
   }
 
   return {
@@ -177,6 +200,17 @@ async function runBiome(ctx: RunContext, subcommand: Subcommand): Promise<ToolRe
     // "% files failing"). Biome reports failures, never the clean total.
     ...(subcommand === 'format' ? { metrics: { formattableFiles: ctx.files.length } } : {}),
   }
+}
+
+/**
+ * The directory Biome runs from, repo-relative: that of the highest config the
+ * project inherits, or — for a `dependency`-only detection with no config to
+ * read — the package that declares Biome. {@link Detection.configFiles} is
+ * nearest-first, so the highest is the last.
+ */
+function biomeRoot(detection: Detection): string {
+  const highest = detection.configFiles.at(-1) ?? detection.ownedVia
+  return highest === undefined ? ROOT_PROJECT : directoryOf(highest)
 }
 
 /** One entry from Biome's `--reporter=json` `diagnostics` array. */

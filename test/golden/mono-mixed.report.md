@@ -1,6 +1,6 @@
 # Codebase health
 
-`<repo>` @ `1e84ef63f0b7067eb8e22569987523f55a14d47c` · crank-health 0.15.0 · quick profile
+`<repo>` @ `f389aa7331d4f802ed030124af51109abf22c9d6` · crank-health 0.15.1 · quick profile
 
 ## Grades
 
@@ -107,10 +107,10 @@ Nothing counted toward the grade.
 | Tool | State | Config | Version | Notes |
 | --- | --- | --- | --- | --- |
 | fallow-dead-code | ok | [default-config] | 3.20.0 | (services/web) |
-| knip | error | [default-config] | — (pinned 6.32.3) | could not parse knip output: Unexpected token 'R', " Run `knip "... is not valid JSON (services/web) |
+| knip | ok | [default-config] | 6.32.3 | (services/web) |
 | vulture | ok | [default-config] | 2.16 | (services/api) |
 
-Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-code.json) · [raw/services/web/fallow-dead-code.stderr.txt](raw/services/web/fallow-dead-code.stderr.txt) · [raw/services/web/knip.json](raw/services/web/knip.json) · [raw/services/web/knip.stderr.txt](raw/services/web/knip.stderr.txt)
+Evidence: [raw/services/web/fallow-dead-code.json](raw/services/web/fallow-dead-code.json) · [raw/services/web/fallow-dead-code.stderr.txt](raw/services/web/fallow-dead-code.stderr.txt) · [raw/services/web/knip.json](raw/services/web/knip.json)
 
 ## complexity — A
 

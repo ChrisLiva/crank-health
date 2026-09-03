@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+import { ROOT_PROJECT, ancestryOf, directoryOf } from '../../core/discover.ts'
 import { execTool, ephemeralCommand, repoCommand, writeScratchRaw } from '../../core/exec.ts'
 import type {
   Detection,
@@ -15,12 +17,16 @@ import {
   asString,
   byLocation,
   errorMessage,
+  exists,
   failed,
   firstLine,
   identify,
+  readJson,
   repoRelative,
+  unavailable,
+  underProject,
 } from '../support.ts'
-import { detectNodeTool, isLibraryPackage } from './node-package.ts'
+import { PACKAGE_JSON, detectNodeTool, isLibraryPackage } from './node-package.ts'
 
 /**
  * knip — the dead-code cross-check (spec "Categories and tools": "fallow
@@ -89,6 +95,14 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
   }
 
   const detection = ctx.detection
+  const root = await knipRoot(ctx)
+  if (root === undefined) {
+    return unavailable(
+      `no package.json in ${ctx.project.path === ROOT_PROJECT ? 'the repo root' : ctx.project.path} ` +
+        'or above it, so knip has no entry points to resolve',
+    )
+  }
+
   const command =
     detection?.installed === true && detection.binPath !== undefined
       ? repoCommand(detection.binPath, [])
@@ -96,7 +110,7 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
 
   const execution = await execTool(
     { ...command, args: [...command.args, ...BASE_ARGS] },
-    { cwd: ctx.repoRoot, timeoutMs: ctx.timeoutMs },
+    { cwd: join(ctx.repoRoot, root), timeoutMs: ctx.timeoutMs },
   )
 
   const rawFiles = [await writeScratchRaw(ctx.scratch, 'knip.json', execution.stdout)]
@@ -118,7 +132,7 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
 
   let issues: KnipIssues
   try {
-    issues = parseKnipJson(execution.stdout)
+    issues = relocate(parseKnipJson(execution.stdout), root)
   } catch (error) {
     return {
       state: 'error',
@@ -142,6 +156,64 @@ async function runKnip(ctx: RunContext): Promise<ToolResult> {
       ? { toolVersion: pinnedVersion(KNIP_PACKAGE) }
       : { toolVersion: detection.version }),
     rawFiles,
+  }
+}
+
+/** A root `package.json` field, or a file beside one, that says "run knip here". */
+const WORKSPACE_DECLARATIONS = { field: 'workspaces', file: 'pnpm-workspace.yaml' } as const
+
+/**
+ * Where knip runs for this project, repo-relative — its cwd is the one thing
+ * that decides what knip analyzes, because knip resolves entry points from the
+ * `package.json` *there* and never looks upward for one.
+ *
+ * A workspace is knip's own unit: run from the workspace root it resolves an
+ * import across packages, run from a member it calls the imported file dead
+ * (`mono-js`'s `cross.js` is the assertion). So the highest ancestor that
+ * declares workspaces, or holds a knip config, wins over anything nearer. With
+ * no such root the project's nearest `package.json` is the one that names its
+ * entry points — a JS package under a Python root has no other. `undefined`
+ * when no ancestor has a manifest at all: JS files without a `package.json`
+ * are knip's `not-available`, not a crash to parse.
+ */
+async function knipRoot(ctx: RunContext): Promise<string | undefined> {
+  const ancestry = ancestryOf(ctx.project.path)
+  const manifests = await Promise.all(
+    ancestry.map(async (directory) =>
+      asRecord(await readJson(join(ctx.repoRoot, directory, PACKAGE_JSON))),
+    ),
+  )
+  const workspaceFiles = await Promise.all(
+    ancestry.map((directory) => exists(join(ctx.repoRoot, directory, WORKSPACE_DECLARATIONS.file))),
+  )
+  // Nearest-first chains: the last index is the highest ancestor.
+  const configDirectories = new Set(
+    (ctx.detection?.configFiles ?? []).map((file) => directoryOf(file)),
+  )
+  for (let depth = ancestry.length - 1; depth >= 0; depth -= 1) {
+    const directory = ancestry[depth] ?? ROOT_PROJECT
+    const declaresWorkspaces =
+      manifests[depth]?.[WORKSPACE_DECLARATIONS.field] !== undefined ||
+      workspaceFiles[depth] === true
+    if (declaresWorkspaces || configDirectories.has(directory)) return directory
+  }
+  const nearest = manifests.findIndex((manifest) => manifest !== undefined)
+  return nearest === -1 ? undefined : ancestry[nearest]
+}
+
+/** knip reports paths relative to where it ran; everything downstream is repo-relative. */
+function relocate(issues: KnipIssues, root: string): KnipIssues {
+  if (root === ROOT_PROJECT) return issues
+  return {
+    unusedFiles: issues.unusedFiles.map((file) => underProject(root, file)),
+    unusedExports: issues.unusedExports.map((symbol) => ({
+      ...symbol,
+      file: underProject(root, symbol.file),
+    })),
+    unusedDependencies: issues.unusedDependencies.map((dependency) => ({
+      ...dependency,
+      file: underProject(root, dependency.file),
+    })),
   }
 }
 

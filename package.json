@@ -1,6 +1,6 @@
 {
   "name": "crank-health",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Deterministic codebase health grades for JS/TS and Python repos",
   "type": "module",
   "license": "MIT",

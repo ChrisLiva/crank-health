@@ -1,0 +1,10 @@
+{
+  "name": "mono-py-web-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7"
+  }
+}
