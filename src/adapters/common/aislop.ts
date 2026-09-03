@@ -47,19 +47,19 @@ import {
  * report, the way `react-doctor.ts` and `zizmor.ts` are.
  */
 
-export const AISLOP_TOOL = 'aislop' satisfies PinnedTool
+const AISLOP_TOOL = 'aislop' satisfies PinnedTool
 
 /** The only engine this runner reads; the other five are off in the config. */
 const AISLOP_ENGINE = 'ai-slop'
 
 /** What aislop's own file policy can read, in `Language` terms. */
-export const AISLOP_LANGUAGES: readonly Language[] = ['js-ts', 'python', 'go', 'csharp']
+const AISLOP_LANGUAGES: readonly Language[] = ['js-ts', 'python', 'go', 'csharp']
 
 /** The one path aislop reads its config from; `.aislop/config.yaml` is not it. */
 export const AISLOP_CONFIG_FILE = '.aislop/config.yml'
 
 /** One entry of aislop's top-level `diagnostics[]`, narrowed to what we map. */
-export interface AislopDiagnostic {
+interface AislopDiagnostic {
   readonly filePath: string
   readonly engine: string
   readonly rule: string
@@ -307,7 +307,7 @@ export function invocationArgs(mirrorRoot: string): string[] {
 }
 
 /** aislop's `RuleSeverityOverride` enum, the only rule values its schema takes. */
-export type RuleSeverity = 'error' | 'warning' | 'off'
+type RuleSeverity = 'error' | 'warning' | 'off'
 
 /** The three keys of a repo's aislop config this runner honors. */
 export interface LiftedConfig {
